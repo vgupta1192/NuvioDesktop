@@ -21,31 +21,42 @@ jobs:
 
       - name: Create local.properties (self-hosted backend)
         run: |
-          cat > local.properties <<'PROPS'
-NUVIO_SUPABASE_URL=https://nuviobackend.kissmissi.duckdns.org
-NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5NzY2MDkyLCJleHAiOjE5NDc0NDYwOTJ9.XB5a12DpW9Uf11QARCv4AAfYHGyk4qRq2Oi_7t8t7X0
-NUVIO_SUPABASE_FALLBACK_URL=
-NUVIO_ANDROID_DISTRIBUTION=full
-NUVIO_IOS_DISTRIBUTION=full
-PROPS
+          printf '%s\n' \
+            'NUVIO_SUPABASE_URL=https://nuviobackend.kissmissi.duckdns.org' \
+            'NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5NzY2MDkyLCJleHAiOjE5NDc0NDYwOTJ9.XB5a12DpW9Uf11QARCv4AAfYHGyk4qRq2Oi_7t8t7X0' \
+            'NUVIO_SUPABASE_FALLBACK_URL=' \
+            'NUVIO_ANDROID_DISTRIBUTION=full' \
+            'NUVIO_IOS_DISTRIBUTION=full' \
+            > local.properties
 
       - name: Package macOS distribution
-        run: ./gradlew :composeApp:packageReleaseDistributionForCurrentOS --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log.txt
 
-      - name: Upload artifacts
+      - name: Upload dmg
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-macos
           path: composeApp/build/compose/binaries/**/dmg/*.dmg
           if-no-files-found: error
 
-      - name: Publish to release
+      - name: Publish dmg to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: desktop-mac-build-${{ github.run_number }}
           name: NuvioDesktop macOS build ${{ github.run_number }}
           prerelease: true
           files: composeApp/build/compose/binaries/**/dmg/*.dmg
+
+      - name: Attach build log on failure
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ci-debug-logs
+          name: CI debug logs
+          prerelease: true
+          files: build-log.txt
 
   linux:
     runs-on: ubuntu-latest
@@ -59,18 +70,20 @@ PROPS
 
       - name: Create local.properties (self-hosted backend)
         run: |
-          cat > local.properties <<'PROPS'
-NUVIO_SUPABASE_URL=https://nuviobackend.kissmissi.duckdns.org
-NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5NzY2MDkyLCJleHAiOjE5NDc0NDYwOTJ9.XB5a12DpW9Uf11QARCv4AAfYHGyk4qRq2Oi_7t8t7X0
-NUVIO_SUPABASE_FALLBACK_URL=
-NUVIO_ANDROID_DISTRIBUTION=full
-NUVIO_IOS_DISTRIBUTION=full
-PROPS
+          printf '%s\n' \
+            'NUVIO_SUPABASE_URL=https://nuviobackend.kissmissi.duckdns.org' \
+            'NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5NzY2MDkyLCJleHAiOjE5NDc0NDYwOTJ9.XB5a12DpW9Uf11QARCv4AAfYHGyk4qRq2Oi_7t8t7X0' \
+            'NUVIO_SUPABASE_FALLBACK_URL=' \
+            'NUVIO_ANDROID_DISTRIBUTION=full' \
+            'NUVIO_IOS_DISTRIBUTION=full' \
+            > local.properties
 
       - name: Package Linux distribution
-        run: ./gradlew :composeApp:packageReleaseDistributionForCurrentOS --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log.txt
 
-      - name: Upload artifacts
+      - name: Upload Linux packages
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-linux
@@ -78,3 +91,12 @@ PROPS
             composeApp/build/compose/binaries/**/*.deb
             composeApp/build/compose/binaries/**/*.AppImage
           if-no-files-found: ignore
+
+      - name: Attach build log on failure
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ci-debug-logs
+          name: CI debug logs
+          prerelease: true
+          files: build-log.txt
