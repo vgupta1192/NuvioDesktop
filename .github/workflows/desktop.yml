@@ -31,10 +31,25 @@ jobs:
             'NUVIO_IOS_DISTRIBUTION=appstore' \
             > local.properties
 
+      - name: Patch compose packaging task dependency
+        run: |
+          printf '%s\n' \
+            'allprojects {' \
+            '    afterEvaluate {' \
+            '        tasks.matching { it.name == "packageReleaseDmg" }.configureEach {' \
+            '            dependsOn tasks.matching { it.name == "packageReleaseAppImage" }' \
+            '        }' \
+            '        tasks.matching { it.name == "packageReleaseDeb" }.configureEach {' \
+            '            dependsOn tasks.matching { it.name == "packageReleaseAppImage" }' \
+            '        }' \
+            '    }' \
+            '}' \
+            > fix-deps.init.gradle
+
       - name: Package macOS distribution
         run: |
           set -o pipefail
-          ./gradlew :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log.txt
+          ./gradlew --init-script fix-deps.init.gradle :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log.txt
 
       - name: Upload dmg
         uses: actions/upload-artifact@v4
@@ -82,10 +97,25 @@ jobs:
             'NUVIO_IOS_DISTRIBUTION=appstore' \
             > local.properties
 
+      - name: Patch compose packaging task dependency
+        run: |
+          printf '%s\n' \
+            'allprojects {' \
+            '    afterEvaluate {' \
+            '        tasks.matching { it.name == "packageReleaseDmg" }.configureEach {' \
+            '            dependsOn tasks.matching { it.name == "packageReleaseAppImage" }' \
+            '        }' \
+            '        tasks.matching { it.name == "packageReleaseDeb" }.configureEach {' \
+            '            dependsOn tasks.matching { it.name == "packageReleaseAppImage" }' \
+            '        }' \
+            '    }' \
+            '}' \
+            > fix-deps.init.gradle
+
       - name: Package Linux distribution
         run: |
           set -o pipefail
-          ./gradlew :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log.txt
+          ./gradlew --init-script fix-deps.init.gradle :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log.txt
 
       - name: Upload Linux packages
         uses: actions/upload-artifact@v4
