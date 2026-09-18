@@ -31,46 +31,32 @@ jobs:
             'NUVIO_IOS_DISTRIBUTION=appstore' \
             > local.properties
 
-      - name: Install Linux native build deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config g++ libmpv-dev libwebkit2gtk-4.1-dev libgtk-3-dev libx11-dev libxcomposite-dev libxext-dev
-
-      - name: Patch compose packaging task dependency
-        run: |
-          printf '%s\n' \
-            'allprojects {' \
-            '    afterEvaluate {' \
-            '        tasks.matching { it.name == "packageReleaseDmg" }.configureEach {' \
-            '            dependsOn tasks.matching { it.name == "packageReleaseAppImage" }' \
-            '        }' \
-            '        tasks.matching { it.name == "packageReleaseDeb" }.configureEach {' \
-            '            dependsOn tasks.matching { it.name == "packageReleaseAppImage" }' \
-            '        }' \
-            '    }' \
-            '}' \
-            > fix-deps.init.gradle
-
-      - name: Package macOS distribution
+      - name: Build macOS app bundle
         run: |
           set -o pipefail
-          ./gradlew --init-script fix-deps.init.gradle :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log-macos.txt
+          ./gradlew :composeApp:packageReleaseAppImage --stacktrace 2>&1 | tee build-log-macos.txt
 
-      - name: Upload dmg
+      - name: Zip app bundle
+        run: |
+          APP_PATH=$(find composeApp/build/compose/binaries -type d -name "*.app" | head -1)
+          echo "Found: $APP_PATH"
+          (cd "$(dirname "$APP_PATH")" && zip -qry "$(basename "$APP_PATH").zip" "$(basename "$APP_PATH")")
+          cp "$(dirname "$APP_PATH")/$(basename "$APP_PATH").zip" ./NuvioDesktop-macos.zip
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-macos
-          path: composeApp/build/compose/binaries/**/dmg/*.dmg
+          path: NuvioDesktop-macos.zip
           if-no-files-found: error
 
-      - name: Publish dmg to release
+      - name: Publish to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: desktop-mac-build-${{ github.run_number }}
           name: NuvioDesktop macOS build ${{ github.run_number }}
           prerelease: true
-          files: composeApp/build/compose/binaries/**/dmg/*.dmg
+          files: NuvioDesktop-macos.zip
 
       - name: Attach build log on failure
         if: failure()
@@ -93,6 +79,11 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Install Linux native build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config g++ cmake libmpv-dev libwebkit2gtk-4.1-dev libgtk-3-dev libx11-dev libxcomposite-dev libxext-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+
       - name: Create local.properties (self-hosted backend)
         run: |
           printf '%s\n' \
@@ -103,33 +94,12 @@ jobs:
             'NUVIO_IOS_DISTRIBUTION=appstore' \
             > local.properties
 
-      - name: Install Linux native build deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config g++ libmpv-dev libwebkit2gtk-4.1-dev libgtk-3-dev libx11-dev libxcomposite-dev libxext-dev
-
-      - name: Patch compose packaging task dependency
-        run: |
-          printf '%s\n' \
-            'allprojects {' \
-            '    afterEvaluate {' \
-            '        tasks.matching { it.name == "packageReleaseDmg" }.configureEach {' \
-            '            dependsOn tasks.matching { it.name == "packageReleaseAppImage" }' \
-            '        }' \
-            '        tasks.matching { it.name == "packageReleaseDeb" }.configureEach {' \
-            '            dependsOn tasks.matching { it.name == "packageReleaseAppImage" }' \
-            '        }' \
-            '    }' \
-            '}' \
-            > fix-deps.init.gradle
-
       - name: Package Linux distribution
         run: |
           set -o pipefail
-          ./gradlew --init-script fix-deps.init.gradle :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log-linux.txt
+          ./gradlew :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log-linux.txt
 
-      - name: Upload Linux packages
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-linux
@@ -137,6 +107,16 @@ jobs:
             composeApp/build/compose/binaries/**/*.deb
             composeApp/build/compose/binaries/**/*.AppImage
           if-no-files-found: ignore
+
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-linux-build-${{ github.run_number }}
+          name: NuvioDesktop Linux build ${{ github.run_number }}
+          prerelease: true
+          files: |
+            composeApp/build/compose/binaries/**/*.deb
+            composeApp/build/compose/binaries/**/*.AppImage
 
       - name: Attach build log on failure
         if: failure()
