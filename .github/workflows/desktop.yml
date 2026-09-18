@@ -22,13 +22,12 @@ jobs:
       - name: Create local.properties (self-hosted backend)
         run: |
           cat > local.properties <<'PROPS'
-          NUVIO_SUPABASE_URL=https://nuviobackend.kissmissi.duckdns.org
-          NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5NzY2MDkyLCJleHAiOjE5NDc0NDYwOTJ9.XB5a12DpW9Uf11QARCv4AAfYHGyk4qRq2Oi_7t8t7X0
-          NUVIO_SUPABASE_FALLBACK_URL=
-          NUVIO_ANDROID_DISTRIBUTION=full
-          NUVIO_IOS_DISTRIBUTION=full
-          PROPS
-          sed -i 's/^          //' local.properties
+NUVIO_SUPABASE_URL=https://nuviobackend.kissmissi.duckdns.org
+NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5NzY2MDkyLCJleHAiOjE5NDc0NDYwOTJ9.XB5a12DpW9Uf11QARCv4AAfYHGyk4qRq2Oi_7t8t7X0
+NUVIO_SUPABASE_FALLBACK_URL=
+NUVIO_ANDROID_DISTRIBUTION=full
+NUVIO_IOS_DISTRIBUTION=full
+PROPS
 
       - name: Package macOS distribution
         run: ./gradlew :composeApp:packageReleaseDistributionForCurrentOS --stacktrace
@@ -37,8 +36,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-macos
-          path: |
-            composeApp/build/compose/binaries/**/dmg/*.dmg
+          path: composeApp/build/compose/binaries/**/dmg/*.dmg
           if-no-files-found: error
 
       - name: Publish to release
@@ -62,17 +60,15 @@ jobs:
       - name: Create local.properties (self-hosted backend)
         run: |
           cat > local.properties <<'PROPS'
-          NUVIO_SUPABASE_URL=https://nuviobackend.kissmissi.duckdns.org
-          NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5NzY2MDkyLCJleHAiOjE5NDc0NDYwOTJ9.XB5a12DpW9Uf11QARCv4AAfYHGyk4qRq2Oi_7t8t7X0
-          NUVIO_SUPABASE_FALLBACK_URL=
-          NUVIO_ANDROID_DISTRIBUTION=full
-          NUVIO_IOS_DISTRIBUTION=full
-          PROPS
-          sed -i 's/^          //' local.properties
+NUVIO_SUPABASE_URL=https://nuviobackend.kissmissi.duckdns.org
+NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5NzY2MDkyLCJleHAiOjE5NDc0NDYwOTJ9.XB5a12DpW9Uf11QARCv4AAfYHGyk4qRq2Oi_7t8t7X0
+NUVIO_SUPABASE_FALLBACK_URL=
+NUVIO_ANDROID_DISTRIBUTION=full
+NUVIO_IOS_DISTRIBUTION=full
+PROPS
 
       - name: Package Linux distribution
         run: ./gradlew :composeApp:packageReleaseDistributionForCurrentOS --stacktrace
-        continue-on-error: true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
