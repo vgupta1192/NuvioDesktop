@@ -97,16 +97,14 @@ jobs:
       - name: Package Linux distribution
         run: |
           set -o pipefail
-          ./gradlew :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log-linux.txt
+          ./gradlew :composeApp:packageReleaseDeb --stacktrace 2>&1 | tee build-log-linux.txt
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-linux
-          path: |
-            composeApp/build/compose/binaries/**/*.deb
-            composeApp/build/compose/binaries/**/*.AppImage
-          if-no-files-found: ignore
+          path: composeApp/build/compose/binaries/**/*.deb
+          if-no-files-found: error
 
       - name: Publish to release
         uses: softprops/action-gh-release@v2
@@ -114,9 +112,7 @@ jobs:
           tag_name: desktop-linux-build-${{ github.run_number }}
           name: NuvioDesktop Linux build ${{ github.run_number }}
           prerelease: true
-          files: |
-            composeApp/build/compose/binaries/**/*.deb
-            composeApp/build/compose/binaries/**/*.AppImage
+          files: composeApp/build/compose/binaries/**/*.deb
 
       - name: Attach build log on failure
         if: failure()
