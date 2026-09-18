@@ -55,7 +55,7 @@ jobs:
       - name: Package macOS distribution
         run: |
           set -o pipefail
-          ./gradlew --init-script fix-deps.init.gradle :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log.txt
+          ./gradlew --init-script fix-deps.init.gradle :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log-macos.txt
 
       - name: Upload dmg
         uses: actions/upload-artifact@v4
@@ -79,7 +79,7 @@ jobs:
           tag_name: ci-debug-logs
           name: CI debug logs
           prerelease: true
-          files: build-log.txt
+          files: build-log-macos.txt
 
   linux:
     runs-on: ubuntu-latest
@@ -127,7 +127,7 @@ jobs:
       - name: Package Linux distribution
         run: |
           set -o pipefail
-          ./gradlew --init-script fix-deps.init.gradle :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log.txt
+          ./gradlew --init-script fix-deps.init.gradle :composeApp:packageReleaseDistributionForCurrentOS --stacktrace 2>&1 | tee build-log-linux.txt
 
       - name: Upload Linux packages
         uses: actions/upload-artifact@v4
@@ -145,4 +145,4 @@ jobs:
           tag_name: ci-debug-logs
           name: CI debug logs
           prerelease: true
-          files: build-log.txt
+          files: build-log-linux.txt
