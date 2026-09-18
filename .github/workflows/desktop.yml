@@ -1,0 +1,84 @@
+name: Build NuvioDesktop
+
+on:
+  push:
+    branches: [Dev]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Create local.properties (self-hosted backend)
+        run: |
+          cat > local.properties <<'PROPS'
+          NUVIO_SUPABASE_URL=https://nuviobackend.kissmissi.duckdns.org
+          NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5NzY2MDkyLCJleHAiOjE5NDc0NDYwOTJ9.XB5a12DpW9Uf11QARCv4AAfYHGyk4qRq2Oi_7t8t7X0
+          NUVIO_SUPABASE_FALLBACK_URL=
+          NUVIO_ANDROID_DISTRIBUTION=full
+          NUVIO_IOS_DISTRIBUTION=full
+          PROPS
+          sed -i 's/^          //' local.properties
+
+      - name: Package macOS distribution
+        run: ./gradlew :composeApp:packageReleaseDistributionForCurrentOS --stacktrace
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NuvioDesktop-macos
+          path: |
+            composeApp/build/compose/binaries/**/dmg/*.dmg
+          if-no-files-found: error
+
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-mac-build-${{ github.run_number }}
+          name: NuvioDesktop macOS build ${{ github.run_number }}
+          prerelease: true
+          files: composeApp/build/compose/binaries/**/dmg/*.dmg
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Create local.properties (self-hosted backend)
+        run: |
+          cat > local.properties <<'PROPS'
+          NUVIO_SUPABASE_URL=https://nuviobackend.kissmissi.duckdns.org
+          NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5NzY2MDkyLCJleHAiOjE5NDc0NDYwOTJ9.XB5a12DpW9Uf11QARCv4AAfYHGyk4qRq2Oi_7t8t7X0
+          NUVIO_SUPABASE_FALLBACK_URL=
+          NUVIO_ANDROID_DISTRIBUTION=full
+          NUVIO_IOS_DISTRIBUTION=full
+          PROPS
+          sed -i 's/^          //' local.properties
+
+      - name: Package Linux distribution
+        run: ./gradlew :composeApp:packageReleaseDistributionForCurrentOS --stacktrace
+        continue-on-error: true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NuvioDesktop-linux
+          path: |
+            composeApp/build/compose/binaries/**/*.deb
+            composeApp/build/compose/binaries/**/*.AppImage
+          if-no-files-found: ignore
