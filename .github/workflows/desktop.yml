@@ -39,7 +39,7 @@ jobs:
       - name: Package macOS dmg
         run: |
           set -o pipefail
-          ./gradlew :composeApp:packageReleaseDmg --stacktrace 2>&1 | tee build-log-macos.txt
+          ./gradlew :composeApp:packageReleaseDmg --no-configuration-cache --stacktrace 2>&1 | tee build-log-macos.txt
 
       - name: Verify native player libraries inside dmg
         run: |
