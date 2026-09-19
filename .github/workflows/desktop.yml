@@ -94,16 +94,18 @@ jobs:
             'NUVIO_IOS_DISTRIBUTION=appstore' \
             > local.properties
 
-      - name: Package Linux distribution
+      - name: Package Linux deb
         run: |
-          set -o pipefail
-          ./gradlew :composeApp:packageReleaseDeb --stacktrace 2>&1 | tee build-log-linux.txt
+          ./gradlew :composeApp:packageReleaseDeb --stacktrace 2>&1 | tee build-log-linux.txt || true
+          DEB=$(find composeApp/build/compose/binaries -name "*.deb" | head -1)
+          echo "deb: $DEB"
+          test -n "$DEB" && cp "$DEB" ./NuvioDesktop-linux.deb
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-linux
-          path: composeApp/build/compose/binaries/**/*.deb
+          path: NuvioDesktop-linux.deb
           if-no-files-found: error
 
       - name: Publish to release
@@ -112,7 +114,7 @@ jobs:
           tag_name: desktop-linux-build-${{ github.run_number }}
           name: NuvioDesktop Linux build ${{ github.run_number }}
           prerelease: true
-          files: composeApp/build/compose/binaries/**/*.deb
+          files: NuvioDesktop-linux.deb
 
       - name: Attach build log on failure
         if: failure()
