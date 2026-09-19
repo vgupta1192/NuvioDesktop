@@ -126,7 +126,13 @@ jobs:
 
       - name: Package Linux deb
         run: |
-          ./gradlew :composeApp:packageReleaseDeb --stacktrace 2>&1 | tee build-log-linux.txt || true
+          ok=0
+          for i in 1 2 3; do
+            echo "attempt $i"
+            ./gradlew :composeApp:packageReleaseDeb --stacktrace 2>&1 | tee build-log-linux.txt && ok=1 && break
+            echo "gradle failed, retrying in 60s (transient repo errors are common)"
+            sleep 60
+          done
           DEB=$(find composeApp/build/compose/binaries -name "*.deb" | head -1)
           echo "deb: $DEB"
           test -n "$DEB" && cp "$DEB" ./NuvioDesktop-linux.deb
