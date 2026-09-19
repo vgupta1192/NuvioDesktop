@@ -5,7 +5,7 @@ on:
     branches: [Dev]
     paths: ['.github/**']
   schedule:
-    - cron: '41 */6 * * *'
+    - cron: '41 * * * *'
   workflow_dispatch:
 
 permissions:
