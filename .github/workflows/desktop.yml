@@ -1,8 +1,11 @@
-name: Build NuvioDesktop
+name: Build NuvioDesktop (upstream + self-host backend)
 
 on:
   push:
     branches: [Dev]
+    paths: ['.github/**']
+  schedule:
+    - cron: '0 6 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -14,6 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          repository: NuvioMedia/NuvioDesktop
+          ref: Dev
           lfs: true
 
       - uses: actions/setup-java@v4
@@ -31,32 +36,43 @@ jobs:
             'NUVIO_IOS_DISTRIBUTION=appstore' \
             > local.properties
 
-      - name: Build macOS app bundle
+      - name: Package macOS dmg
         run: |
           set -o pipefail
-          ./gradlew :composeApp:packageReleaseAppImage --stacktrace 2>&1 | tee build-log-macos.txt
+          ./gradlew :composeApp:packageReleaseDmg --stacktrace 2>&1 | tee build-log-macos.txt
 
-      - name: Zip app bundle
+      - name: Verify native player libraries inside dmg
         run: |
-          APP_PATH=$(find composeApp/build/compose/binaries -type d -name "*.app" | head -1)
-          echo "Found: $APP_PATH"
-          (cd "$(dirname "$APP_PATH")" && zip -qry "$(basename "$APP_PATH").zip" "$(basename "$APP_PATH")")
-          cp "$(dirname "$APP_PATH")/$(basename "$APP_PATH").zip" ./NuvioDesktop-macos.zip
+          DMG=$(find composeApp/build/compose/binaries -name "*.dmg" | head -1)
+          echo "dmg: $DMG"
+          test -n "$DMG"
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/nuvio-dmg "$DMG"
+          ls -la /tmp/nuvio-dmg/
+          APP=$(find /tmp/nuvio-dmg -maxdepth 2 -name "*.app" | head -1)
+          echo "app: $APP"
+          find "$APP/Contents/app" -type d | head -20
+          BRIDGE=$(find "$APP" -name "libplayer_bridge.dylib" | head -1)
+          MPV=$(find "$APP" -iname "*mpv*" | head -1)
+          echo "bridge: $BRIDGE"
+          echo "mpv: $MPV"
+          hdiutil detach /tmp/nuvio-dmg -force
+          test -n "$BRIDGE" || (echo "MISSING libplayer_bridge.dylib" && exit 1)
+          test -n "$MPV" || (echo "MISSING libmpv dylib" && exit 1)
 
-      - name: Upload artifact
+      - name: Upload dmg
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-macos
-          path: NuvioDesktop-macos.zip
+          path: composeApp/build/compose/binaries/**/dmg/*.dmg
           if-no-files-found: error
 
-      - name: Publish to release
+      - name: Publish dmg to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: desktop-mac-build-${{ github.run_number }}
           name: NuvioDesktop macOS build ${{ github.run_number }}
           prerelease: true
-          files: NuvioDesktop-macos.zip
+          files: composeApp/build/compose/binaries/**/dmg/*.dmg
 
       - name: Attach build log on failure
         if: failure()
@@ -72,6 +88,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          repository: NuvioMedia/NuvioDesktop
+          ref: Dev
           lfs: true
 
       - uses: actions/setup-java@v4
