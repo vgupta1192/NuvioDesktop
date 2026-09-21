@@ -1,0 +1,274 @@
+name: "Build NuvioDesktop (self-hosted backend: vgupta1192)"
+
+on:
+  workflow_dispatch:
+    # Manual trigger only. Unlike desktop.yml this variant isn't wired to the
+    # upstream-release watcher (~/bin/nuvio-sync-check.sh) — it points at a
+    # separate self-hosted Nuvio backend and shouldn't compete with that
+    # automation. Run it by hand from the Actions tab when you want a build
+    # against this backend.
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: Check upstream release
+        id: ver
+        run: |
+          UP=$(curl -s -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/NuvioMedia/NuvioDesktop/releases/latest | python3 -c "import json,sys;print(json.load(sys.stdin)['tag_name'])")
+          VER="${UP%%-*}"
+          echo "upstream tag: $UP (version $VER)"
+          BUILT=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-mac-vg-$UP")
+          SHOULD=true
+          if [ "$BUILT" = "200" ]; then
+            RENAMED=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-mac-vg-$UP" | jq --arg want "NuvioDesktop-vg-${VER}.dmg" '[.assets[] | select(.name == $want)] | length')
+            if [ "${RENAMED:-0}" -ge 1 ]; then echo "already built with release naming, skipping"; SHOULD=false; else echo "release exists but assets need renaming, rebuilding"; fi
+          fi
+          echo "should_build=$SHOULD" >> "$GITHUB_OUTPUT"
+          echo "tag=$UP" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.ver.outputs.should_build == 'true'
+        with:
+          repository: NuvioMedia/NuvioDesktop
+          ref: Dev
+          lfs: true
+
+      - uses: actions/setup-java@v4
+        if: steps.ver.outputs.should_build == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Hide Trakt card (Simkl-only build)
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          curl -sSL https://raw.githubusercontent.com/vgupta1192/NuvioDesktop/Dev/.github/patches/hide-unconfigured-trakt.patch -o /tmp/trakt.patch
+          git apply --3way /tmp/trakt.patch
+
+      - name: Create local.properties (vgupta1192 self-hosted backend)
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          printf '%s\n' \
+            'NUVIO_SUPABASE_URL=https://nuvio.vgupta1192.duckdns.org:8489' \
+            'NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5OTkyOTc3LCJleHAiOjE5NDc2NzI5Nzd9.rBg0Dgt3uGeambhEaE7anV-wvSk6MOKc4uTS7iyaxOc' \
+            'NUVIO_SUPABASE_FALLBACK_URL=' \
+            'SIMKL_CLIENT_ID=cf7f2a335cfcd9759fa01d752d9cf8f42fb4fa1a4e4ff08fe4cafb84ec836621' \
+            'TMDB_API_KEY=af624aa414c84ad32d55d5ac45feae76' \
+            'NUVIO_ANDROID_DISTRIBUTION=full' \
+            'NUVIO_IOS_DISTRIBUTION=appstore' \
+            > local.properties
+
+      - name: Package macOS dmg
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          set -o pipefail
+          ./gradlew :composeApp:packageReleaseDmg --no-configuration-cache --stacktrace 2>&1 | tee build-log-macos.txt
+
+      - name: Verify native player libraries inside dmg
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          DMG=$(find composeApp/build/compose/binaries -name "*.dmg" | head -1)
+          echo "dmg: $DMG"
+          test -n "$DMG"
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/nuvio-dmg "$DMG"
+          APP=$(find /tmp/nuvio-dmg -maxdepth 2 -name "*.app" | head -1)
+          BRIDGE=$(find "$APP" -name "libplayer_bridge.dylib" | head -1)
+          MPV=$(find "$APP" -iname "*mpv*" | head -1)
+          echo "bridge: $BRIDGE"
+          echo "mpv: $MPV"
+          hdiutil detach /tmp/nuvio-dmg -force
+          test -n "$BRIDGE" || (echo "MISSING libplayer_bridge.dylib" && exit 1)
+          test -n "$MPV" || (echo "MISSING libmpv dylib" && exit 1)
+
+      - name: Rename dmg
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          DMG=$(find composeApp/build/compose/binaries -name "*.dmg" | head -1)
+          cp "$DMG" "NuvioDesktop-vg-${{ steps.ver.outputs.ver }}.dmg"
+          ls -l NuvioDesktop-vg-*.dmg
+
+      - name: Upload dmg
+        if: steps.ver.outputs.should_build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NuvioDesktop-vg-macos
+          path: NuvioDesktop-vg-${{ steps.ver.outputs.ver }}.dmg
+          if-no-files-found: error
+
+      - name: Publish dmg to release
+        if: steps.ver.outputs.should_build == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-mac-vg-${{ steps.ver.outputs.tag }}
+          name: NuvioDesktop macOS ${{ steps.ver.outputs.tag }} (vgupta1192 backend)
+          prerelease: true
+          files: NuvioDesktop-vg-${{ steps.ver.outputs.ver }}.dmg
+
+      - name: Remove legacy-named assets
+        if: steps.ver.outputs.should_build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: NuvioDesktop-vg-${{ steps.ver.outputs.ver }}.dmg
+          TAG: desktop-mac-vg-${{ steps.ver.outputs.tag }}
+        run: |
+          gh api "repos/${{ github.repository }}/releases/tags/$TAG" \
+            | jq -r --arg keep "$KEEP" '.assets[] | select(.name != $keep) | .id' \
+            | while read -r id; do
+                echo "deleting legacy asset $id"
+                gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$id"
+              done
+
+      - name: Notify Telegram
+        if: steps.ver.outputs.should_build == 'true' && env.TG_BOT_TOKEN != '' && env.TG_CHAT_ID != ''
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          REL_TAG: desktop-mac-vg-${{ steps.ver.outputs.tag }}
+          VER: ${{ steps.ver.outputs.tag }}
+        run: |
+          MSG="💻 NuvioDesktop macOS ${VER} (vgupta1192 backend) is ready
+          Upstream release: ${VER}
+          Download: https://github.com/vgupta1192/NuvioDesktop/releases/tag/${REL_TAG}
+          (open dmg, drag to Applications, then: xattr -cr /Applications/Nuvio.app)"
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT_ID}" \
+            --data-urlencode "text=${MSG}" > /dev/null
+
+      - name: Attach build log on failure
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ci-vg-debug-logs
+          name: CI (vgupta1192 backend) debug logs
+          prerelease: true
+          files: build-log-macos.txt
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check upstream release
+        id: ver
+        run: |
+          UP=$(curl -s -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/NuvioMedia/NuvioDesktop/releases/latest | python3 -c "import json,sys;print(json.load(sys.stdin)['tag_name'])")
+          VER="${UP%%-*}"
+          echo "upstream tag: $UP (version $VER)"
+          BUILT=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-linux-vg-$UP")
+          SHOULD=true
+          if [ "$BUILT" = "200" ]; then
+            RENAMED=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-linux-vg-$UP" | jq --arg want "NuvioDesktop-vg-${VER}.deb" '[.assets[] | select(.name == $want)] | length')
+            if [ "${RENAMED:-0}" -ge 1 ]; then echo "already built with release naming, skipping"; SHOULD=false; else echo "release exists but assets need renaming, rebuilding"; fi
+          fi
+          echo "should_build=$SHOULD" >> "$GITHUB_OUTPUT"
+          echo "tag=$UP" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.ver.outputs.should_build == 'true'
+        with:
+          repository: NuvioMedia/NuvioDesktop
+          ref: Dev
+          lfs: true
+
+      - uses: actions/setup-java@v4
+        if: steps.ver.outputs.should_build == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Linux native build deps
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config g++ cmake libmpv-dev libwebkit2gtk-4.1-dev libgtk-3-dev libx11-dev libxcomposite-dev libxext-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+
+      - name: Hide Trakt card (Simkl-only build)
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          curl -sSL https://raw.githubusercontent.com/vgupta1192/NuvioDesktop/Dev/.github/patches/hide-unconfigured-trakt.patch -o /tmp/trakt.patch
+          git apply --3way /tmp/trakt.patch
+
+      - name: Create local.properties (vgupta1192 self-hosted backend)
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          printf '%s\n' \
+            'NUVIO_SUPABASE_URL=https://nuvio.vgupta1192.duckdns.org:8489' \
+            'NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5OTkyOTc3LCJleHAiOjE5NDc2NzI5Nzd9.rBg0Dgt3uGeambhEaE7anV-wvSk6MOKc4uTS7iyaxOc' \
+            'NUVIO_SUPABASE_FALLBACK_URL=' \
+            'SIMKL_CLIENT_ID=cf7f2a335cfcd9759fa01d752d9cf8f42fb4fa1a4e4ff08fe4cafb84ec836621' \
+            'TMDB_API_KEY=af624aa414c84ad32d55d5ac45feae76' \
+            'NUVIO_ANDROID_DISTRIBUTION=full' \
+            'NUVIO_IOS_DISTRIBUTION=appstore' \
+            > local.properties
+
+      - name: Package Linux deb
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          ok=0
+          for i in 1 2 3; do
+            echo "attempt $i"
+            ./gradlew :composeApp:packageReleaseDeb --stacktrace 2>&1 | tee build-log-linux.txt && ok=1 && break
+            echo "gradle failed, retrying in 60s (transient repo errors are common)"
+            sleep 60
+          done
+          DEB=$(find composeApp/build/compose/binaries -name "*.deb" | head -1)
+          echo "deb: $DEB"
+          test -n "$DEB" && cp "$DEB" "./NuvioDesktop-vg-${{ steps.ver.outputs.ver }}.deb"
+
+      - name: Upload artifacts
+        if: steps.ver.outputs.should_build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NuvioDesktop-vg-linux
+          path: NuvioDesktop-vg-${{ steps.ver.outputs.ver }}.deb
+          if-no-files-found: error
+
+      - name: Publish to release
+        if: steps.ver.outputs.should_build == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-linux-vg-${{ steps.ver.outputs.tag }}
+          name: NuvioDesktop Linux ${{ steps.ver.outputs.tag }} (vgupta1192 backend)
+          prerelease: true
+          files: NuvioDesktop-vg-${{ steps.ver.outputs.ver }}.deb
+
+      - name: Remove legacy-named assets
+        if: steps.ver.outputs.should_build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: NuvioDesktop-vg-${{ steps.ver.outputs.ver }}.deb
+          TAG: desktop-linux-vg-${{ steps.ver.outputs.tag }}
+        run: |
+          gh api "repos/${{ github.repository }}/releases/tags/$TAG" \
+            | jq -r --arg keep "$KEEP" '.assets[] | select(.name != $keep) | .id' \
+            | while read -r id; do
+                echo "deleting legacy asset $id"
+                gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$id"
+              done
+
+      - name: Notify Telegram
+        if: steps.ver.outputs.should_build == 'true' && env.TG_BOT_TOKEN != '' && env.TG_CHAT_ID != ''
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          REL_TAG: desktop-linux-vg-${{ steps.ver.outputs.tag }}
+          VER: ${{ steps.ver.outputs.tag }}
+        run: |
+          MSG="🐧 NuvioDesktop Linux ${VER} (vgupta1192 backend) is ready
+          Download: https://github.com/vgupta1192/NuvioDesktop/releases/tag/${REL_TAG}"
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT_ID}" \
+            --data-urlencode "text=${MSG}" > /dev/null
+
+      - name: Attach build log on failure
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ci-vg-debug-logs
+          name: CI (vgupta1192 backend) debug logs
+          prerelease: true
+          files: build-log-linux.txt
