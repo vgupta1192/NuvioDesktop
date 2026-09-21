@@ -22,10 +22,17 @@ jobs:
         id: ver
         run: |
           UP=$(curl -s -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/NuvioMedia/NuvioDesktop/releases/latest | python3 -c "import json,sys;print(json.load(sys.stdin)['tag_name'])")
-          echo "upstream tag: $UP"
+          VER="${UP%%-*}"
+          echo "upstream tag: $UP (version $VER)"
           BUILT=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-mac-$UP")
-          if [ "$BUILT" = "200" ]; then echo "already built, skipping"; echo "should_build=false" >> "$GITHUB_OUTPUT"; else echo "should_build=true" >> "$GITHUB_OUTPUT"; fi
+          SHOULD=true
+          if [ "$BUILT" = "200" ]; then
+            RENAMED=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-mac-$UP" | jq --arg want "NuvioDesktop-${VER}.dmg" '[.assets[] | select(.name == $want)] | length')
+            if [ "${RENAMED:-0}" -ge 1 ]; then echo "already built with release naming, skipping"; SHOULD=false; else echo "release exists but assets need renaming, rebuilding"; fi
+          fi
+          echo "should_build=$SHOULD" >> "$GITHUB_OUTPUT"
           echo "tag=$UP" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
         if: steps.ver.outputs.should_build == 'true'
@@ -81,12 +88,19 @@ jobs:
           test -n "$BRIDGE" || (echo "MISSING libplayer_bridge.dylib" && exit 1)
           test -n "$MPV" || (echo "MISSING libmpv dylib" && exit 1)
 
+      - name: Rename dmg
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          DMG=$(find composeApp/build/compose/binaries -name "*.dmg" | head -1)
+          cp "$DMG" "NuvioDesktop-${{ steps.ver.outputs.ver }}.dmg"
+          ls -l NuvioDesktop-*.dmg
+
       - name: Upload dmg
         if: steps.ver.outputs.should_build == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-macos
-          path: composeApp/build/compose/binaries/**/dmg/*.dmg
+          path: NuvioDesktop-${{ steps.ver.outputs.ver }}.dmg
           if-no-files-found: error
 
       - name: Publish dmg to release
@@ -96,7 +110,21 @@ jobs:
           tag_name: desktop-mac-${{ steps.ver.outputs.tag }}
           name: NuvioDesktop macOS ${{ steps.ver.outputs.tag }}
           prerelease: true
-          files: composeApp/build/compose/binaries/**/dmg/*.dmg
+          files: NuvioDesktop-${{ steps.ver.outputs.ver }}.dmg
+
+      - name: Remove legacy-named assets
+        if: steps.ver.outputs.should_build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: NuvioDesktop-${{ steps.ver.outputs.ver }}.dmg
+          TAG: desktop-mac-${{ steps.ver.outputs.tag }}
+        run: |
+          gh api "repos/${{ github.repository }}/releases/tags/$TAG" \
+            | jq -r --arg keep "$KEEP" '.assets[] | select(.name != $keep) | .id' \
+            | while read -r id; do
+                echo "deleting legacy asset $id"
+                gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$id"
+              done
 
       - name: Notify Telegram
         if: steps.ver.outputs.should_build == 'true' && env.TG_BOT_TOKEN != '' && env.TG_CHAT_ID != ''
@@ -130,9 +158,17 @@ jobs:
         id: ver
         run: |
           UP=$(curl -s -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/NuvioMedia/NuvioDesktop/releases/latest | python3 -c "import json,sys;print(json.load(sys.stdin)['tag_name'])")
+          VER="${UP%%-*}"
+          echo "upstream tag: $UP (version $VER)"
           BUILT=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-linux-$UP")
-          if [ "$BUILT" = "200" ]; then echo "already built, skipping"; echo "should_build=false" >> "$GITHUB_OUTPUT"; else echo "should_build=true" >> "$GITHUB_OUTPUT"; fi
+          SHOULD=true
+          if [ "$BUILT" = "200" ]; then
+            RENAMED=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-linux-$UP" | jq --arg want "NuvioDesktop-${VER}.deb" '[.assets[] | select(.name == $want)] | length')
+            if [ "${RENAMED:-0}" -ge 1 ]; then echo "already built with release naming, skipping"; SHOULD=false; else echo "release exists but assets need renaming, rebuilding"; fi
+          fi
+          echo "should_build=$SHOULD" >> "$GITHUB_OUTPUT"
           echo "tag=$UP" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
         if: steps.ver.outputs.should_build == 'true'
@@ -184,14 +220,14 @@ jobs:
           done
           DEB=$(find composeApp/build/compose/binaries -name "*.deb" | head -1)
           echo "deb: $DEB"
-          test -n "$DEB" && cp "$DEB" ./NuvioDesktop-linux.deb
+          test -n "$DEB" && cp "$DEB" "./NuvioDesktop-${{ steps.ver.outputs.ver }}.deb"
 
       - name: Upload artifacts
         if: steps.ver.outputs.should_build == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-linux
-          path: NuvioDesktop-linux.deb
+          path: NuvioDesktop-${{ steps.ver.outputs.ver }}.deb
           if-no-files-found: error
 
       - name: Publish to release
@@ -201,7 +237,21 @@ jobs:
           tag_name: desktop-linux-${{ steps.ver.outputs.tag }}
           name: NuvioDesktop Linux ${{ steps.ver.outputs.tag }}
           prerelease: true
-          files: NuvioDesktop-linux.deb
+          files: NuvioDesktop-${{ steps.ver.outputs.ver }}.deb
+
+      - name: Remove legacy-named assets
+        if: steps.ver.outputs.should_build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: NuvioDesktop-${{ steps.ver.outputs.ver }}.deb
+          TAG: desktop-linux-${{ steps.ver.outputs.tag }}
+        run: |
+          gh api "repos/${{ github.repository }}/releases/tags/$TAG" \
+            | jq -r --arg keep "$KEEP" '.assets[] | select(.name != $keep) | .id' \
+            | while read -r id; do
+                echo "deleting legacy asset $id"
+                gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$id"
+              done
 
       - name: Notify Telegram
         if: steps.ver.outputs.should_build == 'true' && env.TG_BOT_TOKEN != '' && env.TG_CHAT_ID != ''
