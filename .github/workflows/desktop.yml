@@ -60,6 +60,12 @@ jobs:
           curl -sSL https://raw.githubusercontent.com/vgupta1192/NuvioDesktop/Dev/.github/patches/subsync-video-hash.patch -o /tmp/subsync.patch
           git apply --3way /tmp/subsync.patch
 
+      - name: Fix upstream broken isGifUrl reference (drop when upstream fixes Dev)
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          curl -sSL https://raw.githubusercontent.com/vgupta1192/NuvioDesktop/Dev/.github/patches/fix-desktop-isgifurl.patch -o /tmp/isgifurl.patch
+          git apply --3way /tmp/isgifurl.patch
+
       - name: Create local.properties (self-hosted backend)
         if: steps.ver.outputs.should_build == 'true'
         run: |
@@ -208,6 +214,12 @@ jobs:
         run: |
           curl -sSL https://raw.githubusercontent.com/vgupta1192/NuvioDesktop/Dev/.github/patches/subsync-video-hash.patch -o /tmp/subsync.patch
           git apply --3way /tmp/subsync.patch
+
+      - name: Fix upstream broken isGifUrl reference (drop when upstream fixes Dev)
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          curl -sSL https://raw.githubusercontent.com/vgupta1192/NuvioDesktop/Dev/.github/patches/fix-desktop-isgifurl.patch -o /tmp/isgifurl.patch
+          git apply --3way /tmp/isgifurl.patch
 
       - name: Create local.properties (self-hosted backend)
         if: steps.ver.outputs.should_build == 'true'
