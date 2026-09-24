@@ -26,10 +26,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api "repos/${{ github.repository }}/releases?per_page=100" \
-            | jq -r '.[] | select(.tag_name | startswith("desktop-mac-vg-") or startswith("desktop-linux-vg-")) | .tag_name' \
-            | while read -r tag; do
-                echo "deleting vg release $tag"
-                gh release delete "$tag" --yes --cleanup-tag
+            | jq -r '.[] | select(.tag_name | startswith("desktop-mac-vg-") or startswith("desktop-linux-vg-")) | "\(.id) \(.tag_name)"' \
+            | while read -r id tag; do
+                echo "deleting vg release $tag (id $id)"
+                gh api -X DELETE "repos/${{ github.repository }}/releases/$id" || echo "delete failed: $tag"
               done
 
   macos:
