@@ -20,14 +20,21 @@ jobs:
     steps:
       - name: Check upstream release
         id: ver
+        env:
+          HEAD_MSG: ${{ github.event.head_commit.message }}
         run: |
           UP=$(curl -s -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/NuvioMedia/NuvioDesktop/releases/latest | python3 -c "import json,sys;print(json.load(sys.stdin)['tag_name'])")
           VER="${UP%%-*}"
           echo "upstream tag: $UP (version $VER)"
           BUILT=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-mac-$UP")
+          # workflow_dispatch or a head commit message containing [force-build] rebuilds
+          # even when the release already exists
+          FORCE=false
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then FORCE=true; fi
+          if echo "$HEAD_MSG" | grep -qi '\[force-build\]'; then FORCE=true; fi
           SHOULD=true
-          if [ "$BUILT" = "200" ]; then
-            RENAMED=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-mac-$UP" | jq --arg want "NuvioDesktop-${VER}-ss2.dmg" '[.assets[] | select(.name == $want)] | length')
+          if [ "$BUILT" = "200" ] && [ "$FORCE" != "true" ]; then
+            RENAMED=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-mac-$UP" | jq --arg want "NuvioDesktop-${VER}.dmg" '[.assets[] | select(.name == $want)] | length')
             if [ "${RENAMED:-0}" -ge 1 ]; then echo "already built with release naming, skipping"; SHOULD=false; else echo "release exists but assets need renaming, rebuilding"; fi
           fi
           echo "should_build=$SHOULD" >> "$GITHUB_OUTPUT"
@@ -52,12 +59,6 @@ jobs:
         run: |
           curl -sSL https://raw.githubusercontent.com/vgupta1192/NuvioDesktop/Dev/.github/patches/hide-unconfigured-trakt.patch -o /tmp/trakt.patch
           git apply --3way /tmp/trakt.patch
-
-      - name: Send stream hash to subtitle addons (SubSync)
-        if: steps.ver.outputs.should_build == 'true'
-        run: |
-          curl -sSL https://raw.githubusercontent.com/vgupta1192/NuvioDesktop/Dev/.github/patches/subsync-video-hash.patch -o /tmp/subsync.patch
-          git apply --3way /tmp/subsync.patch
 
       - name: Fix upstream broken isGifUrl reference (drop when upstream fixes Dev)
         if: steps.ver.outputs.should_build == 'true'
@@ -104,7 +105,7 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           DMG=$(find composeApp/build/compose/binaries -name "*.dmg" | head -1)
-          cp "$DMG" "NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.dmg"
+          cp "$DMG" "NuvioDesktop-${{ steps.ver.outputs.ver }}.dmg"
           ls -l NuvioDesktop-*.dmg
 
       - name: Upload dmg
@@ -112,7 +113,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-macos
-          path: NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.dmg
+          path: NuvioDesktop-${{ steps.ver.outputs.ver }}.dmg
           if-no-files-found: error
 
       - name: Publish dmg to release
@@ -122,13 +123,13 @@ jobs:
           tag_name: desktop-mac-${{ steps.ver.outputs.tag }}
           name: NuvioDesktop macOS ${{ steps.ver.outputs.tag }}
           prerelease: true
-          files: NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.dmg
+          files: NuvioDesktop-${{ steps.ver.outputs.ver }}.dmg
 
       - name: Remove legacy-named assets
         if: steps.ver.outputs.should_build == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          KEEP: NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.dmg
+          KEEP: NuvioDesktop-${{ steps.ver.outputs.ver }}.dmg
           TAG: desktop-mac-${{ steps.ver.outputs.tag }}
         run: |
           gh api "repos/${{ github.repository }}/releases/tags/$TAG" \
@@ -168,14 +169,21 @@ jobs:
     steps:
       - name: Check upstream release
         id: ver
+        env:
+          HEAD_MSG: ${{ github.event.head_commit.message }}
         run: |
           UP=$(curl -s -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/NuvioMedia/NuvioDesktop/releases/latest | python3 -c "import json,sys;print(json.load(sys.stdin)['tag_name'])")
           VER="${UP%%-*}"
           echo "upstream tag: $UP (version $VER)"
           BUILT=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-linux-$UP")
+          # workflow_dispatch or a head commit message containing [force-build] rebuilds
+          # even when the release already exists
+          FORCE=false
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then FORCE=true; fi
+          if echo "$HEAD_MSG" | grep -qi '\[force-build\]'; then FORCE=true; fi
           SHOULD=true
-          if [ "$BUILT" = "200" ]; then
-            RENAMED=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-linux-$UP" | jq --arg want "NuvioDesktop-${VER}-ss2.deb" '[.assets[] | select(.name == $want)] | length')
+          if [ "$BUILT" = "200" ] && [ "$FORCE" != "true" ]; then
+            RENAMED=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-linux-$UP" | jq --arg want "NuvioDesktop-${VER}.deb" '[.assets[] | select(.name == $want)] | length')
             if [ "${RENAMED:-0}" -ge 1 ]; then echo "already built with release naming, skipping"; SHOULD=false; else echo "release exists but assets need renaming, rebuilding"; fi
           fi
           echo "should_build=$SHOULD" >> "$GITHUB_OUTPUT"
@@ -206,12 +214,6 @@ jobs:
         run: |
           curl -sSL https://raw.githubusercontent.com/vgupta1192/NuvioDesktop/Dev/.github/patches/hide-unconfigured-trakt.patch -o /tmp/trakt.patch
           git apply --3way /tmp/trakt.patch
-
-      - name: Send stream hash to subtitle addons (SubSync)
-        if: steps.ver.outputs.should_build == 'true'
-        run: |
-          curl -sSL https://raw.githubusercontent.com/vgupta1192/NuvioDesktop/Dev/.github/patches/subsync-video-hash.patch -o /tmp/subsync.patch
-          git apply --3way /tmp/subsync.patch
 
       - name: Fix upstream broken isGifUrl reference (drop when upstream fixes Dev)
         if: steps.ver.outputs.should_build == 'true'
@@ -244,14 +246,14 @@ jobs:
           done
           DEB=$(find composeApp/build/compose/binaries -name "*.deb" | head -1)
           echo "deb: $DEB"
-          test -n "$DEB" && cp "$DEB" "./NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.deb"
+          test -n "$DEB" && cp "$DEB" "./NuvioDesktop-${{ steps.ver.outputs.ver }}.deb"
 
       - name: Upload artifacts
         if: steps.ver.outputs.should_build == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-linux
-          path: NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.deb
+          path: NuvioDesktop-${{ steps.ver.outputs.ver }}.deb
           if-no-files-found: error
 
       - name: Publish to release
@@ -261,13 +263,13 @@ jobs:
           tag_name: desktop-linux-${{ steps.ver.outputs.tag }}
           name: NuvioDesktop Linux ${{ steps.ver.outputs.tag }}
           prerelease: true
-          files: NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.deb
+          files: NuvioDesktop-${{ steps.ver.outputs.ver }}.deb
 
       - name: Remove legacy-named assets
         if: steps.ver.outputs.should_build == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          KEEP: NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.deb
+          KEEP: NuvioDesktop-${{ steps.ver.outputs.ver }}.deb
           TAG: desktop-linux-${{ steps.ver.outputs.tag }}
         run: |
           gh api "repos/${{ github.repository }}/releases/tags/$TAG" \
