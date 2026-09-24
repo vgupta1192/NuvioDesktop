@@ -27,7 +27,7 @@ jobs:
           BUILT=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-mac-$UP")
           SHOULD=true
           if [ "$BUILT" = "200" ]; then
-            RENAMED=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-mac-$UP" | jq --arg want "NuvioDesktop-${VER}.dmg" '[.assets[] | select(.name == $want)] | length')
+            RENAMED=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-mac-$UP" | jq --arg want "NuvioDesktop-${VER}-ss2.dmg" '[.assets[] | select(.name == $want)] | length')
             if [ "${RENAMED:-0}" -ge 1 ]; then echo "already built with release naming, skipping"; SHOULD=false; else echo "release exists but assets need renaming, rebuilding"; fi
           fi
           echo "should_build=$SHOULD" >> "$GITHUB_OUTPUT"
@@ -104,7 +104,7 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           DMG=$(find composeApp/build/compose/binaries -name "*.dmg" | head -1)
-          cp "$DMG" "NuvioDesktop-${{ steps.ver.outputs.ver }}.dmg"
+          cp "$DMG" "NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.dmg"
           ls -l NuvioDesktop-*.dmg
 
       - name: Upload dmg
@@ -112,7 +112,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-macos
-          path: NuvioDesktop-${{ steps.ver.outputs.ver }}.dmg
+          path: NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.dmg
           if-no-files-found: error
 
       - name: Publish dmg to release
@@ -122,13 +122,13 @@ jobs:
           tag_name: desktop-mac-${{ steps.ver.outputs.tag }}
           name: NuvioDesktop macOS ${{ steps.ver.outputs.tag }}
           prerelease: true
-          files: NuvioDesktop-${{ steps.ver.outputs.ver }}.dmg
+          files: NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.dmg
 
       - name: Remove legacy-named assets
         if: steps.ver.outputs.should_build == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          KEEP: NuvioDesktop-${{ steps.ver.outputs.ver }}.dmg
+          KEEP: NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.dmg
           TAG: desktop-mac-${{ steps.ver.outputs.tag }}
         run: |
           gh api "repos/${{ github.repository }}/releases/tags/$TAG" \
@@ -175,7 +175,7 @@ jobs:
           BUILT=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-linux-$UP")
           SHOULD=true
           if [ "$BUILT" = "200" ]; then
-            RENAMED=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-linux-$UP" | jq --arg want "NuvioDesktop-${VER}.deb" '[.assets[] | select(.name == $want)] | length')
+            RENAMED=$(curl -s -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-linux-$UP" | jq --arg want "NuvioDesktop-${VER}-ss2.deb" '[.assets[] | select(.name == $want)] | length')
             if [ "${RENAMED:-0}" -ge 1 ]; then echo "already built with release naming, skipping"; SHOULD=false; else echo "release exists but assets need renaming, rebuilding"; fi
           fi
           echo "should_build=$SHOULD" >> "$GITHUB_OUTPUT"
@@ -244,14 +244,14 @@ jobs:
           done
           DEB=$(find composeApp/build/compose/binaries -name "*.deb" | head -1)
           echo "deb: $DEB"
-          test -n "$DEB" && cp "$DEB" "./NuvioDesktop-${{ steps.ver.outputs.ver }}.deb"
+          test -n "$DEB" && cp "$DEB" "./NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.deb"
 
       - name: Upload artifacts
         if: steps.ver.outputs.should_build == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: NuvioDesktop-linux
-          path: NuvioDesktop-${{ steps.ver.outputs.ver }}.deb
+          path: NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.deb
           if-no-files-found: error
 
       - name: Publish to release
@@ -261,13 +261,13 @@ jobs:
           tag_name: desktop-linux-${{ steps.ver.outputs.tag }}
           name: NuvioDesktop Linux ${{ steps.ver.outputs.tag }}
           prerelease: true
-          files: NuvioDesktop-${{ steps.ver.outputs.ver }}.deb
+          files: NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.deb
 
       - name: Remove legacy-named assets
         if: steps.ver.outputs.should_build == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          KEEP: NuvioDesktop-${{ steps.ver.outputs.ver }}.deb
+          KEEP: NuvioDesktop-${{ steps.ver.outputs.ver }}-ss2.deb
           TAG: desktop-linux-${{ steps.ver.outputs.tag }}
         run: |
           gh api "repos/${{ github.repository }}/releases/tags/$TAG" \
