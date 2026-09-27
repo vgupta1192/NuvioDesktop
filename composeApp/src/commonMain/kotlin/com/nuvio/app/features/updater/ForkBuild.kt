@@ -25,7 +25,8 @@ internal object ForkBuild {
         var best: AppUpdate? = null
         var bestBuild = -1
         for (release in releases) {
-            if (release.draft) continue
+            // Live TV variant: only its own desktop-livetv-* releases, never the main app's
+            if (release.draft || release.tagName.orEmpty().startsWith("desktop-livetv-").not()) continue
             val byBuild = release.assets.mapNotNull { asset ->
                 val build = assetPattern.find(asset.name)?.groupValues?.get(1)?.toIntOrNull()
                     ?: return@mapNotNull null
