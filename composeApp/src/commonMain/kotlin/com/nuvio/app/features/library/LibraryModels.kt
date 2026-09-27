@@ -115,3 +115,21 @@ fun LibraryItem.toMetaPreview(): MetaPreview =
         rawPosterUrl = rawPosterUrl,
         landscapePoster = landscapePoster,
     )
+
+/**
+ * Live TV fork feature: channel items stay in the Live TV screen. IMDb/TMDB ids are kept even
+ * with a "tv" type, since some sources use "tv" for TV shows.
+ */
+private fun LibraryItem.isLiveTvChannel(): Boolean =
+    com.nuvio.app.features.livetv.isLiveTvContentType(type) &&
+        !id.startsWith("tt") && !id.startsWith("tmdb", ignoreCase = true)
+
+internal fun LibraryUiState.withoutLiveTvItems(): LibraryUiState {
+    if (items.none { it.isLiveTvChannel() } && sections.none { section -> section.items.any { it.isLiveTvChannel() } }) return this
+    return copy(
+        items = items.filterNot { it.isLiveTvChannel() },
+        sections = sections
+            .map { section -> section.copy(items = section.items.filterNot { it.isLiveTvChannel() }) }
+            .filter { it.items.isNotEmpty() },
+    )
+}

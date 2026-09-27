@@ -111,7 +111,10 @@ fun LibraryScreen(
     val uiState by remember {
         LibraryRepository.ensureLoaded()
         LibraryRepository.uiState
-    }.collectAsStateWithLifecycle()
+    }.collectAsStateWithLifecycle().let { state ->
+        // Live TV channels belong to the Live TV screen, not the Library
+        remember { androidx.compose.runtime.derivedStateOf { state.value.withoutLiveTvItems() } }
+    }
     val cloudUiState by CloudLibraryRepository.uiState.collectAsStateWithLifecycle()
     val cloudSettings by remember {
         DebridSettingsRepository.ensureLoaded()

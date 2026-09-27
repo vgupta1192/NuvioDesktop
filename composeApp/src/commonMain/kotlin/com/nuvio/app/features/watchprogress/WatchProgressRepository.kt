@@ -1238,6 +1238,13 @@ object WatchProgressRepository {
         persist: Boolean,
         syncRemote: Boolean,
     ) {
+        // Live TV fork feature: live channels have no resumable progress; keep them out of Continue Watching
+        if (
+            com.nuvio.app.features.livetv.isLiveTvContentType(session.contentType) &&
+            !session.parentMetaId.startsWith("tt") && !session.parentMetaId.startsWith("tmdb", ignoreCase = true)
+        ) {
+            return
+        }
         val targetProfileId = session.profileId
         val positionMs = snapshot.positionMs.coerceAtLeast(0L)
         val durationMs = snapshot.durationMs.coerceAtLeast(0L)

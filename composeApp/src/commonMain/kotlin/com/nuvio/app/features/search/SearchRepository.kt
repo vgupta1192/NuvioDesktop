@@ -407,6 +407,7 @@ object SearchRepository {
         }.flatMap { (addon, manifest) ->
             manifest.catalogs
                 .filter { catalog -> catalog.supportsSearch() }
+                .filterNot { catalog -> com.nuvio.app.features.livetv.isLiveTvContentType(catalog.type) } // Live TV only
                 .map { catalog ->
                     SearchCatalogRequest(
                         addon = addon,
@@ -426,6 +427,7 @@ object SearchRepository {
         }.flatMap { (addon, manifest) ->
             manifest.catalogs
                 .filter { catalog -> catalog.supportsDiscover() }
+                .filterNot { catalog -> com.nuvio.app.features.livetv.isLiveTvContentType(catalog.type) } // Live TV only
                 .map { catalog ->
                     val genreExtra = catalog.genreExtra()
                     DiscoverCatalogOption(
