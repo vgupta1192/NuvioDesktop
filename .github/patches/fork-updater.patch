@@ -1,0 +1,131 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
+index 8c0de02b..0d43f6a5 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
+@@ -111,11 +111,7 @@ class AppUpdaterController internal constructor(
+             if (channel != preferences.channel.value) return@launch
+ 
+             result.onSuccess { update ->
+-                val remoteNewer = if (channel == UpdateChannel.ALL_RELEASES) {
+-                    VersionUtils.isRemoteNewerLegacy(update.tag, AppUpdaterPlatform.currentVersionName)
+-                } else {
+-                    VersionUtils.isRemoteNewer(update.tag, AppUpdaterPlatform.currentVersionName)
+-                }
++                val remoteNewer = ForkBuild.isNewer(update.tag) // self-host fork patch
+                 val ignored = ignoredTag != null && ignoredTag == update.tag
+                 val shouldShowDialog = remoteNewer && (force || !ignored)
+ 
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdaterRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdaterRepository.kt
+index e172da38..7aeff131 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdaterRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdaterRepository.kt
+@@ -65,6 +65,26 @@ internal object AppUpdaterRepository {
+ 
+     suspend fun getLatestChannelUpdate(channel: UpdateChannel): Result<AppUpdate> = runCatching {
+         val source = AppUpdaterPlatform.releaseSource
++        // Self-host fork patch: newest CI build number wins, whatever the channel
++        val forkResponse = httpRequestRaw(
++            method = "GET",
++            url = "https://api.github.com/repos/${source.owner}/${source.repo}/releases?per_page=100",
++            headers = mapOf(
++                "Accept" to "application/vnd.github+json",
++                "User-Agent" to source.userAgent,
++            ),
++            body = "",
++        )
++        currentCoroutineContext().ensureActive()
++        if (forkResponse.status !in 200..299) {
++            error(getString(Res.string.updates_github_api_error, forkResponse.status))
++        }
++        return@runCatching ForkBuild.newest(
++            json.decodeFromString<List<GitHubReleaseDto>>(forkResponse.body),
++            AppUpdaterPlatform.assetSelector,
++        ) ?: throw NoChannelReleaseException()
++
++        @Suppress("UNREACHABLE_CODE")
+         val response = httpRequestRaw(
+             method = "GET",
+             url = "https://api.github.com/repos/${source.owner}/${source.repo}/${releasePath(channel)}",
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/ForkBuild.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/ForkBuild.kt
+new file mode 100644
+index 00000000..559f2ede
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/ForkBuild.kt
+@@ -0,0 +1,62 @@
++package com.nuvio.app.features.updater
++
++/**
++ * Self-host fork patch: updates come from the fork's CI releases. CI builds the app with version
++ * name "<upstream version>-fork.<CI run number>" and names each package
++ * NuvioDesktop-<version>-b<run number>.<dmg|deb>, so "newer" = higher run number (fork rebuilds
++ * of one upstream version keep the same version name otherwise). The platform's asset selector
++ * picks the file this install can use (dmg on macOS, deb/AppImage on Linux, apk on Android).
++ */
++internal object ForkBuild {
++    private const val TAG_PREFIX = "fork-build-"
++    private val assetPattern = Regex("-b(\\d+)\\.[A-Za-z]+$")
++
++    val localBuild: Int
++        get() = AppUpdaterPlatform.currentVersionName.substringAfter("-fork.", "").toIntOrNull() ?: 0
++
++    fun tag(build: Int): String = "$TAG_PREFIX$build"
++
++    fun isNewer(tag: String): Boolean {
++        val remote = tag.removePrefix(TAG_PREFIX).toIntOrNull() ?: return false
++        return remote > localBuild
++    }
++
++    fun newest(releases: List<GitHubReleaseDto>, selector: AppUpdateAssetSelector): AppUpdate? {
++        var best: AppUpdate? = null
++        var bestBuild = -1
++        for (release in releases) {
++            if (release.draft) continue
++            val byBuild = release.assets.mapNotNull { asset ->
++                val build = assetPattern.find(asset.name)?.groupValues?.get(1)?.toIntOrNull()
++                    ?: return@mapNotNull null
++                build to asset
++            }.groupBy({ it.first }, { it.second })
++            for ((build, assets) in byBuild) {
++                if (build <= bestBuild) continue
++                val asset = selectBestUpdateAsset(
++                    assets = assets.map {
++                        AppUpdateAssetCandidate(
++                            name = it.name,
++                            downloadUrl = it.browserDownloadUrl,
++                            size = it.size,
++                            contentType = it.contentType,
++                        )
++                    },
++                    selector = selector,
++                ) ?: continue
++                bestBuild = build
++                val name = release.name?.takeIf { it.isNotBlank() } ?: release.tagName.orEmpty()
++                best = AppUpdate(
++                    tag = tag(build),
++                    title = "$name (build $build)".trim(),
++                    notes = release.body.orEmpty(),
++                    releaseUrl = release.htmlUrl,
++                    assetName = asset.name,
++                    assetUrl = asset.downloadUrl,
++                    assetSizeBytes = asset.size,
++                )
++            }
++        }
++        return best
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
+index 97f47f5b..1a271926 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
+@@ -52,8 +52,9 @@ actual object AppUpdaterPlatform {
+     actual val isSupported: Boolean
+         get() = currentOs != DesktopUpdaterOs.UNKNOWN && linuxInstallMethod != LinuxInstallMethod.FLATPAK
+ 
++    // Self-host fork patch: updates come from the fork's CI releases
+     actual val releaseSource: AppUpdateReleaseSource = AppUpdateReleaseSource(
+-        owner = "NuvioMedia",
++        owner = "vgupta1192",
+         repo = "NuvioDesktop",
+         channelBranch = null,
+         includePrereleases = true,
