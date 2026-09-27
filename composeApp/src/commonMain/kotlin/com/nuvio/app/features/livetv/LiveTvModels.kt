@@ -67,6 +67,17 @@ data class LiveTvUiState(
 }
 
 const val LIVE_TV_CATEGORY_ALL = "__all__"
+
+private val liveTvContentTypes = setOf(
+    "tv", "channel", "channels", "iptv", "live", "livetv", "live_tv", "radio", "broadcast",
+)
+
+/**
+ * Live TV owns these catalog/content types: they show only in the Live TV screen and are kept
+ * out of Home, Search/Discover and Library.
+ */
+fun isLiveTvContentType(type: String?): Boolean =
+    type != null && type.lowercase().trim() in liveTvContentTypes
 const val LIVE_TV_CATEGORY_FAVORITES = "__favorites__"
 
 data class EpgProgram(
