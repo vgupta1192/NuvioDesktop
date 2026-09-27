@@ -229,6 +229,10 @@ internal actual fun CollectionCardRemoteImage(
 
     var composeBitmap by remember(imageUrl) { mutableStateOf<ImageBitmap?>(null) }
 
+    // upstream Dev referenced isGifUrl without defining it (broken mid-commit);
+    // define it locally so desktop targets compile until upstream lands the real one
+    val isGifUrl = imageUrl.substringBefore('?').endsWith(".gif", ignoreCase = true)
+
     // Prefetch as soon as the card becomes visible (not on hover) so the codec is already
     // downloaded/decoded and cached by the time the user actually hovers - hover then reads
     // straight from gifCodecCache with zero network/decode delay.
