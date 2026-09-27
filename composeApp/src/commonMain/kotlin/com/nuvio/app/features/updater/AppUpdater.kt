@@ -111,11 +111,7 @@ class AppUpdaterController internal constructor(
             if (channel != preferences.channel.value) return@launch
 
             result.onSuccess { update ->
-                val remoteNewer = if (channel == UpdateChannel.ALL_RELEASES) {
-                    VersionUtils.isRemoteNewerLegacy(update.tag, AppUpdaterPlatform.currentVersionName)
-                } else {
-                    VersionUtils.isRemoteNewer(update.tag, AppUpdaterPlatform.currentVersionName)
-                }
+                val remoteNewer = ForkBuild.isNewer(update.tag) // self-host fork patch
                 val ignored = ignoredTag != null && ignoredTag == update.tag
                 val shouldShowDialog = remoteNewer && (force || !ignored)
 
