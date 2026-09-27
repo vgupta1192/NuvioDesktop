@@ -1336,7 +1336,7 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
-            packageName = "Nuvio"
+            packageName = "NuvioLiveTV"
             packageVersion = desktopReleasePackageVersion
             vendor = "Nuvio Media"
             if (isMacHost) {
@@ -1351,7 +1351,7 @@ compose.desktop {
                 "jdk.unsupported",
             )
             macOS {
-                bundleID = "com.nuvio.media.desktop"
+                bundleID = "com.nuvio.media.desktop.livetv"
                 iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.icns"))
                 infoPlist {
                     extraKeysRawXml = """
@@ -1359,11 +1359,10 @@ compose.desktop {
                         <array>
                             <dict>
                                 <key>CFBundleURLName</key>
-                                <string>com.nuvio.media.desktop</string>
+                                <string>com.nuvio.media.desktop.livetv</string>
                                 <key>CFBundleURLSchemes</key>
                                 <array>
-                                    <string>nuvio</string>
-                                    <string>stremio</string>
+                                    <string>nuviolivetv</string>
                                 </array>
                             </dict>
                         </array>
@@ -1414,8 +1413,8 @@ fun renameMacosDmgOutput(release: Boolean) {
 
     val distributionName = if (release) "main-release" else "main"
     val outputDir = layout.buildDirectory.dir("compose/binaries/$distributionName/dmg").get().asFile
-    val finalDmg = outputDir.resolve("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
-    val defaultDmg = outputDir.resolve("Nuvio-$desktopReleasePackageVersion.dmg")
+    val finalDmg = outputDir.resolve("NuvioLiveTV-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
+    val defaultDmg = outputDir.resolve("NuvioLiveTV-$desktopReleasePackageVersion.dmg")
     val sourceDmg = defaultDmg.takeIf { it.exists() }
         ?: finalDmg.takeIf { it.exists() }
         ?: error("Expected macOS DMG output in ${outputDir.absolutePath}")
@@ -1719,8 +1718,8 @@ if (isMacHost) {
         dependsOn("packageReleaseDmg")
         dmgDir.set(layout.buildDirectory.dir("compose/binaries/main-release/dmg"))
         artifactDir.set(layout.buildDirectory.dir("compose/release-dmgs"))
-        finalDmgName.set("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
-        defaultDmgName.set("Nuvio-$desktopReleasePackageVersion.dmg")
+        finalDmgName.set("NuvioLiveTV-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
+        defaultDmgName.set("NuvioLiveTV-$desktopReleasePackageVersion.dmg")
         keychainProfile.set(macosNotaryKeychainProfile.orEmpty())
         keychainPath.set(macosNotaryKeychainPath.orEmpty())
         signingIdentity.set(macosSigningIdentity.orEmpty())
