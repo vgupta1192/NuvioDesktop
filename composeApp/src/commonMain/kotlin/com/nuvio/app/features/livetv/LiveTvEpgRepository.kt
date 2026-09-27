@@ -91,7 +91,7 @@ object LiveTvEpgRepository {
                         (listOf(id.substringBefore('.')) + channel.displayNames)
                             .map(::normalize)
                             .filter { it.isNotBlank() }
-                            .forEach { key -> keys.putIfAbsent(key, id) }
+                            .forEach { key -> if (key !in keys) keys[key] = id }
                     }
                     programs.putAll(parsed.programsByChannelId)
                 } catch (error: CancellationException) {

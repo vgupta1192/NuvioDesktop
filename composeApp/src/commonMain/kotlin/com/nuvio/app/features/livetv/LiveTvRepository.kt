@@ -27,10 +27,6 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
 object LiveTvRepository {
-    private val tvCatalogTypes = setOf(
-        "tv", "channel", "channels", "iptv", "live", "livetv", "live_tv", "broadcast", "radio",
-        "sports", "sport", "events", "event", "news",
-    )
     private const val SELECTED_ADDONS_KEY = "selected_addons"
     private const val FAVORITES_KEY = "favorite_channels"
     private const val HIDE_ADULT_KEY = "hide_adult"
@@ -78,7 +74,8 @@ object LiveTvRepository {
 
     private fun onAddonsChanged(forceReload: Boolean) {
         val saved = loadSet(SELECTED_ADDONS_KEY)
-        val options = enabledAddons.map { addon ->
+        // Only addons that have Live TV catalogs; movie/series-only addons never show here.
+        val options = enabledAddons.filter { it.tvCatalogs().isNotEmpty() }.map { addon ->
             LiveTvAddonOption(
                 manifestUrl = addon.manifestUrl,
                 name = addon.displayTitle,
@@ -87,7 +84,7 @@ object LiveTvRepository {
             )
         }
         val selected = saved?.filterTo(mutableSetOf()) { url -> options.any { it.manifestUrl == url } }
-            ?: enabledAddons.filter(::looksLikeTvAddon).mapTo(mutableSetOf()) { it.manifestUrl }
+            ?: options.mapTo(mutableSetOf()) { it.manifestUrl }
         _uiState.update { state ->
             state.copy(
                 availableAddons = options.map { it.copy(isSelected = it.manifestUrl in selected) },
@@ -332,28 +329,12 @@ object LiveTvRepository {
         return copy(categories = categories, selectedCategory = category, filteredChannels = filtered)
     }
 
-    private fun ManagedAddon.tvCatalogs(): List<AddonCatalog> {
-        val catalogs = manifest?.catalogs.orEmpty()
-            .filter { catalog -> catalog.extra.none { it.isRequired } }
-        val tvOnes = catalogs.filter { isTvCatalog(it) }
-        return tvOnes.ifEmpty { if (looksLikeTvAddon(this)) catalogs else emptyList() }
-    }
-
-    private fun isTvCatalog(catalog: AddonCatalog): Boolean {
-        val type = catalog.type.lowercase().trim()
-        if (type in tvCatalogTypes) return true
-        if (type == "movie" || type == "series" || type == "anime") return false
-        val text = "${catalog.id} ${catalog.name}".lowercase()
-        return listOf("channel", "iptv", "live", "canal", "canais", "ao vivo").any { text.contains(it) }
-    }
-
-    private fun looksLikeTvAddon(addon: ManagedAddon): Boolean {
-        val manifest = addon.manifest ?: return false
-        if (manifest.types.any { it.lowercase() in tvCatalogTypes }) return true
-        val text = "${manifest.id} ${manifest.name} ${manifest.description}".lowercase()
-        if (listOf("iptv", "live tv", "livetv", "tv channels", "channels", "canais", "ao vivo").any { text.contains(it) }) return true
-        return manifest.catalogs.any { isTvCatalog(it) }
-    }
+    // Strictly by catalog type: an addon listing "tv" among its manifest types can still serve
+    // only movie/series catalogs, and those must not leak into Live TV.
+    private fun ManagedAddon.tvCatalogs(): List<AddonCatalog> =
+        manifest?.catalogs.orEmpty().filter { catalog ->
+            isLiveTvContentType(catalog.type) && catalog.extra.none { it.isRequired }
+        }
 
     private fun loadSet(key: String): Set<String>? =
         LiveTvStorage.loadString(key)?.split('\n')?.filter { it.isNotBlank() }?.toSet()
