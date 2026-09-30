@@ -210,10 +210,10 @@ index 20ffd02f..de5d256b 100644
                  onClick = { onTabSelected(AppScreenTab.Settings) },
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
 new file mode 100644
-index 00000000..5e8fd447
+index 00000000..499f23a8
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
-@@ -0,0 +1,294 @@
+@@ -0,0 +1,296 @@
 +package com.nuvio.app.features.jellyfin
 +
 +import kotlinx.serialization.json.Json
@@ -383,7 +383,7 @@ index 00000000..5e8fd447
 +                put(
 +                    "Fields",
 +                    "Overview,Genres,ProductionYear,CommunityRating,OfficialRating,RunTimeTicks," +
-+                        "Container,UserData,SeriesId,SeriesName",
++                        "Container,UserData,SeriesId,SeriesName,ProviderIds",
 +                )
 +                put("Recursive", recursive.toString())
 +                put("ImageTypeLimit", "1")
@@ -470,6 +470,8 @@ index 00000000..5e8fd447
 +                ?.jsonPrimitive
 +                ?.contentOrNull,
 +            container = obj.string("Container"),
++            imdbId = (obj["ProviderIds"] as? JsonObject)?.string("Imdb"),
++            tmdbId = (obj["ProviderIds"] as? JsonObject)?.string("Tmdb"),
 +            playbackPositionTicks = userData?.long("PlaybackPositionTicks"),
 +            playedPercentage = userData?.double("PlayedPercentage"),
 +        )
@@ -494,7 +496,7 @@ index 00000000..5e8fd447
 +        this[key] as? JsonArray
 +
 +    /** RFC 3986 query-value encoding without java.net (common code). */
-+    private fun encodeQueryValue(value: String): String = buildString {
++    internal fun encodeQueryValue(value: String): String = buildString {
 +        for (byte in value.encodeToByteArray()) {
 +            val code = byte.toInt() and 0xFF
 +            when {
@@ -615,10 +617,10 @@ index 00000000..e1f02ae6
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
 new file mode 100644
-index 00000000..b6fa97a2
+index 00000000..a987c840
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,145 @@
 +package com.nuvio.app.features.jellyfin
 +
 +import com.nuvio.app.features.home.MetaPreview
@@ -666,10 +668,16 @@ index 00000000..b6fa97a2
 +    val imageTag: String? = null,
 +    val backdropTag: String? = null,
 +    val container: String? = null,
++    val imdbId: String? = null,
++    val tmdbId: String? = null,
 +    val playbackPositionTicks: Long? = null,
 +    val playedPercentage: Double? = null,
 +) {
 +    val isSeries: Boolean get() = type.equals("Series", ignoreCase = true)
++    val isFolder: Boolean
++        get() = type.equals("Folder", ignoreCase = true) ||
++            type.equals("AggregateFolder", ignoreCase = true) ||
++            type.equals("PlaylistFolder", ignoreCase = true)
 +    val isEpisode: Boolean get() = type.equals("Episode", ignoreCase = true)
 +    val isMovie: Boolean get() = type.equals("Movie", ignoreCase = true)
 +
@@ -718,6 +726,10 @@ index 00000000..b6fa97a2
 +    val itemsError: String? = null,
 +    val searchQuery: String = "",
 +    val sortLatestFirst: Boolean = false,
++    val seerrConnected: Boolean = false,
++    val seerrResults: List<SeerrSearchResult> = emptyList(),
++    val seerrRequestedIds: Set<Int> = emptySet(),
++    val seerrStatusMessage: String? = null,
 +    val selectedItemId: String? = null,
 +    val selectedDetail: JellyfinItem? = null,
 +    val seasons: List<JellyfinItem> = emptyList(),
@@ -728,6 +740,18 @@ index 00000000..b6fa97a2
 +) {
 +    val canLoadMore: Boolean get() = items.size < totalItemCount
 +}
++
++/** One Jellyseerr/Overseerr search hit that is NOT currently in the Jellyfin library. */
++data class SeerrSearchResult(
++    val tmdbId: Int,
++    val mediaType: String,
++    val title: String,
++    val overview: String? = null,
++    val releaseYear: Int? = null,
++    val posterUrl: String? = null,
++    val isRequested: Boolean = false,
++    val isAvailable: Boolean = false,
++)
 +
 +internal const val TICKS_PER_MILLISECOND = 10_000L
 +private const val RUNTIME_TICKS_PER_MINUTE = 600_000_000L
@@ -763,14 +787,15 @@ index 00000000..2800325d
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
 new file mode 100644
-index 00000000..d9238614
+index 00000000..4ab28cc1
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
-@@ -0,0 +1,521 @@
+@@ -0,0 +1,708 @@
 +package com.nuvio.app.features.jellyfin
 +
 +import com.nuvio.app.features.catalog.CatalogTarget
 +import com.nuvio.app.features.home.HomeCatalogSection
++import com.nuvio.app.features.profiles.ProfileRepository
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.Dispatchers
@@ -783,6 +808,8 @@ index 00000000..d9238614
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.StateFlow
 +import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.distinctUntilChanged
++import kotlinx.coroutines.flow.map
 +import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.launch
 +
@@ -794,7 +821,10 @@ index 00000000..d9238614
 +    private const val KEY_USER_NAME = "user_name"
 +    private const val KEY_TOKEN = "access_token"
 +
-+    private const val HIDDEN_LIBRARIES_KEY = "hidden_libraries"
++    private const val HIDDEN_LIBRARIES_KEY_PREFIX = "hidden_libraries_p"
++    private const val SEERR_URL_KEY = "seerr_url"
++    private const val SEERR_API_KEY_KEY = "seerr_api_key"
++    private const val SEERR_REQUESTED_KEY = "seerr_requested_ids"
 +
 +    private const val SEARCH_SECTION_LIMIT = 24
 +    private const val SEARCH_DEBOUNCE_MS = 350L
@@ -809,6 +839,8 @@ index 00000000..d9238614
 +    private var librariesJob: Job? = null
 +    private var itemsJob: Job? = null
 +    private var detailJob: Job? = null
++    private var seerrJob: Job? = null
++    private var lastAppliedProfileId: Int? = null
 +
 +    /** True when a signed-in session exists; loads the persisted session on first call. */
 +    val hasSession: Boolean
@@ -825,6 +857,26 @@ index 00000000..d9238614
 +        if (initialized) return
 +        initialized = true
 +        loadPersistedSession()
++        scope.launch {
++            ProfileRepository.state
++                .map { it.activeProfile?.profileIndex ?: 1 }
++                .distinctUntilChanged()
++                .collect { profileId -> applyProfile(profileId) }
++        }
++    }
++
++    /** Hidden libraries are per Nuvio profile; switching profiles swaps the visible set. */
++    private fun applyProfile(profileId: Int) {
++        if (lastAppliedProfileId == null) {
++            lastAppliedProfileId = profileId
++            _uiState.update { it.copy(hiddenLibraryIds = loadHiddenLibraryIds(profileId)) }
++            return
++        }
++        if (lastAppliedProfileId == profileId) return
++        lastAppliedProfileId = profileId
++        _uiState.update { it.copy(hiddenLibraryIds = loadHiddenLibraryIds(profileId)) }
++        refresh()
++        if (_uiState.value.session != null) loadItems(reset = true)
 +    }
 +
 +    private fun loadPersistedSession() {
@@ -838,7 +890,14 @@ index 00000000..d9238614
 +            userName = JellyfinPlatform.loadString(KEY_USER_NAME).orEmpty().ifBlank { "user" },
 +            accessToken = token,
 +        )
-+        _uiState.update { it.copy(session = session, hiddenLibraryIds = loadHiddenLibraryIds()) }
++        _uiState.update {
++            it.copy(
++                session = session,
++                hiddenLibraryIds = loadHiddenLibraryIds(currentProfileId()),
++                seerrConnected = seerrSettings() != null,
++                seerrRequestedIds = loadSeerrRequestedIds(),
++            )
++        }
 +        refresh()
 +    }
 +
@@ -863,7 +922,9 @@ index 00000000..d9238614
 +                        JellyfinUiState(
 +                            session = session,
 +                            isLoadingSession = false,
-+                            hiddenLibraryIds = loadHiddenLibraryIds(),
++                            hiddenLibraryIds = loadHiddenLibraryIds(currentProfileId()),
++                            seerrConnected = seerrSettings() != null,
++                            seerrRequestedIds = loadSeerrRequestedIds(),
 +                        )
 +                    }
 +                    refresh()
@@ -898,17 +959,19 @@ index 00000000..d9238614
 +            } catch (_: Throwable) {
 +                emptyList()
 +            }
++            var selectionChanged = false
 +            _uiState.update { state ->
 +                val visible = libraries.filter { it.id !in state.hiddenLibraryIds }
 +                val selected = visible.firstOrNull { it.id == state.selectedLibraryId }
 +                    ?: visible.firstOrNull { lib -> lib.collectionType != null && lib.collectionType in VIDEO_LIBRARY_TYPES }
 +                    ?: visible.firstOrNull()
++                selectionChanged = selected?.id != state.selectedLibraryId
 +                state.copy(
 +                    libraries = libraries,
 +                    selectedLibraryId = selected?.id,
 +                )
 +            }
-+            if (_uiState.value.items.isEmpty()) loadItems(reset = true)
++            if (selectionChanged || _uiState.value.items.isEmpty()) loadItems(reset = true)
 +        }
 +    }
 +
@@ -956,6 +1019,7 @@ index 00000000..d9238614
 +                    itemsError = null,
 +                    items = if (reset) emptyList() else it.items,
 +                    totalItemCount = if (reset) 0 else it.totalItemCount,
++                    seerrResults = if (searchTerm == null) emptyList() else it.seerrResults,
 +                )
 +            }
 +            val result = try {
@@ -984,6 +1048,7 @@ index 00000000..d9238614
 +            } catch (error: Throwable) {
 +                Result.failure<JellyfinItemPage>(error)
 +            }
++            if (searchTerm != null) refreshSeerrResults(searchTerm)
 +            result.fold(
 +                onSuccess = { page ->
 +                    _uiState.update { current ->
@@ -1014,19 +1079,21 @@ index 00000000..d9238614
 +    /** Selects an item for the detail panel; loads seasons and the first season's episodes for series. */
 +    fun selectItem(item: JellyfinItem) {
 +        detailJob?.cancel()
++        val loadsChildren = item.isSeries || item.isFolder
 +        _uiState.update {
 +            it.copy(
 +                selectedItemId = item.id,
 +                selectedDetail = item,
 +                seasons = if (item.isSeries) it.seasons else emptyList(),
-+                episodes = if (item.isSeries) it.episodes else emptyList(),
++                episodes = if (loadsChildren) it.episodes else emptyList(),
 +                selectedSeasonId = null,
-+                isLoadingDetail = item.isSeries,
++                isLoadingDetail = loadsChildren,
 +                detailError = null,
 +            )
 +        }
-+        if (item.isSeries) {
-+            loadSeriesDetail(item.id)
++        when {
++            item.isSeries -> loadSeriesDetail(item.id)
++            item.isFolder -> loadFolderChildren(item.id)
 +        }
 +    }
 +
@@ -1051,13 +1118,18 @@ index 00000000..d9238614
 +            _uiState.update { state ->
 +                if (state.selectedItemId != itemId) return@update state
 +                when {
-+                    loaded != null -> state.copy(selectedDetail = loaded, isLoadingDetail = loaded.isSeries, detailError = null)
++                    loaded != null -> state.copy(
++                        selectedDetail = loaded,
++                        isLoadingDetail = loaded.isSeries || loaded.isFolder,
++                        detailError = null,
++                    )
 +                    result.isFailure -> state.copy(isLoadingDetail = false, detailError = result.exceptionOrNull()?.message ?: "Could not load item")
 +                    else -> state.copy(isLoadingDetail = false, detailError = "Item not found")
 +                }
 +            }
-+            if (loaded?.isSeries == true) {
-+                loadSeriesDetail(loaded.id)
++            when {
++                loaded?.isSeries == true -> loadSeriesDetail(loaded.id)
++                loaded?.isFolder == true -> loadFolderChildren(loaded.id)
 +            }
 +        }
 +    }
@@ -1135,6 +1207,141 @@ index 00000000..d9238614
 +    fun backdropUrlFor(item: JellyfinItem): String? =
 +        _uiState.value.session?.let { session -> JellyfinClient.backdropImageUrl(session, item) }
 +
++    /** Lists the playable files inside a nested folder (movies/adult "saga" folders, like episodes for shows). */
++    private fun loadFolderChildren(folderId: String) {
++        val session = _uiState.value.session ?: return
++        detailJob = scope.launch {
++            _uiState.update { it.copy(isLoadingDetail = true) }
++            val result = try {
++                Result.success(
++                    JellyfinClient.getItems(
++                        session = session,
++                        parentId = folderId,
++                        startIndex = 0,
++                        limit = 500,
++                        sortBy = "SortName",
++                        sortAscending = true,
++                        includeItemTypes = "Movie,Video,Episode",
++                        recursive = true,
++                    ),
++                )
++            } catch (error: CancellationException) {
++                throw error
++            } catch (error: Throwable) {
++                Result.failure<JellyfinItemPage>(error)
++            }
++            val children = result.getOrNull()?.items.orEmpty()
++            _uiState.update { state ->
++                if (state.selectedDetail?.id != folderId) return@update state
++                state.copy(
++                    episodes = children,
++                    isLoadingDetail = false,
++                    detailError = if (result.isFailure && children.isEmpty()) {
++                        result.exceptionOrNull()?.message ?: "Could not load the folder contents"
++                    } else {
++                        null
++                    },
++                )
++            }
++        }
++    }
++
++    // ---- Jellyseerr request integration ----
++
++    fun connectSeerr(url: String, apiKey: String) {
++        val normalized = SeerrClient.normalizeUrl(url) ?: run {
++            _uiState.update { it.copy(seerrStatusMessage = "Enter a valid Seerr address") }
++            return
++        }
++        if (apiKey.isBlank()) {
++            _uiState.update { it.copy(seerrStatusMessage = "Enter the Seerr API key (Seerr Settings → API Key)") }
++            return
++        }
++        _uiState.update { it.copy(seerrStatusMessage = "Checking Seerr…") }
++        scope.launch {
++            val ok = SeerrClient.testConnection(normalized, apiKey)
++            _uiState.update { state ->
++                if (ok) {
++                    JellyfinPlatform.saveString(SEERR_URL_KEY, normalized)
++                    JellyfinPlatform.saveString(SEERR_API_KEY_KEY, apiKey)
++                    state.copy(seerrConnected = true, seerrStatusMessage = null)
++                } else {
++                    state.copy(seerrStatusMessage = "Could not reach Seerr or the API key was rejected")
++                }
++            }
++            if (ok && _uiState.value.searchQuery.isNotBlank()) {
++                refreshSeerrResults(_uiState.value.searchQuery)
++            }
++        }
++    }
++
++    fun disconnectSeerr() {
++        JellyfinPlatform.saveString(SEERR_URL_KEY, null)
++        JellyfinPlatform.saveString(SEERR_API_KEY_KEY, null)
++        _uiState.update { it.copy(seerrConnected = false, seerrResults = emptyList(), seerrStatusMessage = null) }
++    }
++
++    fun requestViaSeerr(result: SeerrSearchResult) {
++        val settings = seerrSettings() ?: return
++        val (url, key) = settings
++        _uiState.update { it.copy(seerrStatusMessage = "Requesting \"${result.title}\"…") }
++        scope.launch {
++            val outcome = SeerrClient.request(url, key, result.mediaType, result.tmdbId)
++            _uiState.update { state ->
++                when (outcome) {
++                    SeerrClient.RequestOutcome.Created, SeerrClient.RequestOutcome.AlreadyRequested -> {
++                        val updatedIds = state.seerrRequestedIds + result.tmdbId
++                        JellyfinPlatform.saveString(SEERR_REQUESTED_KEY, updatedIds.joinToString("\n") { it.toString() })
++                        state.copy(
++                            seerrRequestedIds = updatedIds,
++                            seerrStatusMessage = if (outcome == SeerrClient.RequestOutcome.Created) {
++                                "Requested \"${result.title}\" — Radarr/Sonarr will download it; it shows up here once ready"
++                            } else {
++                                "\"${result.title}\" was already requested"
++                            },
++                        )
++                    }
++                    SeerrClient.RequestOutcome.Unauthorized ->
++                        state.copy(seerrStatusMessage = "Seerr rejected the API key")
++                    SeerrClient.RequestOutcome.Failed ->
++                        state.copy(seerrStatusMessage = "Seerr request failed — try again")
++                }
++            }
++        }
++    }
++
++    private fun refreshSeerrResults(query: String) {
++        val settings = seerrSettings() ?: run {
++            _uiState.update { it.copy(seerrResults = emptyList()) }
++            return
++        }
++        val (url, key) = settings
++        seerrJob?.cancel()
++        seerrJob = scope.launch {
++            val results = SeerrClient.search(url, key, query)
++            _uiState.update { state ->
++                val knownTmdb = state.items.mapNotNull { it.tmdbId }.filter { it.isNotBlank() }.toSet()
++                val filtered = results.orEmpty().filterNot { result ->
++                    result.isAvailable || result.tmdbId.toString() in knownTmdb
++                }
++                state.copy(seerrResults = filtered)
++            }
++        }
++    }
++
++    private fun seerrSettings(): Pair<String, String>? {
++        val url = JellyfinPlatform.loadString(SEERR_URL_KEY)?.takeIf { it.isNotBlank() } ?: return null
++        val key = JellyfinPlatform.loadString(SEERR_API_KEY_KEY)?.takeIf { it.isNotBlank() } ?: return null
++        return url to key
++    }
++
++    private fun loadSeerrRequestedIds(): Set<Int> =
++        JellyfinPlatform.loadString(SEERR_REQUESTED_KEY)
++            ?.split('\n')
++            ?.mapNotNull { it.trim().toIntOrNull() }
++            ?.toSet()
++            .orEmpty()
++
 +    // ---- library visibility (hide/show in the Jellyfin screen) ----
 +
 +    fun toggleLibraryHidden(libraryId: String) {
@@ -1144,7 +1351,7 @@ index 00000000..d9238614
 +        } else {
 +            current.hiddenLibraryIds + libraryId
 +        }
-+        JellyfinPlatform.saveString(HIDDEN_LIBRARIES_KEY, updated.joinToString("\n"))
++        JellyfinPlatform.saveString(hiddenLibrariesKey(currentProfileId()), updated.joinToString("\n"))
 +        _uiState.update { it.copy(hiddenLibraryIds = updated) }
 +        // Hiding the library being browsed falls back to the first visible one.
 +        if (current.selectedLibraryId == libraryId && libraryId in updated) {
@@ -1168,18 +1375,22 @@ index 00000000..d9238614
 +     * the legacy non-recursive direct-children listing.
 +     */
 +    private fun browseItemTypes(collectionType: String?): String? = when (collectionType?.lowercase()) {
-+        "movies" -> "Movie"
-+        "tvshows" -> "Series"
-+        "mixed" -> "Movie,Series"
++        "movies" -> "Movie,Folder"
++        "tvshows" -> "Series,Folder"
++        "mixed" -> "Movie,Series,Folder"
 +        else -> null
 +    }
 +
-+    private fun loadHiddenLibraryIds(): Set<String> =
-+        JellyfinPlatform.loadString(HIDDEN_LIBRARIES_KEY)
++    private fun loadHiddenLibraryIds(profileId: Int): Set<String> =
++        JellyfinPlatform.loadString(hiddenLibrariesKey(profileId))
 +            ?.split('\n')
 +            ?.filter { it.isNotBlank() }
 +            ?.toSet()
 +            .orEmpty()
++
++    private fun hiddenLibrariesKey(profileId: Int): String = "$HIDDEN_LIBRARIES_KEY_PREFIX$profileId"
++
++    private fun currentProfileId(): Int = runCatching { ProfileRepository.activeProfileId }.getOrDefault(1)
 +
 +    /** Server-side search across every VISIBLE library (parallel), merged and de-duplicated. */
 +    private suspend fun searchVisibleLibraries(
@@ -1290,10 +1501,10 @@ index 00000000..d9238614
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
 new file mode 100644
-index 00000000..2c29cc3a
+index 00000000..645f2cfa
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
-@@ -0,0 +1,800 @@
+@@ -0,0 +1,946 @@
 +package com.nuvio.app.features.jellyfin
 +
 +import androidx.compose.foundation.background
@@ -1371,6 +1582,8 @@ index 00000000..2c29cc3a
 +    val tokens = MaterialTheme.nuvio
 +    val session = state.session
 +    var showHiddenLibraries by remember { mutableStateOf(false) }
++    var seerrUrl by remember { mutableStateOf("") }
++    var seerrApiKey by remember { mutableStateOf("") }
 +
 +    if (session == null) {
 +        JellyfinSignInContent(state = state, onBack = onBack)
@@ -1470,6 +1683,55 @@ index 00000000..2c29cc3a
 +                        }
 +                    }
 +                }
++                Spacer(modifier = Modifier.height(14.dp))
++                NuvioSectionLabel(text = "Seerr — requests")
++                Spacer(modifier = Modifier.height(4.dp))
++                if (state.seerrConnected) {
++                    Text(
++                        text = "Connected. Search above — titles missing from your libraries get a Request button.",
++                        style = MaterialTheme.typography.labelSmall,
++                        color = tokens.colors.textMuted,
++                    )
++                    Spacer(modifier = Modifier.height(6.dp))
++                    Text(
++                        text = "Disconnect",
++                        style = MaterialTheme.typography.labelMedium,
++                        color = tokens.colors.accent,
++                        modifier = Modifier
++                            .clip(RoundedCornerShape(8.dp))
++                            .clickable { JellyfinRepository.disconnectSeerr() }
++                            .padding(horizontal = 4.dp, vertical = 2.dp),
++                    )
++                } else {
++                    NuvioInputField(
++                        value = seerrUrl,
++                        onValueChange = { seerrUrl = it },
++                        placeholder = "Seerr address (https://…)",
++                    )
++                    Spacer(modifier = Modifier.height(6.dp))
++                    NuvioInputField(
++                        value = seerrApiKey,
++                        onValueChange = { seerrApiKey = it },
++                        placeholder = "Seerr API key",
++                    )
++                    Spacer(modifier = Modifier.height(6.dp))
++                    Button(
++                        enabled = seerrUrl.isNotBlank() && seerrApiKey.isNotBlank(),
++                        onClick = { JellyfinRepository.connectSeerr(seerrUrl, seerrApiKey) },
++                        modifier = Modifier.fillMaxWidth(),
++                        colors = ButtonDefaults.buttonColors(containerColor = tokens.colors.accent),
++                    ) {
++                        Text(text = "Connect")
++                    }
++                }
++                if (state.seerrStatusMessage != null) {
++                    Spacer(modifier = Modifier.height(4.dp))
++                    Text(
++                        text = state.seerrStatusMessage.orEmpty(),
++                        style = MaterialTheme.typography.labelSmall,
++                        color = tokens.colors.textMuted,
++                    )
++                }
 +            }
 +
 +            // Middle: search + sort + poster grid
@@ -1554,6 +1816,25 @@ index 00000000..2c29cc3a
 +                                    isSelected = state.selectedItemId == item.id,
 +                                    onClick = { JellyfinRepository.selectItem(item) },
 +                                )
++                            }
++                            if (state.searchQuery.isNotBlank() && state.seerrConnected && state.seerrResults.isNotEmpty()) {
++                                item(key = "jellyfin_seerr_header", span = { GridItemSpan(maxLineSpan) }) {
++                                    Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
++                                        NuvioSectionLabel(text = "Not in your library — request via Seerr")
++                                    }
++                                }
++                                state.seerrResults.forEach { result ->
++                                    item(
++                                        key = "seerr_${result.mediaType}_${result.tmdbId}",
++                                        span = { GridItemSpan(maxLineSpan) },
++                                    ) {
++                                        SeerrResultRow(
++                                            result = result,
++                                            isRequestedLocally = result.tmdbId in state.seerrRequestedIds,
++                                            onRequest = { JellyfinRepository.requestViaSeerr(result) },
++                                        )
++                                    }
++                                }
 +                            }
 +                            if (state.canLoadMore) {
 +                                item(key = "jellyfin_load_more", span = { GridItemSpan(maxLineSpan) }) {
@@ -1956,8 +2237,10 @@ index 00000000..2c29cc3a
 +                    }
 +                }
 +            }
++        }
++        if (item.isSeries || item.isFolder) {
 +            item(key = "jellyfin_detail_episodes_label") {
-+                NuvioSectionLabel(text = "Episodes")
++                NuvioSectionLabel(text = if (item.isSeries) "Episodes" else "Files in this folder")
 +            }
 +            if (state.isLoadingDetail && state.episodes.isEmpty()) {
 +                item(key = "jellyfin_detail_episodes_loading") {
@@ -1987,9 +2270,10 @@ index 00000000..2c29cc3a
 +) {
 +    val tokens = MaterialTheme.nuvio
 +    val playable: JellyfinItem? = when {
-+        item.isSeries -> state.episodes.firstOrNull { it.resumePositionMs > 0 } ?: state.episodes.firstOrNull()
++        item.isSeries || item.isFolder ->
++            state.episodes.firstOrNull { it.resumePositionMs > 0 } ?: state.episodes.firstOrNull()
 +        item.isPlayable -> item
-+        else -> null // folders / box sets have no stream of their own
++        else -> null // box sets etc. have no stream of their own
 +    }
 +    Button(
 +        enabled = playable != null,
@@ -2005,7 +2289,8 @@ index 00000000..2c29cc3a
 +        Text(
 +            text = when {
 +                playable == null && item.isSeries -> "No episodes"
-+                playable == null -> "Folder — not playable"
++                playable == null && item.isFolder -> "No files"
++                playable == null -> "Not playable"
 +                playable.resumePositionMs > 0 -> {
 +                    if (playable.isEpisode) "Resume ${episodeLabel(playable)}" else "Resume"
 +                }
@@ -2043,7 +2328,11 @@ index 00000000..2c29cc3a
 +        verticalAlignment = Alignment.CenterVertically,
 +    ) {
 +        Text(
-+            text = episodeLabel(episode).ifBlank { "E${episode.indexNumber ?: ""}" },
++            text = when {
++                episode.isEpisode -> episodeLabel(episode).ifBlank { "E${episode.indexNumber ?: ""}" }
++                episode.productionYear != null -> episode.productionYear.toString()
++                else -> "•"
++            },
 +            style = MaterialTheme.typography.labelMedium,
 +            color = tokens.colors.textMuted,
 +            modifier = Modifier.width(52.dp),
@@ -2084,6 +2373,74 @@ index 00000000..2c29cc3a
 +    }
 +}
 +
++/** One Jellyseerr search hit: request it and Radarr/Sonarr downloads it into the library. */
++@Composable
++private fun SeerrResultRow(
++    result: SeerrSearchResult,
++    isRequestedLocally: Boolean,
++    onRequest: () -> Unit,
++) {
++    val tokens = MaterialTheme.nuvio
++    val requested = result.isRequested || isRequestedLocally
++    Row(
++        modifier = Modifier
++            .fillMaxWidth()
++            .clip(RoundedCornerShape(10.dp))
++            .background(tokens.colors.surfaceElevated)
++            .padding(horizontal = 10.dp, vertical = 8.dp),
++        horizontalArrangement = Arrangement.spacedBy(12.dp),
++        verticalAlignment = Alignment.CenterVertically,
++    ) {
++        Box(
++            modifier = Modifier
++                .width(44.dp)
++                .aspectRatio(2f / 3f)
++                .clip(RoundedCornerShape(6.dp))
++                .background(tokens.colors.surfaceCard),
++        ) {
++            if (result.posterUrl != null) {
++                NuvioAsyncImage(
++                    model = result.posterUrl,
++                    contentDescription = result.title,
++                    contentScale = ContentScale.Crop,
++                    modifier = Modifier.fillMaxSize(),
++                )
++            }
++        }
++        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
++            Text(
++                text = result.title,
++                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
++                color = tokens.colors.textPrimary,
++                maxLines = 1,
++                overflow = TextOverflow.Ellipsis,
++            )
++            Text(
++                text = (if (result.mediaType == "tv") "Series" else "Movie") +
++                    (result.releaseYear?.let { " · $it" } ?: ""),
++                style = MaterialTheme.typography.labelSmall,
++                color = tokens.colors.textMuted,
++            )
++            if (!result.overview.isNullOrBlank()) {
++                Text(
++                    text = result.overview.orEmpty(),
++                    style = MaterialTheme.typography.labelMedium,
++                    color = tokens.colors.textMuted,
++                    maxLines = 2,
++                    overflow = TextOverflow.Ellipsis,
++                )
++            }
++        }
++        Button(
++            enabled = !requested,
++            onClick = onRequest,
++            colors = ButtonDefaults.buttonColors(containerColor = tokens.colors.accent),
++        ) {
++            Text(text = if (requested) "Requested ✓" else "Request")
++        }
++    }
++}
++
 +internal fun formatPosition(positionMs: Long): String {
 +    val totalSeconds = positionMs / 1000
 +    val hours = totalSeconds / 3600
@@ -2093,6 +2450,141 @@ index 00000000..2c29cc3a
 +    } else {
 +        "${minutes}m"
 +    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/SeerrClient.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/SeerrClient.kt
+new file mode 100644
+index 00000000..d615139b
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/SeerrClient.kt
+@@ -0,0 +1,129 @@
++package com.nuvio.app.features.jellyfin
++
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonArray
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.add
++import kotlinx.serialization.json.booleanOrNull
++import kotlinx.serialization.json.buildJsonArray
++import kotlinx.serialization.json.buildJsonObject
++import kotlinx.serialization.json.contentOrNull
++import kotlinx.serialization.json.intOrNull
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import kotlinx.serialization.json.put
++
++/**
++ * Minimal Jellyseerr/Overseerr REST client (API v1, X-Api-Key header). Requests created here are
++ * forwarded by Seerr to Radarr/Sonarr; once the download finishes and Jellyfin scans it in, the
++ * title simply shows up in its Jellyfin library.
++ */
++internal object SeerrClient {
++    private val json = Json { ignoreUnknownKeys = true }
++
++    internal enum class RequestOutcome { Created, AlreadyRequested, Unauthorized, Failed }
++
++    fun normalizeUrl(raw: String): String? {
++        var url = raw.trim()
++        if (url.isBlank()) return null
++        if (!url.startsWith("http://") && !url.startsWith("https://")) url = "https://$url"
++        return url.trimEnd('/').takeIf { it.removePrefix("https://").removePrefix("http://").isNotBlank() }
++    }
++
++    private fun headers(apiKey: String): Map<String, String> = mapOf(
++        "X-Api-Key" to apiKey,
++        "Accept" to "application/json",
++    )
++
++    suspend fun testConnection(baseUrl: String, apiKey: String): Boolean {
++        val response = JellyfinPlatform.httpCall(
++            method = "GET",
++            url = "$baseUrl/api/v1/auth/me",
++            headers = headers(apiKey),
++            body = null,
++        )
++        return response != null && response.status == 200
++    }
++
++    suspend fun search(baseUrl: String, apiKey: String, query: String, limit: Int = 12): List<SeerrSearchResult>? {
++        if (query.isBlank()) return null
++        val response = JellyfinPlatform.httpCall(
++            method = "GET",
++            url = "$baseUrl/api/v1/search?query=" + JellyfinClient.encodeQueryValue(query) + "&page=1",
++            headers = headers(apiKey),
++            body = null,
++        ) ?: return null
++        if (response.status !in 200..299) return null
++        val root = runCatching { json.parseToJsonElement(response.body).jsonObject }.getOrNull() ?: return null
++        val array = root["results"] as? JsonArray ?: return null
++        return array.mapNotNull { element ->
++            val obj = element as? JsonObject ?: return@mapNotNull null
++            val tmdbId = obj.int("id") ?: return@mapNotNull null
++            val mediaType = obj.string("mediaType") ?: return@mapNotNull null
++            if (mediaType != "movie" && mediaType != "tv") return@mapNotNull null
++            val title = obj.string("title") ?: obj.string("name") ?: obj.string("originalTitle")
++                ?: return@mapNotNull null
++            val mediaInfo = obj["mediaInfo"] as? JsonObject
++            SeerrSearchResult(
++                tmdbId = tmdbId,
++                mediaType = mediaType,
++                title = title,
++                overview = obj.string("overview")?.takeIf { it.isNotBlank() },
++                releaseYear = (obj.string("releaseDate") ?: obj.string("firstAirDate"))
++                    ?.take(4)
++                    ?.toIntOrNull(),
++                posterUrl = obj.string("posterPath")
++                    ?.takeIf { it.isNotBlank() }
++                    ?.let { path -> "https://image.tmdb.org/t/p/w500$path" },
++                isRequested = mediaInfo?.boolean("requested") == true,
++                // Jellyseerr status enum: 1 unknown, 2 pending, 3 processing, 4 partially available, 5 available
++                isAvailable = (mediaInfo?.int("status") ?: 0) >= 4,
++            )
++        }.take(limit)
++    }
++
++    suspend fun request(baseUrl: String, apiKey: String, mediaType: String, tmdbId: Int): RequestOutcome {
++        val seasons = if (mediaType == "tv") tvSeasonNumbers(baseUrl, apiKey, tmdbId) else null
++        val response = JellyfinPlatform.httpCall(
++            method = "POST",
++            url = "$baseUrl/api/v1/request",
++            headers = headers(apiKey) + ("Content-Type" to "application/json"),
++            body = buildJsonObject {
++                put("mediaType", mediaType)
++                put("mediaId", tmdbId)
++                // Seerr requires the seasons array for TV; all seasons except specials.
++                if (seasons != null) put("seasons", kotlinx.serialization.json.buildJsonArray { seasons.forEach { add(it) } })
++            }.toString(),
++        ) ?: return RequestOutcome.Failed
++        return when (response.status) {
++            in 200..299 -> RequestOutcome.Created
++            409 -> RequestOutcome.AlreadyRequested
++            401, 403 -> RequestOutcome.Unauthorized
++            else -> RequestOutcome.Failed
++        }
++    }
++
++    private suspend fun tvSeasonNumbers(baseUrl: String, apiKey: String, tmdbId: Int): List<Int>? {
++        val response = JellyfinPlatform.httpCall(
++            method = "GET",
++            url = "$baseUrl/api/v1/tv/$tmdbId",
++            headers = headers(apiKey),
++            body = null,
++        ) ?: return null
++        if (response.status !in 200..299) return null
++        val root = runCatching { json.parseToJsonElement(response.body).jsonObject }.getOrNull() ?: return null
++        val seasons = root["seasons"] as? JsonArray ?: return null
++        return seasons.mapNotNull { element ->
++            (element as? JsonObject)?.int("seasonNumber")?.takeIf { it > 0 }
++        }.takeIf { it.isNotEmpty() } ?: listOf(1)
++    }
++
++    private fun JsonObject.string(key: String): String? =
++        this[key]?.jsonPrimitive?.contentOrNull
++
++    private fun JsonObject.int(key: String): Int? =
++        this[key]?.jsonPrimitive?.intOrNull
++
++    private fun JsonObject.boolean(key: String): Boolean? =
++        this[key]?.jsonPrimitive?.booleanOrNull
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
 index 07e0d2ae..dcb09b4b 100644
