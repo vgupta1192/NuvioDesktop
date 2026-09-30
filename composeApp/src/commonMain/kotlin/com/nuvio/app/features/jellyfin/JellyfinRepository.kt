@@ -2,6 +2,7 @@ package com.nuvio.app.features.jellyfin
 
 import com.nuvio.app.features.catalog.CatalogTarget
 import com.nuvio.app.features.home.HomeCatalogSection
+import com.nuvio.app.features.profiles.ProfileRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +15,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -25,7 +28,10 @@ object JellyfinRepository {
     private const val KEY_USER_NAME = "user_name"
     private const val KEY_TOKEN = "access_token"
 
-    private const val HIDDEN_LIBRARIES_KEY = "hidden_libraries"
+    private const val HIDDEN_LIBRARIES_KEY_PREFIX = "hidden_libraries_p"
+    private const val SEERR_URL_KEY = "seerr_url"
+    private const val SEERR_API_KEY_KEY = "seerr_api_key"
+    private const val SEERR_REQUESTED_KEY = "seerr_requested_ids"
 
     private const val SEARCH_SECTION_LIMIT = 24
     private const val SEARCH_DEBOUNCE_MS = 350L
@@ -40,6 +46,8 @@ object JellyfinRepository {
     private var librariesJob: Job? = null
     private var itemsJob: Job? = null
     private var detailJob: Job? = null
+    private var seerrJob: Job? = null
+    private var lastAppliedProfileId: Int? = null
 
     /** True when a signed-in session exists; loads the persisted session on first call. */
     val hasSession: Boolean
@@ -56,6 +64,26 @@ object JellyfinRepository {
         if (initialized) return
         initialized = true
         loadPersistedSession()
+        scope.launch {
+            ProfileRepository.state
+                .map { it.activeProfile?.profileIndex ?: 1 }
+                .distinctUntilChanged()
+                .collect { profileId -> applyProfile(profileId) }
+        }
+    }
+
+    /** Hidden libraries are per Nuvio profile; switching profiles swaps the visible set. */
+    private fun applyProfile(profileId: Int) {
+        if (lastAppliedProfileId == null) {
+            lastAppliedProfileId = profileId
+            _uiState.update { it.copy(hiddenLibraryIds = loadHiddenLibraryIds(profileId)) }
+            return
+        }
+        if (lastAppliedProfileId == profileId) return
+        lastAppliedProfileId = profileId
+        _uiState.update { it.copy(hiddenLibraryIds = loadHiddenLibraryIds(profileId)) }
+        refresh()
+        if (_uiState.value.session != null) loadItems(reset = true)
     }
 
     private fun loadPersistedSession() {
@@ -69,7 +97,14 @@ object JellyfinRepository {
             userName = JellyfinPlatform.loadString(KEY_USER_NAME).orEmpty().ifBlank { "user" },
             accessToken = token,
         )
-        _uiState.update { it.copy(session = session, hiddenLibraryIds = loadHiddenLibraryIds()) }
+        _uiState.update {
+            it.copy(
+                session = session,
+                hiddenLibraryIds = loadHiddenLibraryIds(currentProfileId()),
+                seerrConnected = seerrSettings() != null,
+                seerrRequestedIds = loadSeerrRequestedIds(),
+            )
+        }
         refresh()
     }
 
@@ -94,7 +129,9 @@ object JellyfinRepository {
                         JellyfinUiState(
                             session = session,
                             isLoadingSession = false,
-                            hiddenLibraryIds = loadHiddenLibraryIds(),
+                            hiddenLibraryIds = loadHiddenLibraryIds(currentProfileId()),
+                            seerrConnected = seerrSettings() != null,
+                            seerrRequestedIds = loadSeerrRequestedIds(),
                         )
                     }
                     refresh()
@@ -129,17 +166,19 @@ object JellyfinRepository {
             } catch (_: Throwable) {
                 emptyList()
             }
+            var selectionChanged = false
             _uiState.update { state ->
                 val visible = libraries.filter { it.id !in state.hiddenLibraryIds }
                 val selected = visible.firstOrNull { it.id == state.selectedLibraryId }
                     ?: visible.firstOrNull { lib -> lib.collectionType != null && lib.collectionType in VIDEO_LIBRARY_TYPES }
                     ?: visible.firstOrNull()
+                selectionChanged = selected?.id != state.selectedLibraryId
                 state.copy(
                     libraries = libraries,
                     selectedLibraryId = selected?.id,
                 )
             }
-            if (_uiState.value.items.isEmpty()) loadItems(reset = true)
+            if (selectionChanged || _uiState.value.items.isEmpty()) loadItems(reset = true)
         }
     }
 
@@ -187,6 +226,7 @@ object JellyfinRepository {
                     itemsError = null,
                     items = if (reset) emptyList() else it.items,
                     totalItemCount = if (reset) 0 else it.totalItemCount,
+                    seerrResults = if (searchTerm == null) emptyList() else it.seerrResults,
                 )
             }
             val result = try {
@@ -215,6 +255,7 @@ object JellyfinRepository {
             } catch (error: Throwable) {
                 Result.failure<JellyfinItemPage>(error)
             }
+            if (searchTerm != null) refreshSeerrResults(searchTerm)
             result.fold(
                 onSuccess = { page ->
                     _uiState.update { current ->
@@ -245,19 +286,21 @@ object JellyfinRepository {
     /** Selects an item for the detail panel; loads seasons and the first season's episodes for series. */
     fun selectItem(item: JellyfinItem) {
         detailJob?.cancel()
+        val loadsChildren = item.isSeries || item.isFolder
         _uiState.update {
             it.copy(
                 selectedItemId = item.id,
                 selectedDetail = item,
                 seasons = if (item.isSeries) it.seasons else emptyList(),
-                episodes = if (item.isSeries) it.episodes else emptyList(),
+                episodes = if (loadsChildren) it.episodes else emptyList(),
                 selectedSeasonId = null,
-                isLoadingDetail = item.isSeries,
+                isLoadingDetail = loadsChildren,
                 detailError = null,
             )
         }
-        if (item.isSeries) {
-            loadSeriesDetail(item.id)
+        when {
+            item.isSeries -> loadSeriesDetail(item.id)
+            item.isFolder -> loadFolderChildren(item.id)
         }
     }
 
@@ -282,13 +325,18 @@ object JellyfinRepository {
             _uiState.update { state ->
                 if (state.selectedItemId != itemId) return@update state
                 when {
-                    loaded != null -> state.copy(selectedDetail = loaded, isLoadingDetail = loaded.isSeries, detailError = null)
+                    loaded != null -> state.copy(
+                        selectedDetail = loaded,
+                        isLoadingDetail = loaded.isSeries || loaded.isFolder,
+                        detailError = null,
+                    )
                     result.isFailure -> state.copy(isLoadingDetail = false, detailError = result.exceptionOrNull()?.message ?: "Could not load item")
                     else -> state.copy(isLoadingDetail = false, detailError = "Item not found")
                 }
             }
-            if (loaded?.isSeries == true) {
-                loadSeriesDetail(loaded.id)
+            when {
+                loaded?.isSeries == true -> loadSeriesDetail(loaded.id)
+                loaded?.isFolder == true -> loadFolderChildren(loaded.id)
             }
         }
     }
@@ -366,6 +414,141 @@ object JellyfinRepository {
     fun backdropUrlFor(item: JellyfinItem): String? =
         _uiState.value.session?.let { session -> JellyfinClient.backdropImageUrl(session, item) }
 
+    /** Lists the playable files inside a nested folder (movies/adult "saga" folders, like episodes for shows). */
+    private fun loadFolderChildren(folderId: String) {
+        val session = _uiState.value.session ?: return
+        detailJob = scope.launch {
+            _uiState.update { it.copy(isLoadingDetail = true) }
+            val result = try {
+                Result.success(
+                    JellyfinClient.getItems(
+                        session = session,
+                        parentId = folderId,
+                        startIndex = 0,
+                        limit = 500,
+                        sortBy = "SortName",
+                        sortAscending = true,
+                        includeItemTypes = "Movie,Video,Episode",
+                        recursive = true,
+                    ),
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Result.failure<JellyfinItemPage>(error)
+            }
+            val children = result.getOrNull()?.items.orEmpty()
+            _uiState.update { state ->
+                if (state.selectedDetail?.id != folderId) return@update state
+                state.copy(
+                    episodes = children,
+                    isLoadingDetail = false,
+                    detailError = if (result.isFailure && children.isEmpty()) {
+                        result.exceptionOrNull()?.message ?: "Could not load the folder contents"
+                    } else {
+                        null
+                    },
+                )
+            }
+        }
+    }
+
+    // ---- Jellyseerr request integration ----
+
+    fun connectSeerr(url: String, apiKey: String) {
+        val normalized = SeerrClient.normalizeUrl(url) ?: run {
+            _uiState.update { it.copy(seerrStatusMessage = "Enter a valid Seerr address") }
+            return
+        }
+        if (apiKey.isBlank()) {
+            _uiState.update { it.copy(seerrStatusMessage = "Enter the Seerr API key (Seerr Settings → API Key)") }
+            return
+        }
+        _uiState.update { it.copy(seerrStatusMessage = "Checking Seerr…") }
+        scope.launch {
+            val ok = SeerrClient.testConnection(normalized, apiKey)
+            _uiState.update { state ->
+                if (ok) {
+                    JellyfinPlatform.saveString(SEERR_URL_KEY, normalized)
+                    JellyfinPlatform.saveString(SEERR_API_KEY_KEY, apiKey)
+                    state.copy(seerrConnected = true, seerrStatusMessage = null)
+                } else {
+                    state.copy(seerrStatusMessage = "Could not reach Seerr or the API key was rejected")
+                }
+            }
+            if (ok && _uiState.value.searchQuery.isNotBlank()) {
+                refreshSeerrResults(_uiState.value.searchQuery)
+            }
+        }
+    }
+
+    fun disconnectSeerr() {
+        JellyfinPlatform.saveString(SEERR_URL_KEY, null)
+        JellyfinPlatform.saveString(SEERR_API_KEY_KEY, null)
+        _uiState.update { it.copy(seerrConnected = false, seerrResults = emptyList(), seerrStatusMessage = null) }
+    }
+
+    fun requestViaSeerr(result: SeerrSearchResult) {
+        val settings = seerrSettings() ?: return
+        val (url, key) = settings
+        _uiState.update { it.copy(seerrStatusMessage = "Requesting \"${result.title}\"…") }
+        scope.launch {
+            val outcome = SeerrClient.request(url, key, result.mediaType, result.tmdbId)
+            _uiState.update { state ->
+                when (outcome) {
+                    SeerrClient.RequestOutcome.Created, SeerrClient.RequestOutcome.AlreadyRequested -> {
+                        val updatedIds = state.seerrRequestedIds + result.tmdbId
+                        JellyfinPlatform.saveString(SEERR_REQUESTED_KEY, updatedIds.joinToString("\n") { it.toString() })
+                        state.copy(
+                            seerrRequestedIds = updatedIds,
+                            seerrStatusMessage = if (outcome == SeerrClient.RequestOutcome.Created) {
+                                "Requested \"${result.title}\" — Radarr/Sonarr will download it; it shows up here once ready"
+                            } else {
+                                "\"${result.title}\" was already requested"
+                            },
+                        )
+                    }
+                    SeerrClient.RequestOutcome.Unauthorized ->
+                        state.copy(seerrStatusMessage = "Seerr rejected the API key")
+                    SeerrClient.RequestOutcome.Failed ->
+                        state.copy(seerrStatusMessage = "Seerr request failed — try again")
+                }
+            }
+        }
+    }
+
+    private fun refreshSeerrResults(query: String) {
+        val settings = seerrSettings() ?: run {
+            _uiState.update { it.copy(seerrResults = emptyList()) }
+            return
+        }
+        val (url, key) = settings
+        seerrJob?.cancel()
+        seerrJob = scope.launch {
+            val results = SeerrClient.search(url, key, query)
+            _uiState.update { state ->
+                val knownTmdb = state.items.mapNotNull { it.tmdbId }.filter { it.isNotBlank() }.toSet()
+                val filtered = results.orEmpty().filterNot { result ->
+                    result.isAvailable || result.tmdbId.toString() in knownTmdb
+                }
+                state.copy(seerrResults = filtered)
+            }
+        }
+    }
+
+    private fun seerrSettings(): Pair<String, String>? {
+        val url = JellyfinPlatform.loadString(SEERR_URL_KEY)?.takeIf { it.isNotBlank() } ?: return null
+        val key = JellyfinPlatform.loadString(SEERR_API_KEY_KEY)?.takeIf { it.isNotBlank() } ?: return null
+        return url to key
+    }
+
+    private fun loadSeerrRequestedIds(): Set<Int> =
+        JellyfinPlatform.loadString(SEERR_REQUESTED_KEY)
+            ?.split('\n')
+            ?.mapNotNull { it.trim().toIntOrNull() }
+            ?.toSet()
+            .orEmpty()
+
     // ---- library visibility (hide/show in the Jellyfin screen) ----
 
     fun toggleLibraryHidden(libraryId: String) {
@@ -375,7 +558,7 @@ object JellyfinRepository {
         } else {
             current.hiddenLibraryIds + libraryId
         }
-        JellyfinPlatform.saveString(HIDDEN_LIBRARIES_KEY, updated.joinToString("\n"))
+        JellyfinPlatform.saveString(hiddenLibrariesKey(currentProfileId()), updated.joinToString("\n"))
         _uiState.update { it.copy(hiddenLibraryIds = updated) }
         // Hiding the library being browsed falls back to the first visible one.
         if (current.selectedLibraryId == libraryId && libraryId in updated) {
@@ -399,18 +582,22 @@ object JellyfinRepository {
      * the legacy non-recursive direct-children listing.
      */
     private fun browseItemTypes(collectionType: String?): String? = when (collectionType?.lowercase()) {
-        "movies" -> "Movie"
-        "tvshows" -> "Series"
-        "mixed" -> "Movie,Series"
+        "movies" -> "Movie,Folder"
+        "tvshows" -> "Series,Folder"
+        "mixed" -> "Movie,Series,Folder"
         else -> null
     }
 
-    private fun loadHiddenLibraryIds(): Set<String> =
-        JellyfinPlatform.loadString(HIDDEN_LIBRARIES_KEY)
+    private fun loadHiddenLibraryIds(profileId: Int): Set<String> =
+        JellyfinPlatform.loadString(hiddenLibrariesKey(profileId))
             ?.split('\n')
             ?.filter { it.isNotBlank() }
             ?.toSet()
             .orEmpty()
+
+    private fun hiddenLibrariesKey(profileId: Int): String = "$HIDDEN_LIBRARIES_KEY_PREFIX$profileId"
+
+    private fun currentProfileId(): Int = runCatching { ProfileRepository.activeProfileId }.getOrDefault(1)
 
     /** Server-side search across every VISIBLE library (parallel), merged and de-duplicated. */
     private suspend fun searchVisibleLibraries(

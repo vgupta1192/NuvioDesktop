@@ -45,10 +45,16 @@ data class JellyfinItem(
     val imageTag: String? = null,
     val backdropTag: String? = null,
     val container: String? = null,
+    val imdbId: String? = null,
+    val tmdbId: String? = null,
     val playbackPositionTicks: Long? = null,
     val playedPercentage: Double? = null,
 ) {
     val isSeries: Boolean get() = type.equals("Series", ignoreCase = true)
+    val isFolder: Boolean
+        get() = type.equals("Folder", ignoreCase = true) ||
+            type.equals("AggregateFolder", ignoreCase = true) ||
+            type.equals("PlaylistFolder", ignoreCase = true)
     val isEpisode: Boolean get() = type.equals("Episode", ignoreCase = true)
     val isMovie: Boolean get() = type.equals("Movie", ignoreCase = true)
 
@@ -97,6 +103,10 @@ data class JellyfinUiState(
     val itemsError: String? = null,
     val searchQuery: String = "",
     val sortLatestFirst: Boolean = false,
+    val seerrConnected: Boolean = false,
+    val seerrResults: List<SeerrSearchResult> = emptyList(),
+    val seerrRequestedIds: Set<Int> = emptySet(),
+    val seerrStatusMessage: String? = null,
     val selectedItemId: String? = null,
     val selectedDetail: JellyfinItem? = null,
     val seasons: List<JellyfinItem> = emptyList(),
@@ -107,6 +117,18 @@ data class JellyfinUiState(
 ) {
     val canLoadMore: Boolean get() = items.size < totalItemCount
 }
+
+/** One Jellyseerr/Overseerr search hit that is NOT currently in the Jellyfin library. */
+data class SeerrSearchResult(
+    val tmdbId: Int,
+    val mediaType: String,
+    val title: String,
+    val overview: String? = null,
+    val releaseYear: Int? = null,
+    val posterUrl: String? = null,
+    val isRequested: Boolean = false,
+    val isAvailable: Boolean = false,
+)
 
 internal const val TICKS_PER_MILLISECOND = 10_000L
 private const val RUNTIME_TICKS_PER_MINUTE = 600_000_000L
