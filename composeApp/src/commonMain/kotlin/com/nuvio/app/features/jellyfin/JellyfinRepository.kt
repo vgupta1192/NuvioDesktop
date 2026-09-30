@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 object JellyfinRepository {
+    private val VIDEO_LIBRARY_TYPES = setOf("movies", "tvshows", "mixed")
     private const val KEY_SERVER = "server_url"
     private const val KEY_SERVER_NAME = "server_name"
     private const val KEY_USER_ID = "user_id"
@@ -398,7 +399,4 @@ object JellyfinRepository {
         )
     }
 
-    private companion object {
-        val VIDEO_LIBRARY_TYPES = setOf("movies", "tvshows", "mixed")
-    }
 }

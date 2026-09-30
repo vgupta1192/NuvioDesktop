@@ -116,12 +116,10 @@ import com.nuvio.app.features.home.HomeRepository
 import com.nuvio.app.features.home.buildAddonCatalogRefreshSignature
 import com.nuvio.app.features.home.components.shouldBlurContinueWatchingArtwork
 import com.nuvio.app.features.jellyfin.JELLYFIN_META_ID_PREFIX
-import com.nuvio.app.features.jellyfin.JellyfinDetailRoute
 import com.nuvio.app.features.jellyfin.JellyfinDetailScreen
 import com.nuvio.app.features.jellyfin.JellyfinItem
 import com.nuvio.app.features.jellyfin.JellyfinLauncher
 import com.nuvio.app.features.jellyfin.JellyfinRepository
-import com.nuvio.app.features.jellyfin.JellyfinRoute
 import com.nuvio.app.features.jellyfin.JellyfinScreen
 import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.library.LibraryRepository
