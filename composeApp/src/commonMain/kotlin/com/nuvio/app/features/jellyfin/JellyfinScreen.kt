@@ -29,6 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Logout
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -47,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -71,6 +74,7 @@ fun JellyfinScreen(
     val state by JellyfinRepository.uiState.collectAsStateWithLifecycle()
     val tokens = MaterialTheme.nuvio
     val session = state.session
+    var showHiddenLibraries by remember { mutableStateOf(false) }
 
     if (session == null) {
         JellyfinSignInContent(state = state, onBack = onBack)
@@ -126,11 +130,13 @@ fun JellyfinScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 NuvioSectionLabel(text = "Libraries")
                 Spacer(modifier = Modifier.height(4.dp))
-                state.libraries.forEach { library ->
+                val visibleLibraries = state.libraries.filter { it.id !in state.hiddenLibraryIds }
+                val hiddenLibraries = state.libraries.filter { it.id in state.hiddenLibraryIds }
+                visibleLibraries.forEach { library ->
                     JellyfinLibraryRow(
                         name = library.name,
-                        collectionType = library.collectionType,
                         isSelected = state.selectedLibraryId == library.id,
+                        onToggleVisibility = { JellyfinRepository.toggleLibraryHidden(library.id) },
                         onClick = { JellyfinRepository.selectLibrary(library.id) },
                     )
                 }
@@ -140,6 +146,33 @@ fun JellyfinScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = tokens.colors.textMuted,
                     )
+                }
+                if (hiddenLibraries.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { showHiddenLibraries = !showHiddenLibraries }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = (if (showHiddenLibraries) "▾ " else "▸ ") + "Hidden (${hiddenLibraries.size})",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = tokens.colors.textMuted,
+                        )
+                    }
+                    if (showHiddenLibraries) {
+                        hiddenLibraries.forEach { library ->
+                            JellyfinLibraryRow(
+                                name = library.name,
+                                isSelected = false,
+                                isDimmed = true,
+                                onToggleVisibility = { JellyfinRepository.toggleLibraryHidden(library.id) },
+                            )
+                        }
+                    }
                 }
             }
 
@@ -365,9 +398,10 @@ private fun JellyfinSignInContent(
 @Composable
 private fun JellyfinLibraryRow(
     name: String,
-    collectionType: String?,
     isSelected: Boolean,
-    onClick: () -> Unit,
+    isDimmed: Boolean = false,
+    onToggleVisibility: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
 ) {
     val tokens = MaterialTheme.nuvio
     Row(
@@ -375,8 +409,9 @@ private fun JellyfinLibraryRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(if (isSelected) tokens.colors.surfaceElevated else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(start = 10.dp, end = 2.dp, vertical = 2.dp)
+            .alpha(if (isDimmed) 0.55f else 1f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -387,7 +422,21 @@ private fun JellyfinLibraryRow(
             color = if (isSelected) tokens.colors.textPrimary else tokens.colors.textMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
+        if (onToggleVisibility != null) {
+            IconButton(
+                onClick = onToggleVisibility,
+                modifier = Modifier.size(30.dp),
+            ) {
+                Icon(
+                    imageVector = if (isDimmed) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                    contentDescription = if (isDimmed) "Show library" else "Hide library",
+                    tint = tokens.colors.textMuted,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
     }
 }
 
