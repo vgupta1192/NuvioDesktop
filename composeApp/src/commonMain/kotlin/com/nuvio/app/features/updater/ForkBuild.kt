@@ -25,8 +25,14 @@ internal object ForkBuild {
         var best: AppUpdate? = null
         var bestBuild = -1
         for (release in releases) {
-            // Live TV variant builds (desktop-livetv-*) are a separate app; never offer them here
-            if (release.draft || release.tagName.orEmpty().startsWith("desktop-livetv-")) continue
+            // Jellyfin variant: only its own desktop-jellyfin-mac-/desktop-jellyfin-linux- releases;
+            // never the main app's, Live TV's, or the Jellyfin+LiveTV combo app's
+            // (desktop-jellyfin-livetv-*) builds.
+            val forkTag = release.tagName.orEmpty()
+            if (
+                release.draft ||
+                !(forkTag.startsWith("desktop-jellyfin-mac-") || forkTag.startsWith("desktop-jellyfin-linux-"))
+            ) continue
             val byBuild = release.assets.mapNotNull { asset ->
                 val build = assetPattern.find(asset.name)?.groupValues?.get(1)?.toIntOrNull()
                     ?: return@mapNotNull null
