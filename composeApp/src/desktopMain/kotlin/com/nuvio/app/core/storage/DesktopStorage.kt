@@ -44,14 +44,14 @@ internal object DesktopStorage {
         val osName = System.getProperty("os.name").orEmpty().lowercase(Locale.ROOT)
         val userHome = Paths.get(System.getProperty("user.home").orEmpty())
         return when {
-            osName.contains("mac") -> userHome.resolve("Library/Application Support/NuvioLiveTV")
+            osName.contains("mac") -> userHome.resolve("Library/Application Support/NuvioJellyfinTV")
             osName.contains("win") -> {
                 val appData = System.getenv("APPDATA")?.takeIf { it.isNotBlank() }
-                (appData?.let(Paths::get) ?: userHome.resolve("AppData/Roaming")).resolve("NuvioLiveTV")
+                (appData?.let(Paths::get) ?: userHome.resolve("AppData/Roaming")).resolve("NuvioJellyfinTV")
             }
             else -> {
                 val xdgConfig = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() }
-                (xdgConfig?.let(Paths::get) ?: userHome.resolve(".config")).resolve("nuviolivetv")
+                (xdgConfig?.let(Paths::get) ?: userHome.resolve(".config")).resolve("nuviojellyfintv")
             }
         }
     }
@@ -60,14 +60,14 @@ internal object DesktopStorage {
         val osName = System.getProperty("os.name").orEmpty().lowercase(Locale.ROOT)
         val userHome = Paths.get(System.getProperty("user.home").orEmpty())
         return when {
-            osName.contains("mac") -> userHome.resolve("Library/Caches/NuvioLiveTV")
+            osName.contains("mac") -> userHome.resolve("Library/Caches/NuvioJellyfinTV")
             osName.contains("win") -> {
                 val localAppData = System.getenv("LOCALAPPDATA")?.takeIf { it.isNotBlank() }
-                (localAppData?.let(Paths::get) ?: userHome.resolve("AppData/Local")).resolve("NuvioLiveTV/Cache")
+                (localAppData?.let(Paths::get) ?: userHome.resolve("AppData/Local")).resolve("NuvioJellyfinTV/Cache")
             }
             else -> {
                 val xdgCache = System.getenv("XDG_CACHE_HOME")?.takeIf { it.isNotBlank() }
-                (xdgCache?.let(Paths::get) ?: userHome.resolve(".cache")).resolve("nuviolivetv")
+                (xdgCache?.let(Paths::get) ?: userHome.resolve(".cache")).resolve("nuviojellyfintv")
             }
         }
     }
