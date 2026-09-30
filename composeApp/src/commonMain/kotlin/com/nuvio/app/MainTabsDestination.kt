@@ -165,7 +165,7 @@ internal fun MainTabsDestination(
                 FloatingNavigationItem(
                     selected = false,
                     onClick = { com.nuvio.app.features.jellyfin.JellyfinLauncher.open() },
-                    icon = androidx.compose.material.icons.Icons.Rounded.VideoLibrary,
+                    icon = androidx.compose.material.icons.Icons.Rounded.CollectionsBookmark,
                     label = "Jellyfin",
                 )
             } else {

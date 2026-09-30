@@ -866,7 +866,7 @@ internal fun DesktopHoverSidebar(
                     },
                 ) { color ->
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Rounded.VideoLibrary,
+                        imageVector = androidx.compose.material.icons.Icons.Rounded.CollectionsBookmark,
                         contentDescription = "Jellyfin",
                         modifier = Modifier.size(DesktopSidebarIconSize),
                         tint = color,
