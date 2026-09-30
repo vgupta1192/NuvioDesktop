@@ -410,7 +410,7 @@ private fun JellyfinLibraryRow(
             .clip(RoundedCornerShape(10.dp))
             .background(if (isSelected) tokens.colors.surfaceElevated else Color.Transparent)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(start = 10.dp, end = 2.dp, vertical = 2.dp)
+            .padding(start = 10.dp, top = 2.dp, end = 2.dp, bottom = 2.dp)
             .alpha(if (isDimmed) 0.55f else 1f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -692,7 +692,8 @@ private fun JellyfinPlayButton(
     val tokens = MaterialTheme.nuvio
     val playable: JellyfinItem? = when {
         item.isSeries -> state.episodes.firstOrNull { it.resumePositionMs > 0 } ?: state.episodes.firstOrNull()
-        else -> item
+        item.isPlayable -> item
+        else -> null // folders / box sets have no stream of their own
     }
     Button(
         enabled = playable != null,
@@ -707,7 +708,8 @@ private fun JellyfinPlayButton(
         Spacer(modifier = Modifier.width(4.dp))
         Text(
             text = when {
-                playable == null -> "No episodes"
+                playable == null && item.isSeries -> "No episodes"
+                playable == null -> "Folder — not playable"
                 playable.resumePositionMs > 0 -> {
                     if (playable.isEpisode) "Resume ${episodeLabel(playable)}" else "Resume"
                 }
