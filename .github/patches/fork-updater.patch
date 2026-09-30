@@ -48,10 +48,10 @@ index e172da38..7aeff131 100644
              url = "https://api.github.com/repos/${source.owner}/${source.repo}/${releasePath(channel)}",
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/ForkBuild.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/ForkBuild.kt
 new file mode 100644
-index 00000000..559f2ede
+index 00000000..82dbbafa
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/ForkBuild.kt
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,68 @@
 +package com.nuvio.app.features.updater
 +
 +/**
@@ -79,8 +79,13 @@ index 00000000..559f2ede
 +        var best: AppUpdate? = null
 +        var bestBuild = -1
 +        for (release in releases) {
-+            // Live TV variant builds (desktop-livetv-*) are a separate app; never offer them here
-+            if (release.draft || release.tagName.orEmpty().startsWith("desktop-livetv-")) continue
++            // Variant builds are separate side-install apps; never offer them here
++            val variantTag = release.tagName.orEmpty()
++            if (
++                release.draft ||
++                variantTag.startsWith("desktop-livetv-") ||
++                variantTag.startsWith("desktop-jellyfin-")
++            ) continue
 +            val byBuild = release.assets.mapNotNull { asset ->
 +                val build = assetPattern.find(asset.name)?.groupValues?.get(1)?.toIntOrNull()
 +                    ?: return@mapNotNull null
@@ -115,18 +120,3 @@ index 00000000..559f2ede
 +        return best
 +    }
 +}
-diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
-index 97f47f5b..1a271926 100644
---- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
-+++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
-@@ -52,8 +52,9 @@ actual object AppUpdaterPlatform {
-     actual val isSupported: Boolean
-         get() = currentOs != DesktopUpdaterOs.UNKNOWN && linuxInstallMethod != LinuxInstallMethod.FLATPAK
- 
-+    // Self-host fork patch: updates come from the fork's CI releases
-     actual val releaseSource: AppUpdateReleaseSource = AppUpdateReleaseSource(
--        owner = "NuvioMedia",
-+        owner = "vgupta1192",
-         repo = "NuvioDesktop",
-         channelBranch = null,
-         includePrereleases = true,
