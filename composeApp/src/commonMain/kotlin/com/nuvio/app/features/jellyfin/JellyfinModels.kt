@@ -82,6 +82,7 @@ data class JellyfinUiState(
     val isLoadingSession: Boolean = false,
     val sessionError: String? = null,
     val libraries: List<JellyfinLibrary> = emptyList(),
+    val hiddenLibraryIds: Set<String> = emptySet(),
     val selectedLibraryId: String? = null,
     val items: List<JellyfinItem> = emptyList(),
     val totalItemCount: Int = 0,

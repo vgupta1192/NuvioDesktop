@@ -7,6 +7,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,8 +25,12 @@ object JellyfinRepository {
     private const val KEY_USER_NAME = "user_name"
     private const val KEY_TOKEN = "access_token"
 
+    private const val HIDDEN_LIBRARIES_KEY = "hidden_libraries"
+
     private const val SEARCH_SECTION_LIMIT = 24
     private const val SEARCH_DEBOUNCE_MS = 350L
+    private const val PAGE_SIZE = 60
+    private const val MAX_MERGED_SEARCH_ITEMS = 200
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _uiState = MutableStateFlow(JellyfinUiState())
@@ -62,7 +69,7 @@ object JellyfinRepository {
             userName = JellyfinPlatform.loadString(KEY_USER_NAME).orEmpty().ifBlank { "user" },
             accessToken = token,
         )
-        _uiState.update { it.copy(session = session) }
+        _uiState.update { it.copy(session = session, hiddenLibraryIds = loadHiddenLibraryIds()) }
         refresh()
     }
 
@@ -84,7 +91,11 @@ object JellyfinRepository {
                     JellyfinPlatform.saveString(KEY_USER_NAME, session.userName)
                     JellyfinPlatform.saveString(KEY_TOKEN, session.accessToken)
                     _uiState.update {
-                        JellyfinUiState(session = session, isLoadingSession = false)
+                        JellyfinUiState(
+                            session = session,
+                            isLoadingSession = false,
+                            hiddenLibraryIds = loadHiddenLibraryIds(),
+                        )
                     }
                     refresh()
                 },
@@ -119,9 +130,10 @@ object JellyfinRepository {
                 emptyList()
             }
             _uiState.update { state ->
-                val selected = state.selectedLibraryId?.let { id -> libraries.firstOrNull { it.id == id } }
-                    ?: libraries.firstOrNull { lib -> lib.collectionType != null && lib.collectionType in VIDEO_LIBRARY_TYPES }
-                    ?: libraries.firstOrNull()
+                val visible = libraries.filter { it.id !in state.hiddenLibraryIds }
+                val selected = visible.firstOrNull { it.id == state.selectedLibraryId }
+                    ?: visible.firstOrNull { lib -> lib.collectionType != null && lib.collectionType in VIDEO_LIBRARY_TYPES }
+                    ?: visible.firstOrNull()
                 state.copy(
                     libraries = libraries,
                     selectedLibraryId = selected?.id,
@@ -178,17 +190,19 @@ object JellyfinRepository {
                 )
             }
             val result = try {
-                Result.success(
+                val page = if (searchTerm == null) {
                     JellyfinClient.getItems(
                         session = session,
-                        parentId = if (searchTerm == null) state.selectedLibraryId else null,
+                        parentId = state.selectedLibraryId,
                         startIndex = if (reset) 0 else state.items.size,
                         sortBy = if (state.sortLatestFirst) "DateCreated" else "SortName",
                         sortAscending = !state.sortLatestFirst,
-                        searchTerm = searchTerm,
-                        recursive = searchTerm != null,
-                    ),
-                )
+                    )
+                } else {
+                    // Search only the visible libraries: hidden ones must not leak results.
+                    searchVisibleLibraries(session, state, searchTerm)
+                }
+                Result.success(page)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -345,6 +359,76 @@ object JellyfinRepository {
     fun backdropUrlFor(item: JellyfinItem): String? =
         _uiState.value.session?.let { session -> JellyfinClient.backdropImageUrl(session, item) }
 
+    // ---- library visibility (hide/show in the Jellyfin screen) ----
+
+    fun toggleLibraryHidden(libraryId: String) {
+        val current = _uiState.value
+        val updated = if (libraryId in current.hiddenLibraryIds) {
+            current.hiddenLibraryIds - libraryId
+        } else {
+            current.hiddenLibraryIds + libraryId
+        }
+        JellyfinPlatform.saveString(HIDDEN_LIBRARIES_KEY, updated.joinToString("\n"))
+        _uiState.update { it.copy(hiddenLibraryIds = updated) }
+        // Hiding the library being browsed falls back to the first visible one.
+        if (current.selectedLibraryId == libraryId && libraryId in updated) {
+            val nextLibrary = current.libraries.firstOrNull { it.id !in updated }
+            _uiState.update {
+                it.copy(
+                    selectedLibraryId = nextLibrary?.id,
+                    searchQuery = "",
+                    items = emptyList(),
+                    totalItemCount = 0,
+                    itemsError = null,
+                )
+            }
+            loadItems(reset = true)
+        }
+    }
+
+    private fun loadHiddenLibraryIds(): Set<String> =
+        JellyfinPlatform.loadString(HIDDEN_LIBRARIES_KEY)
+            ?.split('\n')
+            ?.filter { it.isNotBlank() }
+            ?.toSet()
+            .orEmpty()
+
+    /** Server-side search across every VISIBLE library (parallel), merged and de-duplicated. */
+    private suspend fun searchVisibleLibraries(
+        session: JellyfinSession,
+        state: JellyfinUiState,
+        searchTerm: String,
+    ): JellyfinItemPage {
+        val visibleIds = state.libraries
+            .filter { it.id !in state.hiddenLibraryIds }
+            .map { it.id }
+        if (visibleIds.isEmpty()) return JellyfinItemPage(emptyList(), 0)
+        val perLibrary = PAGE_SIZE
+        val pages = coroutineScope {
+            visibleIds.map { libraryId ->
+                async {
+                    runCatching {
+                        JellyfinClient.getItems(
+                            session = session,
+                            parentId = libraryId,
+                            startIndex = 0,
+                            limit = perLibrary,
+                            sortBy = "SortName",
+                            searchTerm = searchTerm,
+                            recursive = true,
+                        )
+                    }.getOrNull()
+                }
+            }.awaitAll()
+        }
+        val merged = pages
+            .filterNotNull()
+            .flatMap { it.items }
+            .distinctBy { it.id }
+            .sortedBy { it.name.lowercase() }
+        return JellyfinItemPage(merged.take(MAX_MERGED_SEARCH_ITEMS), merged.size.coerceAtMost(MAX_MERGED_SEARCH_ITEMS))
+    }
+
     // ---- global Search integration ----
 
     /**
@@ -354,22 +438,37 @@ object JellyfinRepository {
     suspend fun searchPreviews(query: String): List<com.nuvio.app.features.home.MetaPreview>? {
         val session = _uiState.value.session ?: return null
         if (query.isBlank()) return null
-        val page = try {
-            JellyfinClient.getItems(
-                session = session,
-                startIndex = 0,
-                limit = SEARCH_SECTION_LIMIT,
-                sortBy = "SortName",
-                sortAscending = true,
-                searchTerm = query.trim(),
-                includeItemTypes = "Movie,Series,Episode",
-                recursive = true,
-            )
+        val state = _uiState.value
+        val visibleIds = state.libraries.filter { it.id !in state.hiddenLibraryIds }.map { it.id }
+        if (visibleIds.isEmpty()) return null
+        val pages = try {
+            coroutineScope {
+                visibleIds.map { libraryId ->
+                    async {
+                        runCatching {
+                            JellyfinClient.getItems(
+                                session = session,
+                                parentId = libraryId,
+                                startIndex = 0,
+                                limit = SEARCH_SECTION_LIMIT,
+                                sortBy = "SortName",
+                                searchTerm = query.trim(),
+                                includeItemTypes = "Movie,Series,Episode",
+                                recursive = true,
+                            )
+                        }.getOrNull()
+                    }
+                }.awaitAll()
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {
             return null
         }
+        val page = JellyfinItemPage(
+            items = pages.filterNotNull().flatMap { it.items }.distinctBy { it.id },
+            totalRecordCount = 0,
+        )
         val previews = page.items.map { item ->
             item.toMetaPreview(
                 posterUrl = JellyfinClient.primaryImageUrl(session, item),
