@@ -615,10 +615,10 @@ index 00000000..e1f02ae6
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
 new file mode 100644
-index 00000000..a34942a1
+index 00000000..b6fa97a2
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,123 @@
 +package com.nuvio.app.features.jellyfin
 +
 +import com.nuvio.app.features.home.MetaPreview
@@ -678,6 +678,13 @@ index 00000000..a34942a1
 +
 +    val resumePositionMs: Long
 +        get() = playbackPositionTicks?.div(TICKS_PER_MILLISECOND)?.takeIf { it > 0L } ?: 0L
++
++    /** True when this item type has a playable video stream (folders / box sets do not). */
++    val isPlayable: Boolean
++        get() = type.equals("Movie", ignoreCase = true) ||
++            type.equals("Episode", ignoreCase = true) ||
++            type.equals("Video", ignoreCase = true) ||
++            type.equals("MusicVideo", ignoreCase = true)
 +
 +    /** Stremio-style content type used for MetaPreview mapping and watch-progress keys. */
 +    val stremioType: String
@@ -756,10 +763,10 @@ index 00000000..2800325d
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
 new file mode 100644
-index 00000000..179cc571
+index 00000000..d9238614
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
-@@ -0,0 +1,501 @@
+@@ -0,0 +1,521 @@
 +package com.nuvio.app.features.jellyfin
 +
 +import com.nuvio.app.features.catalog.CatalogTarget
@@ -953,12 +960,19 @@ index 00000000..179cc571
 +            }
 +            val result = try {
 +                val page = if (searchTerm == null) {
++                    // Video libraries browse recursively by item type: titles inside nested
++                    // folders (e.g. a "complete saga" folder holding several movies) show up as
++                    // separate playable items instead of one unplayable folder entry.
++                    val library = state.libraries.firstOrNull { it.id == state.selectedLibraryId }
++                    val browseTypes = browseItemTypes(library?.collectionType)
 +                    JellyfinClient.getItems(
 +                        session = session,
 +                        parentId = state.selectedLibraryId,
 +                        startIndex = if (reset) 0 else state.items.size,
 +                        sortBy = if (state.sortLatestFirst) "DateCreated" else "SortName",
 +                        sortAscending = !state.sortLatestFirst,
++                        includeItemTypes = browseTypes,
++                        recursive = browseTypes != null,
 +                    )
 +                } else {
 +                    // Search only the visible libraries: hidden ones must not leak results.
@@ -1148,6 +1162,18 @@ index 00000000..179cc571
 +        }
 +    }
 +
++    /**
++     * Item types used when browsing a library, per collection type: movies (incl. adult movies
++     * libraries) flatten to Movie, tv shows to Series, mixed to both. Unknown library types keep
++     * the legacy non-recursive direct-children listing.
++     */
++    private fun browseItemTypes(collectionType: String?): String? = when (collectionType?.lowercase()) {
++        "movies" -> "Movie"
++        "tvshows" -> "Series"
++        "mixed" -> "Movie,Series"
++        else -> null
++    }
++
 +    private fun loadHiddenLibraryIds(): Set<String> =
 +        JellyfinPlatform.loadString(HIDDEN_LIBRARIES_KEY)
 +            ?.split('\n')
@@ -1177,6 +1203,7 @@ index 00000000..179cc571
 +                            limit = perLibrary,
 +                            sortBy = "SortName",
 +                            searchTerm = searchTerm,
++                            includeItemTypes = "Movie,Series,Episode",
 +                            recursive = true,
 +                        )
 +                    }.getOrNull()
@@ -1263,10 +1290,10 @@ index 00000000..179cc571
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
 new file mode 100644
-index 00000000..5e26e57f
+index 00000000..2c29cc3a
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
-@@ -0,0 +1,798 @@
+@@ -0,0 +1,800 @@
 +package com.nuvio.app.features.jellyfin
 +
 +import androidx.compose.foundation.background
@@ -1679,7 +1706,7 @@ index 00000000..5e26e57f
 +            .clip(RoundedCornerShape(10.dp))
 +            .background(if (isSelected) tokens.colors.surfaceElevated else Color.Transparent)
 +            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-+            .padding(start = 10.dp, end = 2.dp, vertical = 2.dp)
++            .padding(start = 10.dp, top = 2.dp, end = 2.dp, bottom = 2.dp)
 +            .alpha(if (isDimmed) 0.55f else 1f),
 +        verticalAlignment = Alignment.CenterVertically,
 +    ) {
@@ -1961,7 +1988,8 @@ index 00000000..5e26e57f
 +    val tokens = MaterialTheme.nuvio
 +    val playable: JellyfinItem? = when {
 +        item.isSeries -> state.episodes.firstOrNull { it.resumePositionMs > 0 } ?: state.episodes.firstOrNull()
-+        else -> item
++        item.isPlayable -> item
++        else -> null // folders / box sets have no stream of their own
 +    }
 +    Button(
 +        enabled = playable != null,
@@ -1976,7 +2004,8 @@ index 00000000..5e26e57f
 +        Spacer(modifier = Modifier.width(4.dp))
 +        Text(
 +            text = when {
-+                playable == null -> "No episodes"
++                playable == null && item.isSeries -> "No episodes"
++                playable == null -> "Folder — not playable"
 +                playable.resumePositionMs > 0 -> {
 +                    if (playable.isEpisode) "Resume ${episodeLabel(playable)}" else "Resume"
 +                }
