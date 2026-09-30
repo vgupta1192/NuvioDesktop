@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-readonly NUVIO_LINUX_SHORTCUT_RELATIVE_PATH="usr/share/applications/nuvio.desktop"
-readonly NUVIO_LINUX_SHORTCUT_NAME="Nuvio"
+readonly NUVIO_LINUX_SHORTCUT_RELATIVE_PATH="usr/share/applications/nuviojellyfin.desktop"
+readonly NUVIO_LINUX_SHORTCUT_NAME="Nuvio Jellyfin"
 readonly NUVIO_LINUX_SHORTCUT_COMMENT="Nuvio Media Player"
 readonly NUVIO_LINUX_SHORTCUT_CATEGORIES="AudioVideo;"
 readonly NUVIO_LINUX_SHORTCUT_STARTUP_NOTIFY="true"
 readonly NUVIO_LINUX_SHORTCUT_STARTUP_WM_CLASS="com-nuvio-app-MainKt"
-readonly NUVIO_LINUX_SHORTCUT_MIME_TYPES="x-scheme-handler/nuvio;x-scheme-handler/stremio;"
+readonly NUVIO_LINUX_SHORTCUT_MIME_TYPES="x-scheme-handler/nuviojellyfin;"
 
 nuvio_linux_desktop_entry_exists() {
     if [[ $# -ne 1 ]]; then
@@ -41,7 +41,7 @@ nuvio_linux_write_desktop_entry() {
     local root_dir="$1"
     local desktop_file="$root_dir/$NUVIO_LINUX_SHORTCUT_RELATIVE_PATH"
     mkdir -p "$(dirname "$desktop_file")"
-    nuvio_linux_write_desktop_entry_file "$desktop_file" "/opt/nuvio/bin/Nuvio %u" "/opt/nuvio/lib/Nuvio.png"
+    nuvio_linux_write_desktop_entry_file "$desktop_file" "/opt/nuviojellyfin/bin/NuvioJellyfin %u" "/opt/nuviojellyfin/lib/NuvioJellyfin.png"
 }
 
 nuvio_linux_ensure_uri_handler() {

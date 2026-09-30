@@ -128,7 +128,7 @@ fun main(args: Array<String>) {
                 SentryInitializer.close()
                 exitApplication()
             },
-            title = if (smokePlayerUrl == null) "Nuvio" else "Nuvio Player Smoke",
+            title = if (smokePlayerUrl == null) "Nuvio Jellyfin" else "Nuvio Player Smoke",
             state = windowState,
             icon = painterResource(appIconState.selected.transparentPreviewResource),
             init = ::configureMacosWindowBeforePeer,
