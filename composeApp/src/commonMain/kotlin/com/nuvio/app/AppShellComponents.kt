@@ -855,6 +855,23 @@ internal fun DesktopHoverSidebar(
                         tint = color,
                     )
                 }
+                // Jellyfin fork feature: opens its own route
+                DesktopSidebarItem(
+                    label = "Jellyfin",
+                    selected = false,
+                    expanded = sidebarExpanded,
+                    onClick = {
+                        onProfileStackVisibleChange(false)
+                        com.nuvio.app.features.jellyfin.JellyfinLauncher.open()
+                    },
+                ) { color ->
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Rounded.VideoLibrary,
+                        contentDescription = "Jellyfin",
+                        modifier = Modifier.size(DesktopSidebarIconSize),
+                        tint = color,
+                    )
+                }
                 DesktopSidebarItem(
                     label = stringResource(Res.string.compose_settings_page_root),
                     selected = selectedTab == AppScreenTab.Settings,
