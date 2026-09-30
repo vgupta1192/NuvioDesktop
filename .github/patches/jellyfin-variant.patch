@@ -1,5 +1,5 @@
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index 11b225f..fc73cf3 100644
+index f985e572..efc7c61b 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
 @@ -1336,7 +1336,7 @@ compose.desktop {
@@ -7,70 +7,70 @@ index 11b225f..fc73cf3 100644
          nativeDistributions {
              targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
 -            packageName = "Nuvio"
-+            packageName = "NuvioLiveTV"
++            packageName = "NuvioJellyfin"
              packageVersion = desktopReleasePackageVersion
              vendor = "Nuvio Media"
              if (isMacHost) {
-@@ -1350,7 +1350,7 @@ compose.desktop {
+@@ -1351,7 +1351,7 @@ compose.desktop {
                  "jdk.unsupported",
              )
              macOS {
 -                bundleID = "com.nuvio.media.desktop"
-+                bundleID = "com.nuvio.media.desktop.livetv"
++                bundleID = "com.nuvio.media.desktop.jellyfin"
                  iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.icns"))
                  infoPlist {
                      extraKeysRawXml = """
-@@ -1358,11 +1358,10 @@ compose.desktop {
+@@ -1359,11 +1359,10 @@ compose.desktop {
                          <array>
                              <dict>
                                  <key>CFBundleURLName</key>
 -                                <string>com.nuvio.media.desktop</string>
-+                                <string>com.nuvio.media.desktop.livetv</string>
++                                <string>com.nuvio.media.desktop.jellyfin</string>
                                  <key>CFBundleURLSchemes</key>
                                  <array>
 -                                    <string>nuvio</string>
 -                                    <string>stremio</string>
-+                                    <string>nuviolivetv</string>
++                                    <string>nuviojellyfin</string>
                                  </array>
                              </dict>
                          </array>
-@@ -1413,8 +1412,8 @@ fun renameMacosDmgOutput(release: Boolean) {
+@@ -1414,8 +1413,8 @@ fun renameMacosDmgOutput(release: Boolean) {
  
      val distributionName = if (release) "main-release" else "main"
      val outputDir = layout.buildDirectory.dir("compose/binaries/$distributionName/dmg").get().asFile
 -    val finalDmg = outputDir.resolve("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
 -    val defaultDmg = outputDir.resolve("Nuvio-$desktopReleasePackageVersion.dmg")
-+    val finalDmg = outputDir.resolve("NuvioLiveTV-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
-+    val defaultDmg = outputDir.resolve("NuvioLiveTV-$desktopReleasePackageVersion.dmg")
++    val finalDmg = outputDir.resolve("NuvioJellyfin-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
++    val defaultDmg = outputDir.resolve("NuvioJellyfin-$desktopReleasePackageVersion.dmg")
      val sourceDmg = defaultDmg.takeIf { it.exists() }
          ?: finalDmg.takeIf { it.exists() }
          ?: error("Expected macOS DMG output in ${outputDir.absolutePath}")
-@@ -1718,8 +1717,8 @@ if (isMacHost) {
+@@ -1719,8 +1718,8 @@ if (isMacHost) {
          dependsOn("packageReleaseDmg")
          dmgDir.set(layout.buildDirectory.dir("compose/binaries/main-release/dmg"))
          artifactDir.set(layout.buildDirectory.dir("compose/release-dmgs"))
 -        finalDmgName.set("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
 -        defaultDmgName.set("Nuvio-$desktopReleasePackageVersion.dmg")
-+        finalDmgName.set("NuvioLiveTV-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
-+        defaultDmgName.set("NuvioLiveTV-$desktopReleasePackageVersion.dmg")
++        finalDmgName.set("NuvioJellyfin-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
++        defaultDmgName.set("NuvioJellyfin-$desktopReleasePackageVersion.dmg")
          keychainProfile.set(macosNotaryKeychainProfile.orEmpty())
          keychainPath.set(macosNotaryKeychainPath.orEmpty())
          signingIdentity.set(macosSigningIdentity.orEmpty())
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-index c3ed65f..a20dd8f 100644
+index 7bc0c1de..8f8a05ed 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-@@ -127,7 +127,7 @@ fun main(args: Array<String>) {
+@@ -128,7 +128,7 @@ fun main(args: Array<String>) {
                  SentryInitializer.close()
                  exitApplication()
              },
 -            title = if (smokePlayerUrl == null) "Nuvio" else "Nuvio Player Smoke",
-+            title = if (smokePlayerUrl == null) "Nuvio Live TV" else "Nuvio Player Smoke",
++            title = if (smokePlayerUrl == null) "Nuvio Jellyfin" else "Nuvio Player Smoke",
              state = windowState,
              icon = painterResource(appIconState.selected.transparentPreviewResource),
              init = ::configureMacosWindowBeforePeer,
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt
-index 3bf9ebf..6cfe895 100644
+index 3bf9ebf5..741cf770 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt
 @@ -44,14 +44,14 @@ internal object DesktopStorage {
@@ -78,16 +78,16 @@ index 3bf9ebf..6cfe895 100644
          val userHome = Paths.get(System.getProperty("user.home").orEmpty())
          return when {
 -            osName.contains("mac") -> userHome.resolve("Library/Application Support/Nuvio")
-+            osName.contains("mac") -> userHome.resolve("Library/Application Support/NuvioLiveTV")
++            osName.contains("mac") -> userHome.resolve("Library/Application Support/NuvioJellyfin")
              osName.contains("win") -> {
                  val appData = System.getenv("APPDATA")?.takeIf { it.isNotBlank() }
 -                (appData?.let(Paths::get) ?: userHome.resolve("AppData/Roaming")).resolve("Nuvio")
-+                (appData?.let(Paths::get) ?: userHome.resolve("AppData/Roaming")).resolve("NuvioLiveTV")
++                (appData?.let(Paths::get) ?: userHome.resolve("AppData/Roaming")).resolve("NuvioJellyfin")
              }
              else -> {
                  val xdgConfig = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() }
 -                (xdgConfig?.let(Paths::get) ?: userHome.resolve(".config")).resolve("nuvio")
-+                (xdgConfig?.let(Paths::get) ?: userHome.resolve(".config")).resolve("nuviolivetv")
++                (xdgConfig?.let(Paths::get) ?: userHome.resolve(".config")).resolve("nuviojellyfin")
              }
          }
      }
@@ -96,21 +96,21 @@ index 3bf9ebf..6cfe895 100644
          val userHome = Paths.get(System.getProperty("user.home").orEmpty())
          return when {
 -            osName.contains("mac") -> userHome.resolve("Library/Caches/Nuvio")
-+            osName.contains("mac") -> userHome.resolve("Library/Caches/NuvioLiveTV")
++            osName.contains("mac") -> userHome.resolve("Library/Caches/NuvioJellyfin")
              osName.contains("win") -> {
                  val localAppData = System.getenv("LOCALAPPDATA")?.takeIf { it.isNotBlank() }
 -                (localAppData?.let(Paths::get) ?: userHome.resolve("AppData/Local")).resolve("Nuvio/Cache")
-+                (localAppData?.let(Paths::get) ?: userHome.resolve("AppData/Local")).resolve("NuvioLiveTV/Cache")
++                (localAppData?.let(Paths::get) ?: userHome.resolve("AppData/Local")).resolve("NuvioJellyfin/Cache")
              }
              else -> {
                  val xdgCache = System.getenv("XDG_CACHE_HOME")?.takeIf { it.isNotBlank() }
 -                (xdgCache?.let(Paths::get) ?: userHome.resolve(".cache")).resolve("nuvio")
-+                (xdgCache?.let(Paths::get) ?: userHome.resolve(".cache")).resolve("nuviolivetv")
++                (xdgCache?.let(Paths::get) ?: userHome.resolve(".cache")).resolve("nuviojellyfin")
              }
          }
      }
 diff --git a/scripts/linux/linux-shortcut-definition.sh b/scripts/linux/linux-shortcut-definition.sh
-index e01e1cd..172e1e4 100644
+index e01e1cdc..f2c51a91 100644
 --- a/scripts/linux/linux-shortcut-definition.sh
 +++ b/scripts/linux/linux-shortcut-definition.sh
 @@ -1,12 +1,12 @@
@@ -118,14 +118,14 @@ index e01e1cd..172e1e4 100644
  
 -readonly NUVIO_LINUX_SHORTCUT_RELATIVE_PATH="usr/share/applications/nuvio.desktop"
 -readonly NUVIO_LINUX_SHORTCUT_NAME="Nuvio"
-+readonly NUVIO_LINUX_SHORTCUT_RELATIVE_PATH="usr/share/applications/nuviolivetv.desktop"
-+readonly NUVIO_LINUX_SHORTCUT_NAME="Nuvio Live TV"
++readonly NUVIO_LINUX_SHORTCUT_RELATIVE_PATH="usr/share/applications/nuviojellyfin.desktop"
++readonly NUVIO_LINUX_SHORTCUT_NAME="Nuvio Jellyfin"
  readonly NUVIO_LINUX_SHORTCUT_COMMENT="Nuvio Media Player"
  readonly NUVIO_LINUX_SHORTCUT_CATEGORIES="AudioVideo;"
  readonly NUVIO_LINUX_SHORTCUT_STARTUP_NOTIFY="true"
  readonly NUVIO_LINUX_SHORTCUT_STARTUP_WM_CLASS="com-nuvio-app-MainKt"
 -readonly NUVIO_LINUX_SHORTCUT_MIME_TYPES="x-scheme-handler/nuvio;x-scheme-handler/stremio;"
-+readonly NUVIO_LINUX_SHORTCUT_MIME_TYPES="x-scheme-handler/nuviolivetv;"
++readonly NUVIO_LINUX_SHORTCUT_MIME_TYPES="x-scheme-handler/nuviojellyfin;"
  
  nuvio_linux_desktop_entry_exists() {
      if [[ $# -ne 1 ]]; then
@@ -134,7 +134,7 @@ index e01e1cd..172e1e4 100644
      local desktop_file="$root_dir/$NUVIO_LINUX_SHORTCUT_RELATIVE_PATH"
      mkdir -p "$(dirname "$desktop_file")"
 -    nuvio_linux_write_desktop_entry_file "$desktop_file" "/opt/nuvio/bin/Nuvio %u" "/opt/nuvio/lib/Nuvio.png"
-+    nuvio_linux_write_desktop_entry_file "$desktop_file" "/opt/nuviolivetv/bin/NuvioLiveTV %u" "/opt/nuviolivetv/lib/NuvioLiveTV.png"
++    nuvio_linux_write_desktop_entry_file "$desktop_file" "/opt/nuviojellyfin/bin/NuvioJellyfin %u" "/opt/nuviojellyfin/lib/NuvioJellyfin.png"
  }
  
  nuvio_linux_ensure_uri_handler() {
