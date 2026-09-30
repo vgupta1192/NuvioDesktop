@@ -52,8 +52,9 @@ actual object AppUpdaterPlatform {
     actual val isSupported: Boolean
         get() = currentOs != DesktopUpdaterOs.UNKNOWN && linuxInstallMethod != LinuxInstallMethod.FLATPAK
 
+    // Self-host fork patch: updates come from the fork's CI releases
     actual val releaseSource: AppUpdateReleaseSource = AppUpdateReleaseSource(
-        owner = "NuvioMedia",
+        owner = "vgupta1192",
         repo = "NuvioDesktop",
         channelBranch = null,
         includePrereleases = true,
