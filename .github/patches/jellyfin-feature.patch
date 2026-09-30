@@ -37,7 +37,7 @@ index bbc87bd7..8ba0f9b3 100644
              subclass(EntityBrowseRoute::class, EntityBrowseRoute.serializer())
              subclass(SettingsPageRoute::class, SettingsPageRoute.serializer())
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index 820c1441..937e57b8 100644
+index 820c1441..81bd8325 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 @@ -855,6 +855,23 @@ internal fun DesktopHoverSidebar(
@@ -55,7 +55,7 @@ index 820c1441..937e57b8 100644
 +                    },
 +                ) { color ->
 +                    Icon(
-+                        imageVector = androidx.compose.material.icons.Icons.Rounded.VideoLibrary,
++                        imageVector = androidx.compose.material.icons.Icons.Rounded.CollectionsBookmark,
 +                        contentDescription = "Jellyfin",
 +                        modifier = Modifier.size(DesktopSidebarIconSize),
 +                        tint = color,
@@ -65,25 +65,23 @@ index 820c1441..937e57b8 100644
                      label = stringResource(Res.string.compose_settings_page_root),
                      selected = selectedTab == AppScreenTab.Settings,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 61b42604..d63e160c 100644
+index 61b42604..c5e91a41 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -108,6 +108,14 @@ import com.nuvio.app.features.home.HomeCatalogSettingsRepository
+@@ -108,6 +108,12 @@ import com.nuvio.app.features.home.HomeCatalogSettingsRepository
  import com.nuvio.app.features.home.HomeRepository
  import com.nuvio.app.features.home.buildAddonCatalogRefreshSignature
  import com.nuvio.app.features.home.components.shouldBlurContinueWatchingArtwork
 +import com.nuvio.app.features.jellyfin.JELLYFIN_META_ID_PREFIX
-+import com.nuvio.app.features.jellyfin.JellyfinDetailRoute
 +import com.nuvio.app.features.jellyfin.JellyfinDetailScreen
 +import com.nuvio.app.features.jellyfin.JellyfinItem
 +import com.nuvio.app.features.jellyfin.JellyfinLauncher
 +import com.nuvio.app.features.jellyfin.JellyfinRepository
-+import com.nuvio.app.features.jellyfin.JellyfinRoute
 +import com.nuvio.app.features.jellyfin.JellyfinScreen
  import com.nuvio.app.features.library.LibraryItem
  import com.nuvio.app.features.library.LibraryRepository
  import com.nuvio.app.features.library.LibrarySection
-@@ -876,6 +884,45 @@ internal fun MainAppContent(
+@@ -876,6 +882,45 @@ internal fun MainAppContent(
              navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
          }
  
@@ -129,7 +127,7 @@ index 61b42604..d63e160c 100644
          fun openExternalStreamUrl(url: String): Boolean {
              val opened = runCatching {
                  uriHandler.openUri(url)
-@@ -1327,12 +1374,23 @@ internal fun MainAppContent(
+@@ -1327,12 +1372,23 @@ internal fun MainAppContent(
                              AppTabActions(
                                  onCatalogClick = onCatalogClick,
                                  onPosterClick = { meta ->
@@ -157,7 +155,7 @@ index 61b42604..d63e160c 100644
                                  },
                                  onLibraryPosterClick = { item ->
                                      navController.navigate(
-@@ -1600,6 +1658,14 @@ internal fun MainAppContent(
+@@ -1600,6 +1656,14 @@ internal fun MainAppContent(
                          ) appUpdaterController::showDebugTestUpdate else null,
                      )
                  }
@@ -173,7 +171,7 @@ index 61b42604..d63e160c 100644
                      DownloadsDestination(
                          route = route,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-index ccad16c4..ba4e937d 100644
+index ccad16c4..66df1c05 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 @@ -141,7 +141,7 @@ internal fun MainTabsDestination(
@@ -194,7 +192,7 @@ index ccad16c4..ba4e937d 100644
 +                FloatingNavigationItem(
 +                    selected = false,
 +                    onClick = { com.nuvio.app.features.jellyfin.JellyfinLauncher.open() },
-+                    icon = androidx.compose.material.icons.Icons.Rounded.VideoLibrary,
++                    icon = androidx.compose.material.icons.Icons.Rounded.CollectionsBookmark,
 +                    label = "Jellyfin",
 +                )
 +            } else {
@@ -750,10 +748,10 @@ index 00000000..2800325d
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
 new file mode 100644
-index 00000000..38e25266
+index 00000000..a4c1ce3c
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
-@@ -0,0 +1,404 @@
+@@ -0,0 +1,402 @@
 +package com.nuvio.app.features.jellyfin
 +
 +import com.nuvio.app.features.catalog.CatalogTarget
@@ -771,6 +769,7 @@ index 00000000..38e25266
 +import kotlinx.coroutines.launch
 +
 +object JellyfinRepository {
++    private val VIDEO_LIBRARY_TYPES = setOf("movies", "tvshows", "mixed")
 +    private const val KEY_SERVER = "server_url"
 +    private const val KEY_SERVER_NAME = "server_name"
 +    private const val KEY_USER_ID = "user_id"
@@ -1154,9 +1153,6 @@ index 00000000..38e25266
 +        )
 +    }
 +
-+    private companion object {
-+        val VIDEO_LIBRARY_TYPES = setOf("movies", "tvshows", "mixed")
-+    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
 new file mode 100644
