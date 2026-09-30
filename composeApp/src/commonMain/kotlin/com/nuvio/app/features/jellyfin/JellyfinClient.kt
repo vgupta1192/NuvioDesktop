@@ -167,7 +167,7 @@ internal object JellyfinClient {
                 put(
                     "Fields",
                     "Overview,Genres,ProductionYear,CommunityRating,OfficialRating,RunTimeTicks," +
-                        "Container,UserData,SeriesId,SeriesName,ProviderIds",
+                        "Container,UserData,SeriesId,SeriesName",
                 )
                 put("Recursive", recursive.toString())
                 put("ImageTypeLimit", "1")
@@ -254,8 +254,6 @@ internal object JellyfinClient {
                 ?.jsonPrimitive
                 ?.contentOrNull,
             container = obj.string("Container"),
-            imdbId = (obj["ProviderIds"] as? JsonObject)?.string("Imdb"),
-            tmdbId = (obj["ProviderIds"] as? JsonObject)?.string("Tmdb"),
             playbackPositionTicks = userData?.long("PlaybackPositionTicks"),
             playedPercentage = userData?.double("PlayedPercentage"),
         )
@@ -280,7 +278,7 @@ internal object JellyfinClient {
         this[key] as? JsonArray
 
     /** RFC 3986 query-value encoding without java.net (common code). */
-    internal fun encodeQueryValue(value: String): String = buildString {
+    private fun encodeQueryValue(value: String): String = buildString {
         for (byte in value.encodeToByteArray()) {
             val code = byte.toInt() and 0xFF
             when {

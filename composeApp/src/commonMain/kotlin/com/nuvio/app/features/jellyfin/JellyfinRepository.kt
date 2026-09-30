@@ -29,9 +29,6 @@ object JellyfinRepository {
     private const val KEY_TOKEN = "access_token"
 
     private const val HIDDEN_LIBRARIES_KEY_PREFIX = "hidden_libraries_p"
-    private const val SEERR_URL_KEY = "seerr_url"
-    private const val SEERR_API_KEY_KEY = "seerr_api_key"
-    private const val SEERR_REQUESTED_KEY = "seerr_requested_ids"
 
     private const val SEARCH_SECTION_LIMIT = 24
     private const val SEARCH_DEBOUNCE_MS = 350L
@@ -46,7 +43,6 @@ object JellyfinRepository {
     private var librariesJob: Job? = null
     private var itemsJob: Job? = null
     private var detailJob: Job? = null
-    private var seerrJob: Job? = null
     private var lastAppliedProfileId: Int? = null
 
     /** True when a signed-in session exists; loads the persisted session on first call. */
@@ -101,8 +97,6 @@ object JellyfinRepository {
             it.copy(
                 session = session,
                 hiddenLibraryIds = loadHiddenLibraryIds(currentProfileId()),
-                seerrConnected = seerrSettings() != null,
-                seerrRequestedIds = loadSeerrRequestedIds(),
             )
         }
         refresh()
@@ -130,8 +124,6 @@ object JellyfinRepository {
                             session = session,
                             isLoadingSession = false,
                             hiddenLibraryIds = loadHiddenLibraryIds(currentProfileId()),
-                            seerrConnected = seerrSettings() != null,
-                            seerrRequestedIds = loadSeerrRequestedIds(),
                         )
                     }
                     refresh()
@@ -226,7 +218,6 @@ object JellyfinRepository {
                     itemsError = null,
                     items = if (reset) emptyList() else it.items,
                     totalItemCount = if (reset) 0 else it.totalItemCount,
-                    seerrResults = if (searchTerm == null) emptyList() else it.seerrResults,
                 )
             }
             val result = try {
@@ -255,7 +246,6 @@ object JellyfinRepository {
             } catch (error: Throwable) {
                 Result.failure<JellyfinItemPage>(error)
             }
-            if (searchTerm != null) refreshSeerrResults(searchTerm)
             result.fold(
                 onSuccess = { page ->
                     _uiState.update { current ->
@@ -452,102 +442,6 @@ object JellyfinRepository {
             }
         }
     }
-
-    // ---- Jellyseerr request integration ----
-
-    fun connectSeerr(url: String, apiKey: String) {
-        val normalized = SeerrClient.normalizeUrl(url) ?: run {
-            _uiState.update { it.copy(seerrStatusMessage = "Enter a valid Seerr address") }
-            return
-        }
-        if (apiKey.isBlank()) {
-            _uiState.update { it.copy(seerrStatusMessage = "Enter the Seerr API key (Seerr Settings → API Key)") }
-            return
-        }
-        _uiState.update { it.copy(seerrStatusMessage = "Checking Seerr…") }
-        scope.launch {
-            val ok = SeerrClient.testConnection(normalized, apiKey)
-            _uiState.update { state ->
-                if (ok) {
-                    JellyfinPlatform.saveString(SEERR_URL_KEY, normalized)
-                    JellyfinPlatform.saveString(SEERR_API_KEY_KEY, apiKey)
-                    state.copy(seerrConnected = true, seerrStatusMessage = null)
-                } else {
-                    state.copy(seerrStatusMessage = "Could not reach Seerr or the API key was rejected")
-                }
-            }
-            if (ok && _uiState.value.searchQuery.isNotBlank()) {
-                refreshSeerrResults(_uiState.value.searchQuery)
-            }
-        }
-    }
-
-    fun disconnectSeerr() {
-        JellyfinPlatform.saveString(SEERR_URL_KEY, null)
-        JellyfinPlatform.saveString(SEERR_API_KEY_KEY, null)
-        _uiState.update { it.copy(seerrConnected = false, seerrResults = emptyList(), seerrStatusMessage = null) }
-    }
-
-    fun requestViaSeerr(result: SeerrSearchResult) {
-        val settings = seerrSettings() ?: return
-        val (url, key) = settings
-        _uiState.update { it.copy(seerrStatusMessage = "Requesting \"${result.title}\"…") }
-        scope.launch {
-            val outcome = SeerrClient.request(url, key, result.mediaType, result.tmdbId)
-            _uiState.update { state ->
-                when (outcome) {
-                    SeerrClient.RequestOutcome.Created, SeerrClient.RequestOutcome.AlreadyRequested -> {
-                        val updatedIds = state.seerrRequestedIds + result.tmdbId
-                        JellyfinPlatform.saveString(SEERR_REQUESTED_KEY, updatedIds.joinToString("\n") { it.toString() })
-                        state.copy(
-                            seerrRequestedIds = updatedIds,
-                            seerrStatusMessage = if (outcome == SeerrClient.RequestOutcome.Created) {
-                                "Requested \"${result.title}\" — Radarr/Sonarr will download it; it shows up here once ready"
-                            } else {
-                                "\"${result.title}\" was already requested"
-                            },
-                        )
-                    }
-                    SeerrClient.RequestOutcome.Unauthorized ->
-                        state.copy(seerrStatusMessage = "Seerr rejected the API key")
-                    SeerrClient.RequestOutcome.Failed ->
-                        state.copy(seerrStatusMessage = "Seerr request failed — try again")
-                }
-            }
-        }
-    }
-
-    private fun refreshSeerrResults(query: String) {
-        val settings = seerrSettings() ?: run {
-            _uiState.update { it.copy(seerrResults = emptyList()) }
-            return
-        }
-        val (url, key) = settings
-        seerrJob?.cancel()
-        seerrJob = scope.launch {
-            val results = SeerrClient.search(url, key, query)
-            _uiState.update { state ->
-                val knownTmdb = state.items.mapNotNull { it.tmdbId }.filter { it.isNotBlank() }.toSet()
-                val filtered = results.orEmpty().filterNot { result ->
-                    result.isAvailable || result.tmdbId.toString() in knownTmdb
-                }
-                state.copy(seerrResults = filtered)
-            }
-        }
-    }
-
-    private fun seerrSettings(): Pair<String, String>? {
-        val url = JellyfinPlatform.loadString(SEERR_URL_KEY)?.takeIf { it.isNotBlank() } ?: return null
-        val key = JellyfinPlatform.loadString(SEERR_API_KEY_KEY)?.takeIf { it.isNotBlank() } ?: return null
-        return url to key
-    }
-
-    private fun loadSeerrRequestedIds(): Set<Int> =
-        JellyfinPlatform.loadString(SEERR_REQUESTED_KEY)
-            ?.split('\n')
-            ?.mapNotNull { it.trim().toIntOrNull() }
-            ?.toSet()
-            .orEmpty()
 
     // ---- library visibility (hide/show in the Jellyfin screen) ----
 

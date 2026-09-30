@@ -75,8 +75,6 @@ fun JellyfinScreen(
     val tokens = MaterialTheme.nuvio
     val session = state.session
     var showHiddenLibraries by remember { mutableStateOf(false) }
-    var seerrUrl by remember { mutableStateOf("") }
-    var seerrApiKey by remember { mutableStateOf("") }
 
     if (session == null) {
         JellyfinSignInContent(state = state, onBack = onBack)
@@ -176,55 +174,6 @@ fun JellyfinScreen(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(14.dp))
-                NuvioSectionLabel(text = "Seerr — requests")
-                Spacer(modifier = Modifier.height(4.dp))
-                if (state.seerrConnected) {
-                    Text(
-                        text = "Connected. Search above — titles missing from your libraries get a Request button.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = tokens.colors.textMuted,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Disconnect",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = tokens.colors.accent,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { JellyfinRepository.disconnectSeerr() }
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                    )
-                } else {
-                    NuvioInputField(
-                        value = seerrUrl,
-                        onValueChange = { seerrUrl = it },
-                        placeholder = "Seerr address (https://…)",
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    NuvioInputField(
-                        value = seerrApiKey,
-                        onValueChange = { seerrApiKey = it },
-                        placeholder = "Seerr API key",
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Button(
-                        enabled = seerrUrl.isNotBlank() && seerrApiKey.isNotBlank(),
-                        onClick = { JellyfinRepository.connectSeerr(seerrUrl, seerrApiKey) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = tokens.colors.accent),
-                    ) {
-                        Text(text = "Connect")
-                    }
-                }
-                if (state.seerrStatusMessage != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = state.seerrStatusMessage.orEmpty(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = tokens.colors.textMuted,
-                    )
-                }
             }
 
             // Middle: search + sort + poster grid
@@ -309,25 +258,6 @@ fun JellyfinScreen(
                                     isSelected = state.selectedItemId == item.id,
                                     onClick = { JellyfinRepository.selectItem(item) },
                                 )
-                            }
-                            if (state.searchQuery.isNotBlank() && state.seerrConnected && state.seerrResults.isNotEmpty()) {
-                                item(key = "jellyfin_seerr_header", span = { GridItemSpan(maxLineSpan) }) {
-                                    Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
-                                        NuvioSectionLabel(text = "Not in your library — request via Seerr")
-                                    }
-                                }
-                                state.seerrResults.forEach { result ->
-                                    item(
-                                        key = "seerr_${result.mediaType}_${result.tmdbId}",
-                                        span = { GridItemSpan(maxLineSpan) },
-                                    ) {
-                                        SeerrResultRow(
-                                            result = result,
-                                            isRequestedLocally = result.tmdbId in state.seerrRequestedIds,
-                                            onRequest = { JellyfinRepository.requestViaSeerr(result) },
-                                        )
-                                    }
-                                }
                             }
                             if (state.canLoadMore) {
                                 item(key = "jellyfin_load_more", span = { GridItemSpan(maxLineSpan) }) {
@@ -862,74 +792,6 @@ private fun JellyfinEpisodeRow(
                     modifier = Modifier.fillMaxWidth().height(2.dp),
                 )
             }
-        }
-    }
-}
-
-/** One Jellyseerr search hit: request it and Radarr/Sonarr downloads it into the library. */
-@Composable
-private fun SeerrResultRow(
-    result: SeerrSearchResult,
-    isRequestedLocally: Boolean,
-    onRequest: () -> Unit,
-) {
-    val tokens = MaterialTheme.nuvio
-    val requested = result.isRequested || isRequestedLocally
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(tokens.colors.surfaceElevated)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .width(44.dp)
-                .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(6.dp))
-                .background(tokens.colors.surfaceCard),
-        ) {
-            if (result.posterUrl != null) {
-                NuvioAsyncImage(
-                    model = result.posterUrl,
-                    contentDescription = result.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        }
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = result.title,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = tokens.colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = (if (result.mediaType == "tv") "Series" else "Movie") +
-                    (result.releaseYear?.let { " · $it" } ?: ""),
-                style = MaterialTheme.typography.labelSmall,
-                color = tokens.colors.textMuted,
-            )
-            if (!result.overview.isNullOrBlank()) {
-                Text(
-                    text = result.overview.orEmpty(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = tokens.colors.textMuted,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        Button(
-            enabled = !requested,
-            onClick = onRequest,
-            colors = ButtonDefaults.buttonColors(containerColor = tokens.colors.accent),
-        ) {
-            Text(text = if (requested) "Requested ✓" else "Request")
         }
     }
 }
