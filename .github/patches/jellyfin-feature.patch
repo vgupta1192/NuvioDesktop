@@ -37,10 +37,18 @@ index b0aed88f..b197bdfc 100644
              subclass(EntityBrowseRoute::class, EntityBrowseRoute.serializer())
              subclass(SettingsPageRoute::class, SettingsPageRoute.serializer())
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index ba0aba88..e0d48683 100644
+index ba0aba88..5935dbc8 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-@@ -873,6 +873,23 @@ internal fun DesktopHoverSidebar(
+@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
+ import androidx.compose.foundation.lazy.LazyListState
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.rounded.CollectionsBookmark
+ import androidx.compose.material.icons.filled.Home
+ import androidx.compose.material.icons.rounded.Settings
+ import androidx.compose.material.icons.rounded.LiveTv
+@@ -873,6 +874,23 @@ internal fun DesktopHoverSidebar(
                          tint = color,
                      )
                  }
@@ -171,10 +179,18 @@ index 947d91c4..f978e249 100644
                      DownloadsDestination(
                          route = route,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-index 20ffd02f..a302b4ca 100644
+index 20ffd02f..de5d256b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-@@ -172,6 +172,17 @@ internal fun MainTabsDestination(
+@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.layout.statusBars
+ import androidx.compose.foundation.layout.widthIn
+ import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.rounded.CollectionsBookmark
+ import androidx.compose.material.icons.rounded.LiveTv
+ import androidx.compose.material.icons.filled.Home
+ import androidx.compose.material3.Scaffold
+@@ -172,6 +173,17 @@ internal fun MainTabsDestination(
              } else {
                  null
              },
