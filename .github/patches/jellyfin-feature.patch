@@ -37,10 +37,18 @@ index bbc87bd7..8ba0f9b3 100644
              subclass(EntityBrowseRoute::class, EntityBrowseRoute.serializer())
              subclass(SettingsPageRoute::class, SettingsPageRoute.serializer())
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index 820c1441..81bd8325 100644
+index 820c1441..1c2501a9 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-@@ -855,6 +855,23 @@ internal fun DesktopHoverSidebar(
+@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
+ import androidx.compose.foundation.lazy.LazyListState
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.rounded.CollectionsBookmark
+ import androidx.compose.material.icons.filled.Home
+ import androidx.compose.material.icons.rounded.Settings
+ import androidx.compose.material3.Icon
+@@ -855,6 +856,23 @@ internal fun DesktopHoverSidebar(
                          tint = color,
                      )
                  }
@@ -171,10 +179,18 @@ index 61b42604..c5e91a41 100644
                      DownloadsDestination(
                          route = route,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-index ccad16c4..66df1c05 100644
+index ccad16c4..5b23084b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-@@ -141,7 +141,7 @@ internal fun MainTabsDestination(
+@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.layout.statusBars
+ import androidx.compose.foundation.layout.widthIn
+ import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.rounded.CollectionsBookmark
+ import androidx.compose.material.icons.filled.Home
+ import androidx.compose.material3.Scaffold
+ import androidx.compose.runtime.Composable
+@@ -141,7 +142,7 @@ internal fun MainTabsDestination(
          }
          val navBarGlowEnabled by ThemeSettingsRepository.navBarGlowEnabled.collectAsStateWithLifecycle()
          var isTopProfileSwitcherOpen by remember { mutableStateOf(false) }
@@ -183,7 +199,7 @@ index ccad16c4..66df1c05 100644
              FloatingNavigationItem(
                  selected = selectedTab == AppScreenTab.Home,
                  onClick = { onTabSelected(AppScreenTab.Home) },
-@@ -160,6 +160,17 @@ internal fun MainTabsDestination(
+@@ -160,6 +161,17 @@ internal fun MainTabsDestination(
                  drawable = Res.drawable.sidebar_library,
                  label = stringResource(Res.string.compose_nav_library),
              ),
