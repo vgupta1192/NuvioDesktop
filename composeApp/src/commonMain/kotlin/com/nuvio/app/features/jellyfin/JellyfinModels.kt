@@ -58,6 +58,13 @@ data class JellyfinItem(
     val resumePositionMs: Long
         get() = playbackPositionTicks?.div(TICKS_PER_MILLISECOND)?.takeIf { it > 0L } ?: 0L
 
+    /** True when this item type has a playable video stream (folders / box sets do not). */
+    val isPlayable: Boolean
+        get() = type.equals("Movie", ignoreCase = true) ||
+            type.equals("Episode", ignoreCase = true) ||
+            type.equals("Video", ignoreCase = true) ||
+            type.equals("MusicVideo", ignoreCase = true)
+
     /** Stremio-style content type used for MetaPreview mapping and watch-progress keys. */
     val stremioType: String
         get() = when {

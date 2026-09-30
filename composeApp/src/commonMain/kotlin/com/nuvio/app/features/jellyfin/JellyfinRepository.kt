@@ -191,12 +191,19 @@ object JellyfinRepository {
             }
             val result = try {
                 val page = if (searchTerm == null) {
+                    // Video libraries browse recursively by item type: titles inside nested
+                    // folders (e.g. a "complete saga" folder holding several movies) show up as
+                    // separate playable items instead of one unplayable folder entry.
+                    val library = state.libraries.firstOrNull { it.id == state.selectedLibraryId }
+                    val browseTypes = browseItemTypes(library?.collectionType)
                     JellyfinClient.getItems(
                         session = session,
                         parentId = state.selectedLibraryId,
                         startIndex = if (reset) 0 else state.items.size,
                         sortBy = if (state.sortLatestFirst) "DateCreated" else "SortName",
                         sortAscending = !state.sortLatestFirst,
+                        includeItemTypes = browseTypes,
+                        recursive = browseTypes != null,
                     )
                 } else {
                     // Search only the visible libraries: hidden ones must not leak results.
@@ -386,6 +393,18 @@ object JellyfinRepository {
         }
     }
 
+    /**
+     * Item types used when browsing a library, per collection type: movies (incl. adult movies
+     * libraries) flatten to Movie, tv shows to Series, mixed to both. Unknown library types keep
+     * the legacy non-recursive direct-children listing.
+     */
+    private fun browseItemTypes(collectionType: String?): String? = when (collectionType?.lowercase()) {
+        "movies" -> "Movie"
+        "tvshows" -> "Series"
+        "mixed" -> "Movie,Series"
+        else -> null
+    }
+
     private fun loadHiddenLibraryIds(): Set<String> =
         JellyfinPlatform.loadString(HIDDEN_LIBRARIES_KEY)
             ?.split('\n')
@@ -415,6 +434,7 @@ object JellyfinRepository {
                             limit = perLibrary,
                             sortBy = "SortName",
                             searchTerm = searchTerm,
+                            includeItemTypes = "Movie,Series,Episode",
                             recursive = true,
                         )
                     }.getOrNull()
