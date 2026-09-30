@@ -1,5 +1,5 @@
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index 11b225f..fc73cf3 100644
+index f985e572..8a4f2646 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
 @@ -1336,7 +1336,7 @@ compose.desktop {
@@ -11,7 +11,7 @@ index 11b225f..fc73cf3 100644
              packageVersion = desktopReleasePackageVersion
              vendor = "Nuvio Media"
              if (isMacHost) {
-@@ -1350,7 +1350,7 @@ compose.desktop {
+@@ -1351,7 +1351,7 @@ compose.desktop {
                  "jdk.unsupported",
              )
              macOS {
@@ -20,7 +20,7 @@ index 11b225f..fc73cf3 100644
                  iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.icns"))
                  infoPlist {
                      extraKeysRawXml = """
-@@ -1358,11 +1358,10 @@ compose.desktop {
+@@ -1359,11 +1359,10 @@ compose.desktop {
                          <array>
                              <dict>
                                  <key>CFBundleURLName</key>
@@ -34,7 +34,7 @@ index 11b225f..fc73cf3 100644
                                  </array>
                              </dict>
                          </array>
-@@ -1413,8 +1412,8 @@ fun renameMacosDmgOutput(release: Boolean) {
+@@ -1414,8 +1413,8 @@ fun renameMacosDmgOutput(release: Boolean) {
  
      val distributionName = if (release) "main-release" else "main"
      val outputDir = layout.buildDirectory.dir("compose/binaries/$distributionName/dmg").get().asFile
@@ -45,7 +45,7 @@ index 11b225f..fc73cf3 100644
      val sourceDmg = defaultDmg.takeIf { it.exists() }
          ?: finalDmg.takeIf { it.exists() }
          ?: error("Expected macOS DMG output in ${outputDir.absolutePath}")
-@@ -1718,8 +1717,8 @@ if (isMacHost) {
+@@ -1719,8 +1718,8 @@ if (isMacHost) {
          dependsOn("packageReleaseDmg")
          dmgDir.set(layout.buildDirectory.dir("compose/binaries/main-release/dmg"))
          artifactDir.set(layout.buildDirectory.dir("compose/release-dmgs"))
@@ -57,10 +57,10 @@ index 11b225f..fc73cf3 100644
          keychainPath.set(macosNotaryKeychainPath.orEmpty())
          signingIdentity.set(macosSigningIdentity.orEmpty())
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-index c3ed65f..a20dd8f 100644
+index 7bc0c1de..c6fa4849 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-@@ -127,7 +127,7 @@ fun main(args: Array<String>) {
+@@ -128,7 +128,7 @@ fun main(args: Array<String>) {
                  SentryInitializer.close()
                  exitApplication()
              },
@@ -70,7 +70,7 @@ index c3ed65f..a20dd8f 100644
              icon = painterResource(appIconState.selected.transparentPreviewResource),
              init = ::configureMacosWindowBeforePeer,
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt
-index 3bf9ebf..6cfe895 100644
+index 3bf9ebf5..6cfe8951 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt
 @@ -44,14 +44,14 @@ internal object DesktopStorage {
@@ -110,7 +110,7 @@ index 3bf9ebf..6cfe895 100644
          }
      }
 diff --git a/scripts/linux/linux-shortcut-definition.sh b/scripts/linux/linux-shortcut-definition.sh
-index e01e1cd..172e1e4 100644
+index e01e1cdc..172e1e41 100644
 --- a/scripts/linux/linux-shortcut-definition.sh
 +++ b/scripts/linux/linux-shortcut-definition.sh
 @@ -1,12 +1,12 @@

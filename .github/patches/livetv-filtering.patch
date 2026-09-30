@@ -1,0 +1,196 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeCatalogDefinitions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeCatalogDefinitions.kt
+index f4e50dd7..5bc1703d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeCatalogDefinitions.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeCatalogDefinitions.kt
+@@ -47,6 +47,7 @@ fun buildHomeCatalogDefinitions(addons: List<ManagedAddon>): List<HomeCatalogDef
+     }.flatMap { (addon, manifest) ->
+         manifest.catalogs
+             .filter { catalog -> catalog.extra.none { it.isRequired } }
++            .filterNot { catalog -> com.nuvio.app.features.livetv.isLiveTvContentType(catalog.type) } // Live TV only
+             .map { catalog ->
+                 HomeCatalogDefinition(
+                     key = "${manifest.id}:${catalog.type}:${catalog.id}",
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryModels.kt
+index f38d5cd7..755bd891 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryModels.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryModels.kt
+@@ -115,3 +115,21 @@ fun LibraryItem.toMetaPreview(): MetaPreview =
+         rawPosterUrl = rawPosterUrl,
+         landscapePoster = landscapePoster,
+     )
++
++/**
++ * Live TV fork feature: channel items stay in the Live TV screen. IMDb/TMDB ids are kept even
++ * with a "tv" type, since some sources use "tv" for TV shows.
++ */
++private fun LibraryItem.isLiveTvChannel(): Boolean =
++    com.nuvio.app.features.livetv.isLiveTvContentType(type) &&
++        !id.startsWith("tt") && !id.startsWith("tmdb", ignoreCase = true)
++
++internal fun LibraryUiState.withoutLiveTvItems(): LibraryUiState {
++    if (items.none { it.isLiveTvChannel() } && sections.none { section -> section.items.any { it.isLiveTvChannel() } }) return this
++    return copy(
++        items = items.filterNot { it.isLiveTvChannel() },
++        sections = sections
++            .map { section -> section.copy(items = section.items.filterNot { it.isLiveTvChannel() }) }
++            .filter { it.items.isNotEmpty() },
++    )
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
+index fddc9b29..d7c59dc4 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
+@@ -111,7 +111,10 @@ fun LibraryScreen(
+     val uiState by remember {
+         LibraryRepository.ensureLoaded()
+         LibraryRepository.uiState
+-    }.collectAsStateWithLifecycle()
++    }.collectAsStateWithLifecycle().let { state ->
++        // Live TV channels belong to the Live TV screen, not the Library
++        remember { androidx.compose.runtime.derivedStateOf { state.value.withoutLiveTvItems() } }
++    }
+     val cloudUiState by CloudLibraryRepository.uiState.collectAsStateWithLifecycle()
+     val cloudSettings by remember {
+         DebridSettingsRepository.ensureLoaded()
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
+index a7c0c83e..66cac7fa 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
+@@ -91,7 +91,7 @@ object LiveTvEpgRepository {
+                         (listOf(id.substringBefore('.')) + channel.displayNames)
+                             .map(::normalize)
+                             .filter { it.isNotBlank() }
+-                            .forEach { key -> keys.putIfAbsent(key, id) }
++                            .forEach { key -> if (key !in keys) keys[key] = id }
+                     }
+                     programs.putAll(parsed.programsByChannelId)
+                 } catch (error: CancellationException) {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
+index ff90e8ed..a7f9c85c 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
+@@ -67,6 +67,17 @@ data class LiveTvUiState(
+ }
+ 
+ const val LIVE_TV_CATEGORY_ALL = "__all__"
++
++private val liveTvContentTypes = setOf(
++    "tv", "channel", "channels", "iptv", "live", "livetv", "live_tv", "radio", "broadcast",
++)
++
++/**
++ * Live TV owns these catalog/content types: they show only in the Live TV screen and are kept
++ * out of Home, Search/Discover and Library.
++ */
++fun isLiveTvContentType(type: String?): Boolean =
++    type != null && type.lowercase().trim() in liveTvContentTypes
+ const val LIVE_TV_CATEGORY_FAVORITES = "__favorites__"
+ 
+ data class EpgProgram(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
+index 86d3cf6e..5f9232ef 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
+@@ -27,10 +27,6 @@ import kotlinx.coroutines.sync.Semaphore
+ import kotlinx.coroutines.sync.withPermit
+ 
+ object LiveTvRepository {
+-    private val tvCatalogTypes = setOf(
+-        "tv", "channel", "channels", "iptv", "live", "livetv", "live_tv", "broadcast", "radio",
+-        "sports", "sport", "events", "event", "news",
+-    )
+     private const val SELECTED_ADDONS_KEY = "selected_addons"
+     private const val FAVORITES_KEY = "favorite_channels"
+     private const val HIDE_ADULT_KEY = "hide_adult"
+@@ -78,7 +74,8 @@ object LiveTvRepository {
+ 
+     private fun onAddonsChanged(forceReload: Boolean) {
+         val saved = loadSet(SELECTED_ADDONS_KEY)
+-        val options = enabledAddons.map { addon ->
++        // Only addons that have Live TV catalogs; movie/series-only addons never show here.
++        val options = enabledAddons.filter { it.tvCatalogs().isNotEmpty() }.map { addon ->
+             LiveTvAddonOption(
+                 manifestUrl = addon.manifestUrl,
+                 name = addon.displayTitle,
+@@ -87,7 +84,7 @@ object LiveTvRepository {
+             )
+         }
+         val selected = saved?.filterTo(mutableSetOf()) { url -> options.any { it.manifestUrl == url } }
+-            ?: enabledAddons.filter(::looksLikeTvAddon).mapTo(mutableSetOf()) { it.manifestUrl }
++            ?: options.mapTo(mutableSetOf()) { it.manifestUrl }
+         _uiState.update { state ->
+             state.copy(
+                 availableAddons = options.map { it.copy(isSelected = it.manifestUrl in selected) },
+@@ -332,28 +329,12 @@ object LiveTvRepository {
+         return copy(categories = categories, selectedCategory = category, filteredChannels = filtered)
+     }
+ 
+-    private fun ManagedAddon.tvCatalogs(): List<AddonCatalog> {
+-        val catalogs = manifest?.catalogs.orEmpty()
+-            .filter { catalog -> catalog.extra.none { it.isRequired } }
+-        val tvOnes = catalogs.filter { isTvCatalog(it) }
+-        return tvOnes.ifEmpty { if (looksLikeTvAddon(this)) catalogs else emptyList() }
+-    }
+-
+-    private fun isTvCatalog(catalog: AddonCatalog): Boolean {
+-        val type = catalog.type.lowercase().trim()
+-        if (type in tvCatalogTypes) return true
+-        if (type == "movie" || type == "series" || type == "anime") return false
+-        val text = "${catalog.id} ${catalog.name}".lowercase()
+-        return listOf("channel", "iptv", "live", "canal", "canais", "ao vivo").any { text.contains(it) }
+-    }
+-
+-    private fun looksLikeTvAddon(addon: ManagedAddon): Boolean {
+-        val manifest = addon.manifest ?: return false
+-        if (manifest.types.any { it.lowercase() in tvCatalogTypes }) return true
+-        val text = "${manifest.id} ${manifest.name} ${manifest.description}".lowercase()
+-        if (listOf("iptv", "live tv", "livetv", "tv channels", "channels", "canais", "ao vivo").any { text.contains(it) }) return true
+-        return manifest.catalogs.any { isTvCatalog(it) }
+-    }
++    // Strictly by catalog type: an addon listing "tv" among its manifest types can still serve
++    // only movie/series catalogs, and those must not leak into Live TV.
++    private fun ManagedAddon.tvCatalogs(): List<AddonCatalog> =
++        manifest?.catalogs.orEmpty().filter { catalog ->
++            isLiveTvContentType(catalog.type) && catalog.extra.none { it.isRequired }
++        }
+ 
+     private fun loadSet(key: String): Set<String>? =
+         LiveTvStorage.loadString(key)?.split('\n')?.filter { it.isNotBlank() }?.toSet()
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
+index f6a7ad6b..07e0d2ae 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
+@@ -407,6 +407,7 @@ object SearchRepository {
+         }.flatMap { (addon, manifest) ->
+             manifest.catalogs
+                 .filter { catalog -> catalog.supportsSearch() }
++                .filterNot { catalog -> com.nuvio.app.features.livetv.isLiveTvContentType(catalog.type) } // Live TV only
+                 .map { catalog ->
+                     SearchCatalogRequest(
+                         addon = addon,
+@@ -426,6 +427,7 @@ object SearchRepository {
+         }.flatMap { (addon, manifest) ->
+             manifest.catalogs
+                 .filter { catalog -> catalog.supportsDiscover() }
++                .filterNot { catalog -> com.nuvio.app.features.livetv.isLiveTvContentType(catalog.type) } // Live TV only
+                 .map { catalog ->
+                     val genreExtra = catalog.genreExtra()
+                     DiscoverCatalogOption(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
+index b88346f3..b4cfa714 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
+@@ -1238,6 +1238,13 @@ object WatchProgressRepository {
+         persist: Boolean,
+         syncRemote: Boolean,
+     ) {
++        // Live TV fork feature: live channels have no resumable progress; keep them out of Continue Watching
++        if (
++            com.nuvio.app.features.livetv.isLiveTvContentType(session.contentType) &&
++            !session.parentMetaId.startsWith("tt") && !session.parentMetaId.startsWith("tmdb", ignoreCase = true)
++        ) {
++            return
++        }
+         val targetProfileId = session.profileId
+         val positionMs = snapshot.positionMs.coerceAtLeast(0L)
+         val durationMs = snapshot.durationMs.coerceAtLeast(0L)
