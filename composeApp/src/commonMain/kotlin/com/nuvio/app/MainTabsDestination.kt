@@ -172,6 +172,17 @@ internal fun MainTabsDestination(
             } else {
                 null
             },
+            // Jellyfin fork feature: opens its own route (desktop sidebar only)
+            if (isDesktop) {
+                FloatingNavigationItem(
+                    selected = false,
+                    onClick = { com.nuvio.app.features.jellyfin.JellyfinLauncher.open() },
+                    icon = androidx.compose.material.icons.Icons.Rounded.VideoLibrary,
+                    label = "Jellyfin",
+                )
+            } else {
+                null
+            },
             FloatingNavigationItem(
                 selected = selectedTab == AppScreenTab.Settings,
                 onClick = { onTabSelected(AppScreenTab.Settings) },
