@@ -28,7 +28,15 @@ jobs:
         env:
           HEAD_MSG: ${{ github.event.head_commit.message }}
         run: |
-          UP=$(curl -s -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/NuvioMedia/NuvioDesktop/releases/latest | python3 -c "import json,sys;print(json.load(sys.stdin)['tag_name'])")
+          REL=$(curl -s -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/NuvioMedia/NuvioDesktop/releases/latest)
+          UP=$(printf '%s' "$REL" | python3 -c "import json,sys;print(json.load(sys.stdin)['tag_name'])")
+          # attach the upstream release notes so fork releases carry the upstream changelog
+          {
+            echo 'notes<<GHR_NOTES_EOF_9d41f'
+            printf 'Fork CI build of upstream %s.\n\n' "$UP"
+            printf '%s' "$REL" | python3 -c "import json,sys;print(json.load(sys.stdin).get('body') or '(no upstream release notes)')"
+            echo 'GHR_NOTES_EOF_9d41f'
+          } >> "$GITHUB_OUTPUT"
           VER="${UP%%-*}"
           echo "upstream tag: $UP (version $VER)"
           BUILT=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-livetv-mac-$UP")
@@ -165,6 +173,7 @@ jobs:
           tag_name: desktop-livetv-mac-${{ steps.ver.outputs.tag }}
           name: NuvioDesktop LiveTV macOS ${{ steps.ver.outputs.tag }}
           prerelease: true
+          body: ${{ steps.ver.outputs.notes }}
           files: NuvioDesktopLiveTV-${{ steps.ver.outputs.ver }}-b${{ github.run_number }}.dmg
 
       - name: Remove legacy-named assets
@@ -219,7 +228,15 @@ jobs:
         env:
           HEAD_MSG: ${{ github.event.head_commit.message }}
         run: |
-          UP=$(curl -s -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/NuvioMedia/NuvioDesktop/releases/latest | python3 -c "import json,sys;print(json.load(sys.stdin)['tag_name'])")
+          REL=$(curl -s -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/NuvioMedia/NuvioDesktop/releases/latest)
+          UP=$(printf '%s' "$REL" | python3 -c "import json,sys;print(json.load(sys.stdin)['tag_name'])")
+          # attach the upstream release notes so fork releases carry the upstream changelog
+          {
+            echo 'notes<<GHR_NOTES_EOF_9d41f'
+            printf 'Fork CI build of upstream %s.\n\n' "$UP"
+            printf '%s' "$REL" | python3 -c "import json,sys;print(json.load(sys.stdin).get('body') or '(no upstream release notes)')"
+            echo 'GHR_NOTES_EOF_9d41f'
+          } >> "$GITHUB_OUTPUT"
           VER="${UP%%-*}"
           echo "upstream tag: $UP (version $VER)"
           BUILT=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${{ github.token }}" "https://api.github.com/repos/vgupta1192/NuvioDesktop/releases/tags/desktop-livetv-linux-$UP")
@@ -347,6 +364,7 @@ jobs:
           tag_name: desktop-livetv-linux-${{ steps.ver.outputs.tag }}
           name: NuvioDesktop LiveTV Linux ${{ steps.ver.outputs.tag }}
           prerelease: true
+          body: ${{ steps.ver.outputs.notes }}
           files: NuvioDesktopLiveTV-${{ steps.ver.outputs.ver }}-b${{ github.run_number }}.deb
 
       - name: Remove legacy-named assets
