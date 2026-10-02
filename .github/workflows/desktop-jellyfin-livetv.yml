@@ -202,8 +202,14 @@ jobs:
           REL_TAG: desktop-jellyfin-livetv-mac-${{ steps.ver.outputs.tag }}
           VER: ${{ steps.ver.outputs.tag }}
         run: |
+          HASH=""
+          for f in *.dmg *.deb; do
+            [ -e "$f" ] || continue
+            HASH="${HASH}$(basename "$f"): $(stat -c%s "$f") bytes, sha256 $(sha256sum "$f" | cut -c1-16)..."
+          done
           MSG="📺💻 NuvioDesktop Jellyfin+LiveTV macOS ${VER} is ready
           Upstream release: ${VER}
+          ${HASH}
           Download: https://github.com/vgupta1192/NuvioDesktop/releases/tag/${REL_TAG}
           ${{ steps.patch_updater.outputs.applied == 'true' && format('Build {0}: Macs on a fork build show the update banner at start (or Settings → check for updates); Update opens the dmg, drag NuvioJellyfinTV to Applications', github.run_number) || '⚠️ fork-updater patch did NOT apply — manual install only' }}
           Installs alongside the other Nuvio apps as NuvioJellyfinTV (own login/settings; Live TV + Jellyfin)
@@ -394,9 +400,15 @@ jobs:
           REL_TAG: desktop-jellyfin-livetv-linux-${{ steps.ver.outputs.tag }}
           VER: ${{ steps.ver.outputs.tag }}
         run: |
+          HASH=""
+          for f in *.dmg *.deb; do
+            [ -e "$f" ] || continue
+            HASH="${HASH}$(basename "$f"): $(stat -c%s "$f") bytes, sha256 $(sha256sum "$f" | cut -c1-16)..."
+          done
           MSG="📺🐧 NuvioDesktop Jellyfin+LiveTV Linux ${VER} is ready
           Installs alongside the other Nuvio apps as package nuviojellyfintv (own login/settings; Live TV + Jellyfin)
           ${{ steps.patch_updater.outputs.applied == 'true' && format('Build {0}: fork builds update in-app (banner at start)', github.run_number) || '⚠️ fork-updater patch did NOT apply — manual install only' }}
+          ${HASH}
           Download: https://github.com/vgupta1192/NuvioDesktop/releases/tag/${REL_TAG}"
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
