@@ -34,8 +34,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CollectionsBookmark
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -851,6 +853,40 @@ internal fun DesktopHoverSidebar(
                     Icon(
                         painter = painterResource(Res.drawable.sidebar_library),
                         contentDescription = stringResource(Res.string.compose_nav_library),
+                        modifier = Modifier.size(DesktopSidebarIconSize),
+                        tint = color,
+                    )
+                }
+                // Live TV fork feature: opens its own route
+                DesktopSidebarItem(
+                    label = "Live TV",
+                    selected = false,
+                    expanded = sidebarExpanded,
+                    onClick = {
+                        onProfileStackVisibleChange(false)
+                        com.nuvio.app.features.livetv.LiveTvLauncher.open()
+                    },
+                ) { color ->
+                    Icon(
+                        imageVector = Icons.Rounded.LiveTv,
+                        contentDescription = "Live TV",
+                        modifier = Modifier.size(DesktopSidebarIconSize),
+                        tint = color,
+                    )
+                }
+                // Jellyfin fork feature: opens its own route
+                DesktopSidebarItem(
+                    label = "Jellyfin",
+                    selected = false,
+                    expanded = sidebarExpanded,
+                    onClick = {
+                        onProfileStackVisibleChange(false)
+                        com.nuvio.app.features.jellyfin.JellyfinLauncher.open()
+                    },
+                ) { color ->
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Rounded.CollectionsBookmark,
+                        contentDescription = "Jellyfin",
                         modifier = Modifier.size(DesktopSidebarIconSize),
                         tint = color,
                     )

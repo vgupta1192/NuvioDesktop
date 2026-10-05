@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CollectionsBookmark
+import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -141,7 +143,7 @@ internal fun MainTabsDestination(
         }
         val navBarGlowEnabled by ThemeSettingsRepository.navBarGlowEnabled.collectAsStateWithLifecycle()
         var isTopProfileSwitcherOpen by remember { mutableStateOf(false) }
-        val floatingNavigationItems = listOf(
+        val floatingNavigationItems = listOfNotNull(
             FloatingNavigationItem(
                 selected = selectedTab == AppScreenTab.Home,
                 onClick = { onTabSelected(AppScreenTab.Home) },
@@ -160,6 +162,28 @@ internal fun MainTabsDestination(
                 drawable = Res.drawable.sidebar_library,
                 label = stringResource(Res.string.compose_nav_library),
             ),
+            // Live TV fork feature: opens its own route (desktop sidebar only)
+            if (isDesktop) {
+                FloatingNavigationItem(
+                    selected = false,
+                    onClick = { com.nuvio.app.features.livetv.LiveTvLauncher.open() },
+                    icon = androidx.compose.material.icons.Icons.Rounded.LiveTv,
+                    label = "Live TV",
+                )
+            } else {
+                null
+            },
+            // Jellyfin fork feature: opens its own route (desktop sidebar only)
+            if (isDesktop) {
+                FloatingNavigationItem(
+                    selected = false,
+                    onClick = { com.nuvio.app.features.jellyfin.JellyfinLauncher.open() },
+                    icon = androidx.compose.material.icons.Icons.Rounded.CollectionsBookmark,
+                    label = "Jellyfin",
+                )
+            } else {
+                null
+            },
             FloatingNavigationItem(
                 selected = selectedTab == AppScreenTab.Settings,
                 onClick = { onTabSelected(AppScreenTab.Settings) },

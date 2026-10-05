@@ -28,6 +28,8 @@ internal val navigationSavedStateConfiguration = SavedStateConfiguration {
         polymorphic(NavKey::class) {
             subclass(TabsRoute::class, TabsRoute.serializer())
             subclass(DetailRoute::class, DetailRoute.serializer())
+            subclass(JellyfinRoute::class, JellyfinRoute.serializer())
+            subclass(JellyfinDetailRoute::class, JellyfinDetailRoute.serializer())
             subclass(PersonDetailRoute::class, PersonDetailRoute.serializer())
             subclass(EntityBrowseRoute::class, EntityBrowseRoute.serializer())
             subclass(SettingsPageRoute::class, SettingsPageRoute.serializer())
@@ -48,6 +50,7 @@ internal val navigationSavedStateConfiguration = SavedStateConfiguration {
             subclass(StreamRoute::class, StreamRoute.serializer())
             subclass(CatalogRoute::class, CatalogRoute.serializer())
             subclass(PlayerRoute::class, PlayerRoute.serializer())
+            subclass(com.nuvio.app.navigation.LiveTvRoute::class, com.nuvio.app.navigation.LiveTvRoute.serializer())
         }
     }
 }

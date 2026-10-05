@@ -1238,6 +1238,19 @@ object WatchProgressRepository {
         persist: Boolean,
         syncRemote: Boolean,
     ) {
+        // Live TV fork feature: live channels have no resumable progress; keep them out of Continue Watching
+        if (
+            com.nuvio.app.features.livetv.isLiveTvContentType(session.contentType) &&
+            !session.parentMetaId.startsWith("tt") && !session.parentMetaId.startsWith("tmdb", ignoreCase = true)
+        ) {
+            return
+        }
+        // Jellyfin fork feature: the Jellyfin server tracks playback positions itself (resume comes
+        // from UserData on launch); keep jf: items out of local Continue Watching, which cannot
+        // open them (they have no addon detail page).
+        if (session.videoId.startsWith("jf:") || session.parentMetaId.startsWith("jf:")) {
+            return
+        }
         val targetProfileId = session.profileId
         val positionMs = snapshot.positionMs.coerceAtLeast(0L)
         val durationMs = snapshot.durationMs.coerceAtLeast(0L)
