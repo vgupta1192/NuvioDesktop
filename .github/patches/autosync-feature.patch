@@ -177,7 +177,7 @@ index fcb23559..ab505380 100644
              title = stringResource(Res.string.settings_playback_section_subtitle_rendering),
              isTablet = isTablet,
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
-index 83a36a8c..fa19a87c 100644
+index 83a36a8c..8161f151 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 @@ -31,11 +31,15 @@ import androidx.compose.ui.unit.dp
@@ -221,11 +221,12 @@ index 83a36a8c..fa19a87c 100644
      modifier: Modifier,
      playWhenReady: Boolean,
      resizeMode: PlayerResizeMode,
-@@ -122,10 +128,24 @@ private fun NativePlayerSurface(
+@@ -122,7 +128,21 @@ private fun NativePlayerSurface(
  ) {
      val platformDensity = LocalNuvioPlatformDensity.current
      val host = remember { NativePlayerHost() }
 +    val latestSourceUrl = rememberUpdatedState(sourceUrl)
++    val latestSourceHeaders = rememberUpdatedState(sourceHeaders)
 +    val latestExternalSubtitles = rememberUpdatedState(externalSubtitles)
 +    val autoSyncScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
      val controller = remember(host) { NativePlayerController(host) }
@@ -234,7 +235,7 @@ index 83a36a8c..fa19a87c 100644
 +            base = controller,
 +            scope = autoSyncScope,
 +            sourceUrl = { latestSourceUrl.value },
-+            sourceHeaders = { latestSourceHeaders.value },
++            sourceHeaders = { sanitizePlaybackHeaders(latestSourceHeaders.value) },
 +            subtitleCandidates = { latestExternalSubtitles.value },
 +            playerInstanceKey = controller.hashCode(),
 +        )
@@ -242,10 +243,6 @@ index 83a36a8c..fa19a87c 100644
      val hostFirstPaintComplete = remember { mutableStateOf(false) }
      val hostFirstFullSizePaintComplete = remember { mutableStateOf(false) }
      val playbackHeaders = remember(sourceHeaders) { sanitizePlaybackHeaders(sourceHeaders) }
-+    val latestSourceHeaders = rememberUpdatedState(playbackHeaders)
-     val latestOnPlayerControlsAction = rememberUpdatedState(onPlayerControlsAction)
-     val latestOnPlayerControlsEvent = rememberUpdatedState(onPlayerControlsEvent)
-     val latestOnPlayerControlsScrubChange = rememberUpdatedState(onPlayerControlsScrubChange)
 @@ -138,7 +158,7 @@ private fun NativePlayerSurface(
      val nvidiaRtxSuperResolutionEnabled = playerSettings.nvidiaRtxSuperResolutionEnabled
  
@@ -614,6 +611,20 @@ index 00000000..6e3dd60f
 +        }
 +    }
 +}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncCandidateAlias.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncCandidateAlias.kt
+new file mode 100644
+index 00000000..5d74fd07
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncCandidateAlias.kt
+@@ -0,0 +1,8 @@
++package com.nuvio.app.features.player.autosync
++
++/**
++ * The TV module's candidate type lived in its own package; on desktop the public contract class
++ * is in com.nuvio.app.features.player (commonMain), so the ported engine files see it under the
++ * same name through this alias.
++ */
++internal typealias AutoSyncSubtitleCandidate = com.nuvio.app.features.player.AutoSyncSubtitleCandidate
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncClock.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncClock.kt
 new file mode 100644
 index 00000000..6496c47d
@@ -7539,7 +7550,7 @@ index 00000000..0fc53927
 +)
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/PlayerAutoSyncBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/PlayerAutoSyncBridge.kt
 new file mode 100644
-index 00000000..4d1dae44
+index 00000000..46dd0ee2
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/PlayerAutoSyncBridge.kt
 @@ -0,0 +1,208 @@
@@ -7740,7 +7751,7 @@ index 00000000..4d1dae44
 +                    }
 +                    .sorted(Comparator.comparing { path: Path -> path.fileName.toString() }
 +                        .reversed())
-+                    .skip((RETIMED_FILES_TO_KEEP - 1).coerceAtLeast(0))
++                    .skip((RETIMED_FILES_TO_KEEP - 1).coerceAtLeast(0).toLong())
 +                    .forEach { path -> runCatching { Files.deleteIfExists(path) } }
 +            }
 +        }
