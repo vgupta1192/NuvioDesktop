@@ -66,6 +66,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
 
       - uses: actions/checkout@v4
         if: steps.ver.outputs.should_build == 'true'
@@ -273,6 +274,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
 
       - name: Install Linux native build deps
         if: steps.ver.outputs.should_build == 'true'
