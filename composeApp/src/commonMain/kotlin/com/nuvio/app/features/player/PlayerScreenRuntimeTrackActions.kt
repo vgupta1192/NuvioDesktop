@@ -139,7 +139,8 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded(): Bool
                     selectedAddonSubtitleId = preference.addonSubtitleId ?: persistedUrl
                     selectedSubtitleIndex = -1
                     useCustomSubtitles = true
-                    playerController?.setSubtitleUri(persistedUrl)
+                    val autoSync = playerController as? AutoSyncPlayerController
+                    if (autoSync != null) autoSync.setSubtitleUriWithAutoSync(persistedUrl) else playerController?.setSubtitleUri(persistedUrl)
                     preferredSubtitleSelectionApplied = true
                     isUserExplicitSubtitleSelection = true
                 } else if (belongsToCurrentItem) {
@@ -159,7 +160,8 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded(): Bool
                         selectedAddonSubtitleId = subtitle.selectionKey
                         selectedSubtitleIndex = -1
                         useCustomSubtitles = true
-                        playerController?.setSubtitleUri(subtitle.url)
+                        val autoSync = playerController as? AutoSyncPlayerController
+                        if (autoSync != null) autoSync.setSubtitleUriWithAutoSync(subtitle.url) else playerController?.setSubtitleUri(subtitle.url)
                         preferredSubtitleSelectionApplied = true
                         isUserExplicitSubtitleSelection = true
                     } else {
@@ -293,7 +295,8 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
                 selectedAddonSubtitleId = primaryAddonMatch.selectionKey
                 selectedSubtitleIndex = -1
                 useCustomSubtitles = true
-                playerController?.setSubtitleUri(primaryAddonMatch.url)
+                val autoSync = playerController as? AutoSyncPlayerController
+                if (autoSync != null) autoSync.setSubtitleUriWithAutoSync(primaryAddonMatch.url) else playerController?.setSubtitleUri(primaryAddonMatch.url)
                 return
             }
         }
@@ -335,7 +338,8 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
             selectedAddonSubtitleId = forcedAddonMatch.selectionKey
             selectedSubtitleIndex = -1
             useCustomSubtitles = true
-            playerController?.setSubtitleUri(forcedAddonMatch.url)
+            val autoSync = playerController as? AutoSyncPlayerController
+            if (autoSync != null) autoSync.setSubtitleUriWithAutoSync(forcedAddonMatch.url) else playerController?.setSubtitleUri(forcedAddonMatch.url)
         } else {
             disableAutomaticSubtitleSelection()
         }
@@ -373,7 +377,8 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
         selectedAddonSubtitleId = addonMatch.selectionKey
         selectedSubtitleIndex = -1
         useCustomSubtitles = true
-        playerController?.setSubtitleUri(addonMatch.url)
+        val autoSync = playerController as? AutoSyncPlayerController
+        if (autoSync != null) autoSync.setSubtitleUriWithAutoSync(addonMatch.url) else playerController?.setSubtitleUri(addonMatch.url)
     } else if (!preferredSubtitleSelectionApplied) {
         disableAutomaticSubtitleSelection()
         preferredSubtitleSelectionApplied = true

@@ -31,11 +31,15 @@ import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.AppPresenceState
 import com.nuvio.app.core.ui.LocalNuvioPlatformDensity
 import com.nuvio.app.core.ui.PresenceSnapshot
+import com.nuvio.app.features.streams.StreamSubtitle
 import com.nuvio.app.features.player.desktop.DesktopHostOs
 import com.nuvio.app.features.player.desktop.DesktopPlayerPictureInPicture
 import com.nuvio.app.features.player.desktop.NativePlayerController
 import com.nuvio.app.features.player.desktop.NativePlayerHost
 import com.nuvio.app.features.player.desktop.desktopFullscreenChanges
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 
@@ -45,7 +49,7 @@ actual fun PlatformPlayerSurface(
     sourceAudioUrl: String?,
     sourceHeaders: Map<String, String>,
     sourceResponseHeaders: Map<String, String>,
-    externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle>,
+    externalSubtitles: List<StreamSubtitle>,
     streamType: String?,
     useYoutubeChunkedPlayback: Boolean,
     modifier: Modifier,
@@ -73,6 +77,7 @@ actual fun PlatformPlayerSurface(
             sourceUrl = sourceUrl,
             sourceAvailable = sourceAvailable,
             sourceHeaders = sourceHeaders,
+            externalSubtitles = externalSubtitles,
             modifier = modifier,
             playWhenReady = playWhenReady,
             resizeMode = resizeMode,
@@ -105,6 +110,7 @@ private fun NativePlayerSurface(
     sourceUrl: String,
     sourceAvailable: Boolean,
     sourceHeaders: Map<String, String>,
+    externalSubtitles: List<StreamSubtitle>,
     modifier: Modifier,
     playWhenReady: Boolean,
     resizeMode: PlayerResizeMode,
@@ -122,7 +128,21 @@ private fun NativePlayerSurface(
 ) {
     val platformDensity = LocalNuvioPlatformDensity.current
     val host = remember { NativePlayerHost() }
+    val latestSourceUrl = rememberUpdatedState(sourceUrl)
+    val latestSourceHeaders = rememberUpdatedState(sourceHeaders)
+    val latestExternalSubtitles = rememberUpdatedState(externalSubtitles)
+    val autoSyncScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
     val controller = remember(host) { NativePlayerController(host) }
+    val autoSyncController = remember(host) {
+        AutoSyncNativePlayerController(
+            base = controller,
+            scope = autoSyncScope,
+            sourceUrl = { latestSourceUrl.value },
+            sourceHeaders = { sanitizePlaybackHeaders(latestSourceHeaders.value) },
+            subtitleCandidates = { latestExternalSubtitles.value },
+            playerInstanceKey = controller.hashCode(),
+        )
+    }
     val hostFirstPaintComplete = remember { mutableStateOf(false) }
     val hostFirstFullSizePaintComplete = remember { mutableStateOf(false) }
     val playbackHeaders = remember(sourceHeaders) { sanitizePlaybackHeaders(sourceHeaders) }
@@ -138,7 +158,7 @@ private fun NativePlayerSurface(
     val nvidiaRtxSuperResolutionEnabled = playerSettings.nvidiaRtxSuperResolutionEnabled
 
     SideEffect {
-        onControllerReady(controller)
+        onControllerReady(autoSyncController)
     }
 
     DisposableEffect(host) {
@@ -174,7 +194,10 @@ private fun NativePlayerSurface(
     }
 
     DisposableEffect(controller, sourceAvailable, sourceUrl, playbackHeaders) {
-        onDispose { controller.dispose() }
+        onDispose {
+            autoSyncController.dispose()
+            controller.dispose()
+        }
     }
 
     // The controls overlay owns the player shortcuts. After alt-tab, desktop
@@ -217,7 +240,7 @@ private fun NativePlayerSurface(
         initialPositionRequestKey?.let { key ->
             latestOnInitialPositionHandled.value(key, initialPositionMs > 0L)
         }
-        onControllerReady(controller)
+        onControllerReady(autoSyncController)
     }
 
     LaunchedEffect(controller, sourceAvailable, playWhenReady) {

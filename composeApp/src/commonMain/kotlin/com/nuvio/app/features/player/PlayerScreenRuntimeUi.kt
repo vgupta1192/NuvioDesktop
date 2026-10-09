@@ -536,6 +536,15 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                     playerController = controller.takeIf { sourceAvailable }
                     playerLifecycleController = controller
                     playerControllerSourceUrl = surfaceSource?.sourceUrl
+                    (controller as? AutoSyncPlayerController)?.setAutoSyncAppliedListener { _, delayMs ->
+                        subtitleDelayMs = delayMs
+                    }
+                    (controller as? AutoSyncPlayerController)?.setAutoSyncMessageListener { message ->
+                        if (isDesktop) {
+                            playerNotificationMessage = message
+                            playerNotificationToken += 1L
+                        }
+                    }
                 },
                 onSnapshot = { snapshot ->
                     if (!updatePlaybackSnapshot(snapshot)) return@PlatformPlayerSurface
@@ -1026,7 +1035,8 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
             selectedSubtitleIndex = -1
             useCustomSubtitles = true
             persistAddonSubtitlePreference(addon)
-            playerController?.setSubtitleUri(addon.url)
+            val autoSync = playerController as? AutoSyncPlayerController
+            if (autoSync != null) autoSync.setSubtitleUriWithSelectedAutoSync(addon.url) else playerController?.setSubtitleUri(addon.url)
         }
         "subtitleDelayDelta" -> setSubtitleDelay((subtitleDelayMs + value.toInt()).coerceIn(SUBTITLE_DELAY_MIN_MS, SUBTITLE_DELAY_MAX_MS))
         "subtitleDelayReset" -> setSubtitleDelay(0)
@@ -1772,7 +1782,8 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
             useCustomSubtitles = true
             preferredSubtitleSelectionApplied = true
             persistAddonSubtitlePreference(addon)
-            playerController?.setSubtitleUri(addon.url)
+            val autoSync = playerController as? AutoSyncPlayerController
+            if (autoSync != null) autoSync.setSubtitleUriWithSelectedAutoSync(addon.url) else playerController?.setSubtitleUri(addon.url)
         },
         onFetchAddonSubtitles = { fetchAddonSubtitlesForActiveItem() },
         onSubtitleStyleChanged = PlayerSettingsRepository::setSubtitleStyle,
