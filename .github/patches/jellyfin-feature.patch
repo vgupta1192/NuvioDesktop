@@ -37,7 +37,7 @@ index b0aed88f..b197bdfc 100644
              subclass(EntityBrowseRoute::class, EntityBrowseRoute.serializer())
              subclass(SettingsPageRoute::class, SettingsPageRoute.serializer())
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index ba0aba88..5935dbc8 100644
+index 2f6dd47c..53de4fe6 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 @@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
@@ -48,7 +48,7 @@ index ba0aba88..5935dbc8 100644
  import androidx.compose.material.icons.filled.Home
  import androidx.compose.material.icons.rounded.Settings
  import androidx.compose.material.icons.rounded.LiveTv
-@@ -873,6 +874,23 @@ internal fun DesktopHoverSidebar(
+@@ -876,6 +877,23 @@ internal fun DesktopHoverSidebar(
                          tint = color,
                      )
                  }
@@ -73,10 +73,10 @@ index ba0aba88..5935dbc8 100644
                      label = stringResource(Res.string.compose_settings_page_root),
                      selected = selectedTab == AppScreenTab.Settings,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 947d91c4..f978e249 100644
+index 0286ae0e..eba54ab1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -115,6 +115,12 @@ import com.nuvio.app.features.home.HomeCatalogSettingsRepository
+@@ -121,6 +121,12 @@ import com.nuvio.app.features.home.HomeCatalogSettingsRepository
  import com.nuvio.app.features.home.HomeRepository
  import com.nuvio.app.features.home.buildAddonCatalogRefreshSignature
  import com.nuvio.app.features.home.components.shouldBlurContinueWatchingArtwork
@@ -89,7 +89,7 @@ index 947d91c4..f978e249 100644
  import com.nuvio.app.features.library.LibraryItem
  import com.nuvio.app.features.library.LibraryRepository
  import com.nuvio.app.features.library.LibrarySection
-@@ -917,6 +923,45 @@ internal fun MainAppContent(
+@@ -931,6 +937,45 @@ internal fun MainAppContent(
              navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
          }
  
@@ -135,13 +135,12 @@ index 947d91c4..f978e249 100644
          fun openExternalStreamUrl(url: String): Boolean {
              val opened = runCatching {
                  uriHandler.openUri(url)
-@@ -1368,12 +1413,23 @@ internal fun MainAppContent(
+@@ -1393,9 +1438,22 @@ internal fun MainAppContent(
+                         actions = { isTabletLayout ->
                              AppTabActions(
                                  onCatalogClick = onCatalogClick,
-                                 onPosterClick = { meta ->
--                                    navController.navigate(
--                                        DetailRoute(type = meta.type, id = meta.id, title = meta.name),
--                                    )
+-                                onPosterClick = navController::openPreview,
++                                onPosterClick = { meta ->
 +                                    if (meta.id.startsWith(JELLYFIN_META_ID_PREFIX)) {
 +                                        navController.navigate(
 +                                            JellyfinDetailRoute(
@@ -150,11 +149,9 @@ index 947d91c4..f978e249 100644
 +                                            ),
 +                                        )
 +                                    } else {
-+                                        navController.navigate(
-+                                            DetailRoute(type = meta.type, id = meta.id, title = meta.name),
-+                                        )
++                                        navController.openPreview(meta)
 +                                    }
-                                 },
++                                },
                                  onPosterLongClick = { meta ->
 -                                    openPosterActions(PosterActionTarget(preview = meta))
 +                                    if (!meta.id.startsWith(JELLYFIN_META_ID_PREFIX)) {
@@ -163,7 +160,7 @@ index 947d91c4..f978e249 100644
                                  },
                                  onLibraryPosterClick = { item ->
                                      navController.navigate(
-@@ -1645,6 +1701,14 @@ internal fun MainAppContent(
+@@ -1667,6 +1725,14 @@ internal fun MainAppContent(
                      val onBack = rememberGuardedPopBackStack(navController, route)
                      LiveTvScreen(onBack = onBack, onPlay = ::openLiveTvChannel)
                  }
@@ -179,7 +176,7 @@ index 947d91c4..f978e249 100644
                      DownloadsDestination(
                          route = route,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-index 20ffd02f..de5d256b 100644
+index 2d3ef10b..5c1b0d4f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 @@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
@@ -2188,10 +2185,10 @@ index 00000000..76e8719b
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
-index 07e0d2ae..dcb09b4b 100644
+index d40ef0fc..f1fd4432 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
-@@ -18,6 +18,7 @@ import com.nuvio.app.features.catalog.nextCatalogPaginationState
+@@ -21,6 +21,7 @@ import com.nuvio.app.features.catalog.nextCatalogPaginationState
  import com.nuvio.app.features.catalog.supportsPagination
  import com.nuvio.app.features.home.HomeCatalogSettingsRepository
  import com.nuvio.app.features.home.HomeCatalogSection
@@ -2199,91 +2196,56 @@ index 07e0d2ae..dcb09b4b 100644
  import com.nuvio.app.features.home.MetaPreview
  import com.nuvio.app.features.home.filterReleasedItems
  import com.nuvio.app.core.poster.withCustomPosterUrls
-@@ -86,7 +87,10 @@ object SearchRepository {
-         val hasPendingAddonManifests = enabledAddons.hasPendingEnabledManifests()
+@@ -90,7 +91,10 @@ object SearchRepository {
          val addonManifestErrorMessage = enabledAddons.firstEnabledManifestError()
          val activeAddons = enabledAddons.filter { it.manifest != null }
--        if (activeAddons.isEmpty()) {
+         val serverLibraries = ServerCatalog.titleLibraries()
+-        if (activeAddons.isEmpty() && serverLibraries.isEmpty()) {
 +        // Jellyfin fork feature: the user's Jellyfin server is a search source of its own, so a
 +        // signed-in Jellyfin session keeps search alive even with no addons installed.
 +        val jellyfinSearch = JellyfinRepository.hasSession
-+        if (activeAddons.isEmpty() && !jellyfinSearch) {
++        if (activeAddons.isEmpty() && serverLibraries.isEmpty() && !jellyfinSearch) {
              activeJob?.cancel()
              lastRequestKey = null
              _uiState.value = SearchUiState(
-@@ -105,7 +109,7 @@ object SearchRepository {
+@@ -109,7 +113,7 @@ object SearchRepository {
              addons = activeAddons,
              query = normalizedQuery,
          )
--        if (requests.isEmpty()) {
-+        if (requests.isEmpty() && !jellyfinSearch) {
+-        if (requests.isEmpty() && serverLibraries.isEmpty()) {
++        if (requests.isEmpty() && serverLibraries.isEmpty() && !jellyfinSearch) {
              activeJob?.cancel()
              lastRequestKey = null
              _uiState.value = SearchUiState(
-@@ -127,6 +131,8 @@ object SearchRepository {
-                     "${request.addon.manifestUrl}:${request.type}:${request.catalogId}"
+@@ -132,8 +136,10 @@ object SearchRepository {
                  },
              )
+             serverLibraries.forEach { ref -> append("|server:${ref.connection.id}:${ref.library.id}") }
 +            append('|')
 +            append(JellyfinRepository.sessionKey.orEmpty())
          }
+-        val loaders: List<suspend () -> HomeCatalogSection> =
++        val loaders: List<suspend () -> HomeCatalogSection?> =
+             requests.map { request -> suspend { request.toSection(forceRefresh = forceRefresh) } } +
+                 serverLibraries.map { ref ->
+                     suspend {
+@@ -143,6 +149,11 @@ object SearchRepository {
+                             }
+                         }
+                     }
++                } +
++                if (jellyfinSearch) {
++                    listOf(suspend { JellyfinRepository.searchSection(normalizedQuery) })
++                } else {
++                    emptyList()
+                 }
          if (canReuseRequestState(forceRefresh, requestKey, lastRequestKey)) return
          lastRequestKey = requestKey
-@@ -136,6 +142,7 @@ object SearchRepository {
- 
-         activeJob = scope.launch {
-             val resultChannel = Channel<IndexedSearchResult>(Channel.UNLIMITED)
-+            val jellyfinIndex = if (jellyfinSearch) requests.size else -1
-             val jobs = requests.mapIndexed { index, request ->
-                 launch {
-                     runCatching { request.toSection(forceRefresh = forceRefresh) }
-@@ -160,11 +167,40 @@ object SearchRepository {
-                         )
-                 }
-             }
-+            val jellyfinJob = if (jellyfinSearch) {
-+                launch {
-+                    runCatching { JellyfinRepository.searchSection(normalizedQuery) }
-+                        .fold(
-+                            onSuccess = { section ->
-+                                if (section != null) {
-+                                    resultChannel.trySend(
-+                                        IndexedSearchResult(
-+                                            index = jellyfinIndex,
-+                                            section = section,
-+                                        ),
-+                                    )
-+                                }
-+                            },
-+                            onFailure = { error ->
-+                                if (error is CancellationException) throw error
-+                                resultChannel.trySend(
-+                                    IndexedSearchResult(
-+                                        index = jellyfinIndex,
-+                                        error = error,
-+                                    ),
-+                                )
-+                            },
-+                        )
-+                }
-+            } else {
-+                null
-+            }
-             val closeChannelJob = launch {
-                 jobs.joinAll()
-+                jellyfinJob?.join()
-                 resultChannel.close()
-             }
--            val results = arrayOfNulls<IndexedSearchResult>(requests.size)
-+            val results = arrayOfNulls<IndexedSearchResult>(requests.size + if (jellyfinSearch) 1 else 0)
- 
-             try {
-                 for (result in resultChannel) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-index b4cfa714..0736b358 100644
+index d82c2b79..4c935eec 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-@@ -1245,6 +1245,12 @@ object WatchProgressRepository {
+@@ -1262,6 +1262,12 @@ object WatchProgressRepository {
          ) {
              return
          }
