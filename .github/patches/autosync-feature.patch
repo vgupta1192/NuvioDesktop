@@ -4695,7 +4695,7 @@ index 00000000..f5901069
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutomaticSubtitleSync.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutomaticSubtitleSync.kt
 new file mode 100644
-index 00000000..00fe7cf1
+index 00000000..3a69848c
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutomaticSubtitleSync.kt
 @@ -0,0 +1,2708 @@
@@ -6661,7 +6661,7 @@ index 00000000..00fe7cf1
 +    private suspend fun requestSubtitle(
 +        url: String,
 +        headers: Map<String, String>,
-+    ): com.nuvio.app.features.addons.RawHttpResponse =
++    ): AutoSyncRawHttpResponse =
 +        withTimeoutOrNull(SUBTITLE_DOWNLOAD_TIMEOUT_MS) {
 +            AutoSyncSubtitleHttp.get(
 +                url = url,
@@ -6671,7 +6671,7 @@ index 00000000..00fe7cf1
 +        } ?: error("subtitle request timed out after ${SUBTITLE_DOWNLOAD_TIMEOUT_MS}ms")
 +
 +    private fun validatedSubtitleBody(
-+        response: com.nuvio.app.features.addons.RawHttpResponse,
++        response: AutoSyncRawHttpResponse,
 +    ): String {
 +        if (response.status !in 200..299) error("subtitle HTTP ${response.status}")
 +        if (response.body.endsWith("\n...[truncated]")) {
