@@ -3,7 +3,7 @@ name: Build NuvioDesktop Jellyfin+LiveTV (upstream release sync)
 
 on:
   push:
-    branches: [jellyfin-livetv]
+    branches: [master]
     paths: ['.github/**']
   workflow_dispatch:
     # Builds are triggered by the local watcher on vgupta1192's box
@@ -228,9 +228,9 @@ jobs:
           Upstream release: ${VER}
           ${HASH}
           Download: https://github.com/vgupta1192/NuvioDesktop/releases/tag/${REL_TAG}
-          ${{ steps.patch_updater.outputs.applied == 'true' && format('Build {0}: Macs on a fork build show the update banner at start (or Settings → check for updates); Update opens the dmg, drag NuvioJellyfinTV to Applications', github.run_number) || '⚠️ fork-updater patch did NOT apply — manual install only' }}
-          Installs alongside the other Nuvio apps as NuvioJellyfinTV (own login/settings; Live TV + Jellyfin)
-          (first manual install: open dmg, drag to Applications, then: xattr -cr /Applications/NuvioJellyfinTV.app)"
+          ${{ steps.patch_updater.outputs.applied == 'true' && format('Build {0}: Macs on a fork build show the update banner at start (or Settings → check for updates); Update opens the dmg, drag Nuvio to Applications', github.run_number) || '⚠️ fork-updater patch did NOT apply — manual install only' }}
+          Installs as Nuvio (own login/settings; Live TV + Jellyfin)
+          (first manual install: open dmg, drag to Applications, then: xattr -cr /Applications/Nuvio.app)"
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT_ID}" \
             --data-urlencode "text=${MSG}" > /dev/null

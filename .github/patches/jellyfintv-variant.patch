@@ -7,7 +7,7 @@ index 8a4f2646..5044ce4b 100644
          nativeDistributions {
              targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
 -            packageName = "NuvioLiveTV"
-+            packageName = "NuvioJellyfinTV"
++            packageName = "Nuvio"
              packageVersion = desktopReleasePackageVersion
              vendor = "Nuvio Media"
              if (isMacHost) {
@@ -64,7 +64,7 @@ index c6fa4849..a1d3f24f 100644
                  exitApplication()
              },
 -            title = if (smokePlayerUrl == null) "Nuvio Live TV" else "Nuvio Player Smoke",
-+            title = if (smokePlayerUrl == null) "Nuvio Jellyfin TV" else "Nuvio Player Smoke",
++            title = if (smokePlayerUrl == null) "Nuvio" else "Nuvio Player Smoke",
              state = windowState,
              icon = painterResource(appIconState.selected.transparentPreviewResource),
              init = ::configureMacosWindowBeforePeer,
@@ -118,7 +118,7 @@ index 172e1e41..cbbcbb88 100644
 -readonly NUVIO_LINUX_SHORTCUT_RELATIVE_PATH="usr/share/applications/nuviolivetv.desktop"
 -readonly NUVIO_LINUX_SHORTCUT_NAME="Nuvio Live TV"
 +readonly NUVIO_LINUX_SHORTCUT_RELATIVE_PATH="usr/share/applications/nuviojellyfintv.desktop"
-+readonly NUVIO_LINUX_SHORTCUT_NAME="Nuvio Jellyfin TV"
++readonly NUVIO_LINUX_SHORTCUT_NAME="Nuvio"
  readonly NUVIO_LINUX_SHORTCUT_COMMENT="Nuvio Media Player"
  readonly NUVIO_LINUX_SHORTCUT_CATEGORIES="AudioVideo;"
  readonly NUVIO_LINUX_SHORTCUT_STARTUP_NOTIFY="true"
@@ -133,7 +133,7 @@ index 172e1e41..cbbcbb88 100644
      local desktop_file="$root_dir/$NUVIO_LINUX_SHORTCUT_RELATIVE_PATH"
      mkdir -p "$(dirname "$desktop_file")"
 -    nuvio_linux_write_desktop_entry_file "$desktop_file" "/opt/nuviolivetv/bin/NuvioLiveTV %u" "/opt/nuviolivetv/lib/NuvioLiveTV.png"
-+    nuvio_linux_write_desktop_entry_file "$desktop_file" "/opt/nuviojellyfintv/bin/NuvioJellyfinTV %u" "/opt/nuviojellyfintv/lib/NuvioJellyfinTV.png"
++    nuvio_linux_write_desktop_entry_file "$desktop_file" "/opt/nuvio/bin/Nuvio %u" "/opt/nuvio/lib/Nuvio.png"
  }
  
  nuvio_linux_ensure_uri_handler() {
