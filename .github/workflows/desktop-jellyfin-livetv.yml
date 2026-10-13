@@ -61,7 +61,37 @@ jobs:
         with:
           repository: NuvioMedia/NuvioDesktop
           ref: Dev
-          lfs: true
+          lfs: false
+        env:
+          GIT_LFS_SKIP_SMUDGE: '1'
+
+      # The macOS libmpv runtime (*.dylib) is stored in upstream's Git LFS. When NuvioMedia's
+      # LFS budget runs out (2026-10-13: "This repository exceeded its LFS budget"; forks share
+      # that budget), copy the same dylibs from this fork's last macOS release instead. Gradle
+      # copies them into the new app and the packager signs them again.
+      - name: Fetch macOS libmpv runtime (LFS, or last fork build)
+        if: steps.ver.outputs.should_build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RT='composeApp/src/desktopMain/native/macos/runtime/**'
+          if git lfs pull --include "$RT"; then echo "LFS runtime fetched"; exit 0; fi
+          echo "::warning::upstream Git LFS unavailable; reusing the libmpv runtime from the last fork macOS build"
+          TAG=$(gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json tagName -q '.[].tagName' | grep '^desktop-jellyfin-livetv-mac-' | grep -v debug | head -1)
+          echo "source release: $TAG"
+          test -n "$TAG"
+          mkdir -p /tmp/prev && gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p '*.dmg' -D /tmp/prev
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/prev-dmg /tmp/prev/*.dmg
+          APP=$(find /tmp/prev-dmg -maxdepth 2 -name "*.app" | head -1)
+          MISSING=0
+          for F in $(git lfs ls-files -n -I "$RT"); do
+            SRC=$(find "$APP" -type f -path "*/native/macos/*" -name "$(basename "$F")" | head -1)
+            if [ -n "$SRC" ]; then cp -f "$SRC" "$F"; else echo "missing in previous app: $F"; MISSING=1; fi
+          done
+          hdiutil detach /tmp/prev-dmg -force
+          if [ "$MISSING" != 0 ]; then echo "::error::previous fork build lacks some runtime dylibs"; exit 1; fi
+          if grep -rl 'git-lfs.github.com/spec' composeApp/src/desktopMain/native/macos/runtime; then echo "::error::LFS pointer files left"; exit 1; fi
+          echo "runtime restored from $TAG"
 
       - uses: actions/setup-java@v4
         if: steps.ver.outputs.should_build == 'true'
@@ -283,7 +313,10 @@ jobs:
         with:
           repository: NuvioMedia/NuvioDesktop
           ref: Dev
-          lfs: true
+          lfs: false
+        env:
+          # LFS holds only the macOS/Windows libmpv runtimes; the Linux build does not use them
+          GIT_LFS_SKIP_SMUDGE: '1'
 
       - uses: actions/setup-java@v4
         if: steps.ver.outputs.should_build == 'true'
