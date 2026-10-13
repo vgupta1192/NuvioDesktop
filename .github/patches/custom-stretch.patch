@@ -1,0 +1,975 @@
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
+index b67bce15..6c7ecf4f 100644
+--- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
+@@ -1525,7 +1525,8 @@ private class NuvioLibmpvView(
+         executeMpv {
+             when (resizeMode) {
+                 PlayerResizeMode.Fit,
+-                PlayerResizeMode.Stretch -> {
++                PlayerResizeMode.Stretch,
++                PlayerResizeMode.CustomStretch -> {
+                     mpv.setPropertyDouble("panscan", 0.0)
+                     mpv.setPropertyString("video-aspect-override", "no")
+                 }
+@@ -1974,6 +1975,7 @@ private fun PlayerResizeMode.toExoResizeMode(): Int =
+         PlayerResizeMode.Fill -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+         PlayerResizeMode.Zoom -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+         PlayerResizeMode.Stretch -> AspectRatioFrameLayout.RESIZE_MODE_FIT
++        PlayerResizeMode.CustomStretch -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+     }
+ 
+ private fun PlayerView.syncLibassOverlay(
+diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
+index 693c5f13..aaae46d0 100644
+--- a/composeApp/src/commonMain/composeResources/values/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings.xml
+@@ -467,6 +467,7 @@
+     <string name="compose_player_resize_fill">Fill</string>
+     <string name="compose_player_resize_fit">Fit</string>
+     <string name="compose_player_resize_stretch">Stretch</string>
++    <string name="compose_player_resize_custom_stretch">Custom Stretch</string>
+     <string name="compose_player_resize_zoom">Zoom</string>
+     <string name="compose_player_seek_back_10">Seek backward 10 seconds</string>
+     <string name="compose_player_seek_delta_backward">-%1$ds</string>
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
+new file mode 100644
+index 00000000..1abf4e26
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
+@@ -0,0 +1,256 @@
++package com.nuvio.app.features.player
++
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.rememberUpdatedState
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.isActive
++import kotlin.math.abs
++import kotlin.math.max
++import kotlin.math.min
++
++/**
++ * Custom Stretch: find the black bars that are baked into the video frame (letterbox,
++ * pillarbox or both) and stretch only the picture area over the whole screen.
++ *
++ * Plain "Stretch" scales the decoded frame to the screen, so bars inside the file stay
++ * visible. Custom Stretch samples frames, measures the area that holds picture and maps
++ * that area to the full player size. Nothing inside the picture area is cropped: the
++ * detected area only grows (union of all samples), so a dark scene can never make the
++ * picture smaller.
++ */
++
++/** Picture area inside the decoded frame, as fractions (0..1) of the frame size. */
++data class VideoContentRect(
++    val left: Float,
++    val top: Float,
++    val right: Float,
++    val bottom: Float,
++) {
++    val width: Float get() = right - left
++    val height: Float get() = bottom - top
++
++    fun union(other: VideoContentRect): VideoContentRect = VideoContentRect(
++        left = min(left, other.left),
++        top = min(top, other.top),
++        right = max(right, other.right),
++        bottom = max(bottom, other.bottom),
++    )
++
++    fun isCloseTo(other: VideoContentRect, tolerance: Float = 0.004f): Boolean =
++        abs(left - other.left) <= tolerance &&
++            abs(top - other.top) <= tolerance &&
++            abs(right - other.right) <= tolerance &&
++            abs(bottom - other.bottom) <= tolerance
++
++    companion object {
++        val Full = VideoContentRect(0f, 0f, 1f, 1f)
++    }
++}
++
++/**
++ * mpv geometry for a picture area, used with `keepaspect=no`: `video-scale-x/y` enlarge the
++ * frame so the picture area covers the window and `video-pan-x/y` move the picture area to the
++ * window center. mpv clips the result to the window, so subtitles stay on screen.
++ */
++data class MpvStretchTransform(
++    val scaleX: Double,
++    val scaleY: Double,
++    val panX: Double,
++    val panY: Double,
++) {
++    companion object {
++        val Identity = MpvStretchTransform(1.0, 1.0, 0.0, 0.0)
++    }
++}
++
++/**
++ * Map a picture area measured on the rendered output (what is on screen while [transform] is
++ * active with `keepaspect=no`) back to frame fractions, clipped to the frame.
++ */
++fun VideoContentRect.mapFromScreen(transform: MpvStretchTransform): VideoContentRect {
++    fun frameX(x: Float) = ((x - 0.5) / transform.scaleX + 0.5 - transform.panX).toFloat().coerceIn(0f, 1f)
++    fun frameY(y: Float) = ((y - 0.5) / transform.scaleY + 0.5 - transform.panY).toFloat().coerceIn(0f, 1f)
++    return VideoContentRect(frameX(left), frameY(top), frameX(right), frameY(bottom))
++}
++
++/** Bars of letterboxed and pillarboxed video are centered. Use the thicker bar on both sides. */
++fun VideoContentRect.symmetric(): VideoContentRect {
++    val horizontal = max(left, 1f - right)
++    val vertical = max(top, 1f - bottom)
++    return VideoContentRect(horizontal, vertical, 1f - horizontal, 1f - vertical)
++}
++
++/** A downscaled luma (0..255) picture of one video frame. */
++class LumaFrame(val luma: ByteArray, val width: Int, val height: Int) {
++    fun detectContent(): VideoContentRect? = BlackBarDetector.detect(luma, width, height)
++}
++
++fun VideoContentRect.toMpvStretchTransform(): MpvStretchTransform {
++    if (width <= 0f || height <= 0f) return MpvStretchTransform.Identity
++    return MpvStretchTransform(
++        scaleX = 1.0 / width,
++        scaleY = 1.0 / height,
++        panX = 0.5 - (left + right) / 2.0,
++        panY = 0.5 - (top + bottom) / 2.0,
++    )
++}
++
++object BlackBarDetector {
++    /** Luma (0..255) above this value counts as picture. Limited-range black is 16. */
++    private const val LUMA_LIMIT = 30
++
++    /** A row or column holds picture when this fraction of its pixels is above [LUMA_LIMIT]. */
++    private const val LINE_CONTENT_FRACTION = 0.02f
++
++    /** Bars thinner than this fraction of the frame are ignored (no visible gain, avoids jitter). */
++    private const val MIN_BAR_FRACTION = 0.006f
++
++    /** A sample whose picture is smaller than this is a dark scene or a logo, not the picture area. */
++    private const val MIN_CONTENT_WIDTH = 0.45f
++    private const val MIN_CONTENT_HEIGHT = 0.35f
++
++    /**
++     * Measure the picture area in one luma sample ([width] x [height], row stride [stride]).
++     * Returns null when the sample is too dark to tell (black frame, fade, dark scene).
++     */
++    fun detect(luma: ByteArray, width: Int, height: Int, stride: Int = width): VideoContentRect? {
++        if (width < 8 || height < 8 || luma.size < stride * (height - 1) + width) return null
++
++        val rowThreshold = max(2, (width * LINE_CONTENT_FRACTION).toInt())
++        var top = -1
++        var bottom = -1
++        for (y in 0 until height) {
++            if (countBright(luma, y * stride, 1, width) >= rowThreshold) {
++                if (top < 0) top = y
++                bottom = y
++            }
++        }
++        if (top < 0) return null
++
++        val rows = bottom - top + 1
++        val columnThreshold = max(2, (rows * LINE_CONTENT_FRACTION).toInt())
++        var left = -1
++        var right = -1
++        for (x in 0 until width) {
++            if (countBright(luma, top * stride + x, stride, rows) >= columnThreshold) {
++                if (left < 0) left = x
++                right = x
++            }
++        }
++        if (left < 0) return null
++
++        var rect = VideoContentRect(
++            left = left.toFloat() / width,
++            top = top.toFloat() / height,
++            right = (right + 1).toFloat() / width,
++            bottom = (bottom + 1).toFloat() / height,
++        )
++        rect = rect.copy(
++            left = if (rect.left < MIN_BAR_FRACTION) 0f else rect.left,
++            top = if (rect.top < MIN_BAR_FRACTION) 0f else rect.top,
++            right = if (1f - rect.right < MIN_BAR_FRACTION) 1f else rect.right,
++            bottom = if (1f - rect.bottom < MIN_BAR_FRACTION) 1f else rect.bottom,
++        )
++        if (rect.width < MIN_CONTENT_WIDTH || rect.height < MIN_CONTENT_HEIGHT) return null
++        return rect
++    }
++
++    /** Luma of packed 0xAARRGGBB pixels (Android Bitmap), BT.601 weights. */
++    fun lumaFromArgb(pixels: IntArray, width: Int, height: Int): ByteArray {
++        val out = ByteArray(width * height)
++        for (i in 0 until min(pixels.size, out.size)) {
++            val c = pixels[i]
++            val r = (c shr 16) and 0xFF
++            val g = (c shr 8) and 0xFF
++            val b = c and 0xFF
++            out[i] = ((r * 77 + g * 150 + b * 29) shr 8).toByte()
++        }
++        return out
++    }
++
++    private fun countBright(luma: ByteArray, start: Int, step: Int, count: Int): Int {
++        var bright = 0
++        var index = start
++        repeat(count) {
++            if ((luma[index].toInt() and 0xFF) > LUMA_LIMIT) bright++
++            index += step
++        }
++        return bright
++    }
++}
++
++/**
++ * Collects samples for one title and decides when the stretch geometry changes.
++ * The picture area is the union of all valid samples, so it only grows.
++ */
++class BlackBarTracker {
++    private var union: VideoContentRect? = null
++    private var validSamples = 0
++    private var committed: VideoContentRect? = null
++
++    /** Sample faster until the first few valid samples are in. */
++    val isCalibrating: Boolean get() = validSamples < CALIBRATION_SAMPLES
++
++    val current: VideoContentRect? get() = committed
++
++    fun reset() {
++        union = null
++        validSamples = 0
++        committed = null
++    }
++
++    /** Feed one sample. Returns the new picture area when it changed, else null. */
++    fun offer(sample: VideoContentRect?): VideoContentRect? {
++        if (sample == null) return null
++        validSamples++
++        val merged = union?.union(sample) ?: sample
++        union = merged
++        if (validSamples < CALIBRATION_SAMPLES) return null
++        val previous = committed
++        if (previous != null && previous.isCloseTo(merged)) return null
++        committed = merged
++        return merged
++    }
++
++    companion object {
++        const val CALIBRATION_SAMPLES = 3
++        const val CALIBRATION_INTERVAL_MS = 1_200L
++        const val STEADY_INTERVAL_MS = 8_000L
++        const val FIRST_SAMPLE_DELAY_MS = 800L
++
++        /** Longest side of the sampled frame. Enough to place bar edges within ~0.3%. */
++        const val SAMPLE_MAX_DIMENSION = 320
++    }
++}
++
++/**
++ * Runs the Custom Stretch sampling loop while [enabled]. [sample] returns the picture area of
++ * the current frame (null when it cannot tell). [onContentRect] receives null when sampling
++ * starts (plain stretch of the whole frame) and then every new picture area.
++ * The loop restarts, with a fresh tracker, when [sourceKey] changes.
++ */
++@Composable
++fun CustomStretchSamplingEffect(
++    enabled: Boolean,
++    sourceKey: Any?,
++    sample: suspend () -> VideoContentRect?,
++    onContentRect: (VideoContentRect?) -> Unit,
++) {
++    val latestSample = rememberUpdatedState(sample)
++    val latestOnContentRect = rememberUpdatedState(onContentRect)
++    LaunchedEffect(enabled, sourceKey) {
++        latestOnContentRect.value(null)
++        if (!enabled) return@LaunchedEffect
++        val tracker = BlackBarTracker()
++        delay(BlackBarTracker.FIRST_SAMPLE_DELAY_MS)
++        while (isActive) {
++            val rect = runCatching { latestSample.value() }.getOrNull()
++            tracker.offer(rect)?.let { latestOnContentRect.value(it) }
++            delay(
++                if (tracker.isCalibrating) BlackBarTracker.CALIBRATION_INTERVAL_MS
++                else BlackBarTracker.STEADY_INTERVAL_MS,
++            )
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerLayout.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerLayout.kt
+index ebfdf1b9..159a840a 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerLayout.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerLayout.kt
+@@ -19,6 +19,7 @@ import nuvio.composeapp.generated.resources.Res
+ import nuvio.composeapp.generated.resources.compose_player_resize_fill
+ import nuvio.composeapp.generated.resources.compose_player_resize_fit
+ import nuvio.composeapp.generated.resources.compose_player_resize_stretch
++import nuvio.composeapp.generated.resources.compose_player_resize_custom_stretch
+ import nuvio.composeapp.generated.resources.compose_player_resize_zoom
+ import org.jetbrains.compose.resources.StringResource
+ import kotlin.math.max
+@@ -140,8 +141,9 @@ internal fun PlayerResizeMode.next(): PlayerResizeMode =
+     when (supportedOnCurrentPlatform()) {
+         PlayerResizeMode.Fit -> if (isDesktop) PlayerResizeMode.Zoom else PlayerResizeMode.Fill
+         PlayerResizeMode.Fill -> PlayerResizeMode.Zoom
+-        PlayerResizeMode.Zoom -> if (isDesktop) PlayerResizeMode.Stretch else PlayerResizeMode.Fit
+-        PlayerResizeMode.Stretch -> PlayerResizeMode.Fit
++        PlayerResizeMode.Zoom -> if (isDesktop) PlayerResizeMode.Stretch else PlayerResizeMode.CustomStretch
++        PlayerResizeMode.Stretch -> PlayerResizeMode.CustomStretch
++        PlayerResizeMode.CustomStretch -> PlayerResizeMode.Fit
+     }
+ 
+ internal fun PlayerResizeMode.supportedOnCurrentPlatform(): PlayerResizeMode =
+@@ -157,6 +159,7 @@ internal val PlayerResizeMode.labelRes: StringResource
+         PlayerResizeMode.Fill -> Res.string.compose_player_resize_fill
+         PlayerResizeMode.Zoom -> Res.string.compose_player_resize_zoom
+         PlayerResizeMode.Stretch -> Res.string.compose_player_resize_stretch
++        PlayerResizeMode.CustomStretch -> Res.string.compose_player_resize_custom_stretch
+     }
+ 
+ internal fun formatPlaybackTime(positionMs: Long): String {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerModels.kt
+index 4126e590..f510038f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerModels.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerModels.kt
+@@ -80,6 +80,7 @@ enum class PlayerResizeMode {
+     Fill,
+     Zoom,
+     Stretch,
++    CustomStretch,
+ }
+ 
+ enum class AndroidPlaybackEngine(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
+index 3c360127..190b38f0 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
+@@ -34,6 +34,7 @@ import nuvio.composeapp.generated.resources.compose_player_downloaded
+ import nuvio.composeapp.generated.resources.compose_player_resize_fill
+ import nuvio.composeapp.generated.resources.compose_player_resize_fit
+ import nuvio.composeapp.generated.resources.compose_player_resize_stretch
++import nuvio.composeapp.generated.resources.compose_player_resize_custom_stretch
+ import nuvio.composeapp.generated.resources.compose_player_resize_zoom
+ import nuvio.composeapp.generated.resources.generic_unknown
+ import nuvio.composeapp.generated.resources.parental_alcohol
+@@ -137,6 +138,7 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
+         runtime.resizeModeFillLabel = stringResource(Res.string.compose_player_resize_fill)
+         runtime.resizeModeZoomLabel = stringResource(Res.string.compose_player_resize_zoom)
+         runtime.resizeModeStretchLabel = stringResource(Res.string.compose_player_resize_stretch)
++        runtime.resizeModeCustomStretchLabel = stringResource(Res.string.compose_player_resize_custom_stretch)
+         runtime.downloadedLabel = stringResource(Res.string.compose_player_downloaded)
+         runtime.airsPrefix = stringResource(Res.string.compose_player_airs_prefix)
+         runtime.tbaLabel = stringResource(Res.string.compose_player_tba)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
+index b5a6a83e..b9795ab9 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
+@@ -263,6 +263,7 @@ internal fun PlayerScreenRuntime.cycleResizeMode() {
+             PlayerResizeMode.Fill -> resizeModeFillLabel
+             PlayerResizeMode.Zoom -> resizeModeZoomLabel
+             PlayerResizeMode.Stretch -> resizeModeStretchLabel
++            PlayerResizeMode.CustomStretch -> resizeModeCustomStretchLabel
+         },
+     )
+     controlsVisible = true
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
+index 5237e8df..85483760 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
+@@ -126,6 +126,7 @@ internal class PlayerScreenRuntime(
+     var resizeModeFillLabel: String = ""
+     var resizeModeZoomLabel: String = ""
+     var resizeModeStretchLabel: String = ""
++    var resizeModeCustomStretchLabel: String = ""
+     var downloadedLabel: String = ""
+     var airsPrefix: String = ""
+     var tbaLabel: String = ""
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
+index f8d84e4c..d5521c48 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
+@@ -257,6 +257,13 @@ private fun NativePlayerSurface(
+         controller.setResizeMode(resizeMode)
+     }
+ 
++    CustomStretchSamplingEffect(
++        enabled = resizeMode == PlayerResizeMode.CustomStretch,
++        sourceKey = listOf(controller, sourceUrl),
++        sample = { controller.sampleCustomStretchContent() },
++        onContentRect = { rect -> controller.setCustomStretchContent(rect) },
++    )
++
+     LaunchedEffect(controller, playerControlsState) {
+         controller.updateControls(playerControlsState)
+         DesktopPlayerPictureInPicture.setWindowTitle(playerControlsState.pipWindowTitle)
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
+index 45ecfe6c..2d92532a 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
+@@ -68,6 +68,9 @@ internal object NativePlayerBridge {
+     external fun setVolume(handle: Long, level: Float)
+     external fun volume(handle: Long): Float
+     external fun setResizeMode(handle: Long, mode: Int)
++    external fun setVideoTransform(handle: Long, scaleX: Double, scaleY: Double, panX: Double, panY: Double)
++    /** Luma of the current decoded frame: UInt16 LE width, UInt16 LE height, then the luma bytes. */
++    external fun sampleVideoLuma(handle: Long, maxDimension: Int): ByteArray?
+     external fun durationMs(handle: Long): Long
+     external fun positionMs(handle: Long): Long
+     external fun bufferedPositionMs(handle: Long): Long
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index 1033850f..df5817dc 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -17,6 +17,11 @@ import com.nuvio.app.features.player.PlayerControlsState
+ import com.nuvio.app.features.player.PlayerEngineController
+ import com.nuvio.app.features.player.PlayerPlaybackSnapshot
+ import com.nuvio.app.features.player.PlayerResizeMode
++import com.nuvio.app.features.player.BlackBarTracker
++import com.nuvio.app.features.player.LumaFrame
++import com.nuvio.app.features.player.MpvStretchTransform
++import com.nuvio.app.features.player.VideoContentRect
++import com.nuvio.app.features.player.toMpvStretchTransform
+ import com.nuvio.app.features.player.SUBTITLE_DELAY_MAX_MS
+ import com.nuvio.app.features.player.findPreferredAudioTrackIndex
+ import com.nuvio.app.features.player.SUBTITLE_DELAY_MIN_MS
+@@ -510,11 +515,41 @@ internal class NativePlayerController(
+                     PlayerResizeMode.Fill -> 1
+                     PlayerResizeMode.Zoom -> 2
+                     PlayerResizeMode.Stretch -> 3
++                    PlayerResizeMode.CustomStretch -> 4
+                 },
+             )
++            if (mode == PlayerResizeMode.CustomStretch) applyVideoTransform(current, customStretchTransform)
+         }
+     }
+ 
++    private var customStretchTransform = MpvStretchTransform.Identity
++
++    /** Custom Stretch picture area (null = stretch the whole frame). */
++    fun setCustomStretchContent(rect: VideoContentRect?) {
++        customStretchTransform = rect?.toMpvStretchTransform() ?: MpvStretchTransform.Identity
++        if (rememberedResizeMode != PlayerResizeMode.CustomStretch) return
++        handle.takeIf { it != 0L }?.let { applyVideoTransform(it, customStretchTransform) }
++    }
++
++    private fun applyVideoTransform(current: Long, transform: MpvStretchTransform) {
++        runCatching {
++            NativePlayerBridge.setVideoTransform(current, transform.scaleX, transform.scaleY, transform.panX, transform.panY)
++        }
++    }
++
++    /** Picture area of the current decoded frame, or null when there is no usable frame. */
++    fun sampleCustomStretchContent(): VideoContentRect? {
++        val current = handle.takeIf { it != 0L } ?: return null
++        val raw = runCatching {
++            NativePlayerBridge.sampleVideoLuma(current, BlackBarTracker.SAMPLE_MAX_DIMENSION)
++        }.getOrNull() ?: return null
++        if (raw.size <= 4) return null
++        val width = (raw[0].toInt() and 0xFF) or ((raw[1].toInt() and 0xFF) shl 8)
++        val height = (raw[2].toInt() and 0xFF) or ((raw[3].toInt() and 0xFF) shl 8)
++        if (width <= 0 || height <= 0 || raw.size < 4 + width * height) return null
++        return LumaFrame(raw.copyOfRange(4, 4 + width * height), width, height).detectContent()
++    }
++
+     private fun handlePlayerEvent(type: String, value: Double) {
+         if (type.shouldLogNativeControlEvent()) {
+             log.d { "event received handle=$handle type=$type value=$value" }
+diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
+index f2d8a49a..95312560 100644
+--- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
++++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
+@@ -26,6 +26,7 @@
+ #include <condition_variable>
+ #include <cstdint>
+ #include <cstdio>
++#include <cmath>
+ #include <cstring>
+ #include <functional>
+ #include <mutex>
+@@ -1499,6 +1500,60 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
+     return JNI_VERSION_1_6;
+ }
+ 
++// Custom Stretch geometry (used with keepaspect=no): the picture area covers the window.
++static void nuvioSetVideoTransform(mpv_handle *mpv, double scaleX, double scaleY, double panX, double panY) {
++    double values[4] = {scaleX, scaleY, panX, panY};
++    const char *names[4] = {"video-scale-x", "video-scale-y", "video-pan-x", "video-pan-y"};
++    for (int i = 0; i < 4; i++) mpv_set_property(mpv, names[i], MPV_FORMAT_DOUBLE, &values[i]);
++}
++
++// Custom Stretch: downscale a screenshot-raw result (bgr0) to luma for black bar detection.
++// Output layout: width and height as little-endian uint16, then width * height luma bytes.
++static bool nuvioLumaFromScreenshot(const mpv_node &result, int maxDimension, std::vector<uint8_t> &out) {
++    if (result.format != MPV_FORMAT_NODE_MAP || !result.u.list || maxDimension <= 0) return false;
++    int64_t width = 0, height = 0, stride = 0;
++    const char *format = "bgr0";
++    const uint8_t *pixels = nullptr;
++    size_t pixelBytes = 0;
++    const mpv_node_list *list = result.u.list;
++    for (int i = 0; i < list->num; i++) {
++        const char *key = list->keys ? list->keys[i] : nullptr;
++        if (!key) continue;
++        const mpv_node &value = list->values[i];
++        if (std::strcmp(key, "w") == 0 && value.format == MPV_FORMAT_INT64) width = value.u.int64;
++        else if (std::strcmp(key, "h") == 0 && value.format == MPV_FORMAT_INT64) height = value.u.int64;
++        else if (std::strcmp(key, "stride") == 0 && value.format == MPV_FORMAT_INT64) stride = value.u.int64;
++        else if (std::strcmp(key, "format") == 0 && value.format == MPV_FORMAT_STRING && value.u.string) format = value.u.string;
++        else if (std::strcmp(key, "data") == 0 && value.format == MPV_FORMAT_BYTE_ARRAY && value.u.ba) {
++            pixels = static_cast<const uint8_t *>(value.u.ba->data);
++            pixelBytes = value.u.ba->size;
++        }
++    }
++    if (std::strcmp(format, "bgr0") != 0 || width <= 0 || height <= 0 || stride < width * 4 || !pixels ||
++        pixelBytes < static_cast<size_t>(stride * height)) {
++        return false;
++    }
++    double scale = std::min(1.0, static_cast<double>(maxDimension) / static_cast<double>(std::max(width, height)));
++    int outWidth = std::max(8, static_cast<int>(std::lround(static_cast<double>(width) * scale)));
++    int outHeight = std::max(8, static_cast<int>(std::lround(static_cast<double>(height) * scale)));
++    out.assign(4 + static_cast<size_t>(outWidth) * outHeight, 0);
++    out[0] = static_cast<uint8_t>(outWidth & 0xFF);
++    out[1] = static_cast<uint8_t>((outWidth >> 8) & 0xFF);
++    out[2] = static_cast<uint8_t>(outHeight & 0xFF);
++    out[3] = static_cast<uint8_t>((outHeight >> 8) & 0xFF);
++    for (int y = 0; y < outHeight; y++) {
++        int64_t sourceY = std::min<int64_t>(height - 1, (y * height + height / 2) / outHeight);
++        const uint8_t *row = pixels + sourceY * stride;
++        for (int x = 0; x < outWidth; x++) {
++            int64_t sourceX = std::min<int64_t>(width - 1, (x * width + width / 2) / outWidth);
++            const uint8_t *pixel = row + sourceX * 4;
++            out[4 + static_cast<size_t>(y) * outWidth + x] =
++                static_cast<uint8_t>((pixel[2] * 77 + pixel[1] * 150 + pixel[0] * 29) >> 8);
++        }
++    }
++    return true;
++}
++
+ extern "C" {
+ 
+ #define NP(name) \
+@@ -1849,9 +1904,11 @@ JNIEXPORT jfloat JNICALL NP(speed)(JNIEnv *, jobject, jlong handle) {
+ JNIEXPORT void JNICALL NP(setResizeMode)(JNIEnv *, jobject, jlong handle, jint mode) {
+     Player *p = asPlayer(handle);
+     if (!p) return;
+-    // 0 fit, 1 fill, 2 zoom, 3 stretch
++    // 0 fit, 1 fill, 2 zoom, 3 stretch, 4 custom stretch (picture area set by setVideoTransform)
++    nuvioSetVideoTransform(p->mpv, 1.0, 1.0, 0.0, 0.0);
+     switch (mode) {
+-        case 3: mpv_set_property_string(p->mpv, "keepaspect", "no");
++        case 3:
++        case 4: mpv_set_property_string(p->mpv, "keepaspect", "no");
+                 mpv_set_property_string(p->mpv, "panscan", "0.0");
+                 mpv_set_property_string(p->mpv, "video-unscaled", "no"); break;
+         case 1:
+@@ -1864,6 +1921,28 @@ JNIEXPORT void JNICALL NP(setResizeMode)(JNIEnv *, jobject, jlong handle, jint m
+     }
+ }
+ 
++JNIEXPORT void JNICALL NP(setVideoTransform)(JNIEnv *, jobject, jlong handle, jdouble scaleX, jdouble scaleY,
++                                             jdouble panX, jdouble panY) {
++    Player *p = asPlayer(handle);
++    if (!p || !p->mpv) return;
++    nuvioSetVideoTransform(p->mpv, scaleX, scaleY, panX, panY);
++}
++
++JNIEXPORT jbyteArray JNICALL NP(sampleVideoLuma)(JNIEnv *env, jobject, jlong handle, jint maxDimension) {
++    Player *p = asPlayer(handle);
++    if (!p || !p->mpv) return nullptr;
++    const char *args[] = {"screenshot-raw", "video", nullptr};
++    mpv_node result;
++    if (mpv_command_ret(p->mpv, args, &result) < 0) return nullptr;
++    std::vector<uint8_t> luma;
++    bool ok = nuvioLumaFromScreenshot(result, maxDimension, luma);
++    mpv_free_node_contents(&result);
++    if (!ok) return nullptr;
++    jbyteArray array = env->NewByteArray(static_cast<jsize>(luma.size()));
++    if (array) env->SetByteArrayRegion(array, 0, static_cast<jsize>(luma.size()), reinterpret_cast<const jbyte *>(luma.data()));
++    return array;
++}
++
+ // ---- tracks & subtitles (mpv properties) --------------------------------
+ 
+ JNIEXPORT jstring JNICALL NP(audioTracksJson)(JNIEnv *env, jobject, jlong handle) {
+diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
+index 1b844c01..c921033b 100644
+--- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
++++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
+@@ -14,7 +14,10 @@
+ #include <mpv/render_gl.h>
+ 
+ #include <atomic>
++#include <algorithm>
+ #include <cmath>
++#include <cstdint>
++#include <cstring>
+ #include <dlfcn.h>
+ #include <string>
+ #include <vector>
+@@ -117,6 +120,53 @@ static constexpr double kMaxVolumePercent = 200.0;
+ 
+ @end
+ 
++// Custom Stretch: downscale a screenshot-raw result (bgr0) to luma for black bar detection.
++// Output layout: width and height as little-endian uint16, then width * height luma bytes.
++static bool nuvioLumaFromScreenshot(const mpv_node &result, int maxDimension, std::vector<uint8_t> &out) {
++    if (result.format != MPV_FORMAT_NODE_MAP || !result.u.list || maxDimension <= 0) return false;
++    int64_t width = 0, height = 0, stride = 0;
++    const char *format = "bgr0";
++    const uint8_t *pixels = nullptr;
++    size_t pixelBytes = 0;
++    const mpv_node_list *list = result.u.list;
++    for (int i = 0; i < list->num; i++) {
++        const char *key = list->keys ? list->keys[i] : nullptr;
++        if (!key) continue;
++        const mpv_node &value = list->values[i];
++        if (std::strcmp(key, "w") == 0 && value.format == MPV_FORMAT_INT64) width = value.u.int64;
++        else if (std::strcmp(key, "h") == 0 && value.format == MPV_FORMAT_INT64) height = value.u.int64;
++        else if (std::strcmp(key, "stride") == 0 && value.format == MPV_FORMAT_INT64) stride = value.u.int64;
++        else if (std::strcmp(key, "format") == 0 && value.format == MPV_FORMAT_STRING && value.u.string) format = value.u.string;
++        else if (std::strcmp(key, "data") == 0 && value.format == MPV_FORMAT_BYTE_ARRAY && value.u.ba) {
++            pixels = static_cast<const uint8_t *>(value.u.ba->data);
++            pixelBytes = value.u.ba->size;
++        }
++    }
++    if (std::strcmp(format, "bgr0") != 0 || width <= 0 || height <= 0 || stride < width * 4 || !pixels ||
++        pixelBytes < static_cast<size_t>(stride * height)) {
++        return false;
++    }
++    double scale = std::min(1.0, static_cast<double>(maxDimension) / static_cast<double>(std::max(width, height)));
++    int outWidth = std::max(8, static_cast<int>(std::lround(static_cast<double>(width) * scale)));
++    int outHeight = std::max(8, static_cast<int>(std::lround(static_cast<double>(height) * scale)));
++    out.assign(4 + static_cast<size_t>(outWidth) * outHeight, 0);
++    out[0] = static_cast<uint8_t>(outWidth & 0xFF);
++    out[1] = static_cast<uint8_t>((outWidth >> 8) & 0xFF);
++    out[2] = static_cast<uint8_t>(outHeight & 0xFF);
++    out[3] = static_cast<uint8_t>((outHeight >> 8) & 0xFF);
++    for (int y = 0; y < outHeight; y++) {
++        int64_t sourceY = std::min<int64_t>(height - 1, (y * height + height / 2) / outHeight);
++        const uint8_t *row = pixels + sourceY * stride;
++        for (int x = 0; x < outWidth; x++) {
++            int64_t sourceX = std::min<int64_t>(width - 1, (x * width + width / 2) / outWidth);
++            const uint8_t *pixel = row + sourceX * 4;
++            out[4 + static_cast<size_t>(y) * outWidth + x] =
++                static_cast<uint8_t>((pixel[2] * 77 + pixel[1] * 150 + pixel[0] * 29) >> 8);
++        }
++    }
++    return true;
++}
++
+ @interface MpvWebPlayer : NSObject
+ - (instancetype)initWithHostView:(NSView *)hostView
+                        sourceUrl:(NSString *)sourceUrl
+@@ -142,6 +192,8 @@ static constexpr double kMaxVolumePercent = 200.0;
+ - (void)setVolume:(double)level;
+ - (double)volume;
+ - (void)setResizeMode:(int)mode;
++- (void)setVideoTransformScaleX:(double)scaleX scaleY:(double)scaleY panX:(double)panX panY:(double)panY;
++- (NSData *)sampleVideoLuma:(int)maxDimension;
+ - (long long)durationMs;
+ - (long long)positionMs;
+ - (long long)bufferedPositionMs;
+@@ -2287,12 +2339,14 @@ static void nuvioMpvWakeup(void *ctx) {
+             panscan = @"1.0";
+             break;
+         case 3:
++        case 4: // custom stretch: the picture area is then set with setVideoTransform
+             keepAspect = @"no";
+             break;
+         default:
+             break;
+     }
+ 
++    [self setVideoTransformScaleX:1.0 scaleY:1.0 panX:0.0 panY:0.0];
+     dispatch_queue_t queue = _mpvEventQueue;
+     if (!queue) {
+         [self setStringProperty:"keepaspect" value:keepAspect];
+@@ -2312,6 +2366,46 @@ static void nuvioMpvWakeup(void *ctx) {
+     });
+ }
+ 
++- (void)setVideoTransformScaleX:(double)scaleX scaleY:(double)scaleY panX:(double)panX panY:(double)panY {
++    if (!_mpv) return;
++    void (^apply)(void) = ^{
++        mpv_handle *mpv = self->_mpv;
++        if (!mpv) return;
++        double values[4] = {scaleX, scaleY, panX, panY};
++        const char *names[4] = {"video-scale-x", "video-scale-y", "video-pan-x", "video-pan-y"};
++        for (int i = 0; i < 4; i++) mpv_set_property(mpv, names[i], MPV_FORMAT_DOUBLE, &values[i]);
++    };
++    dispatch_queue_t queue = _mpvEventQueue;
++    if (queue) {
++        dispatch_async(queue, apply);
++    } else {
++        apply();
++    }
++}
++
++- (NSData *)sampleVideoLuma:(int)maxDimension {
++    if (!_mpv) return nil;
++    __block std::vector<uint8_t> luma;
++    __block bool ok = false;
++    void (^sample)(void) = ^{
++        mpv_handle *mpv = self->_mpv;
++        if (!mpv) return;
++        const char *args[] = {"screenshot-raw", "video", nullptr};
++        mpv_node result;
++        if (mpv_command_ret(mpv, args, &result) < 0) return;
++        ok = nuvioLumaFromScreenshot(result, maxDimension, luma);
++        mpv_free_node_contents(&result);
++    };
++    dispatch_queue_t queue = _mpvEventQueue;
++    if (queue) {
++        dispatch_sync(queue, sample);
++    } else {
++        sample();
++    }
++    if (!ok) return nil;
++    return [NSData dataWithBytes:luma.data() length:luma.size()];
++}
++
+ - (long long)durationMs {
+     return (long long)llround(fmax(_cachedDurationSeconds.load(), 0.0) * 1000.0);
+ }
+@@ -3495,6 +3589,40 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_volume(
+     return (jfloat)[player volume];
+ }
+ 
++extern "C" JNIEXPORT void JNICALL
++Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setVideoTransform(
++    JNIEnv * /* env */,
++    jobject /* bridge */,
++    jlong handle,
++    jdouble scaleX,
++    jdouble scaleY,
++    jdouble panX,
++    jdouble panY
++) {
++    if (handle == 0) return;
++    MpvWebPlayer *player = (__bridge MpvWebPlayer *)(void *)(intptr_t)handle;
++    // Same path as setResizeMode, so the identity reset there never lands after this transform.
++    runOnMainAsync(^{
++        [player setVideoTransformScaleX:scaleX scaleY:scaleY panX:panX panY:panY];
++    });
++}
++
++extern "C" JNIEXPORT jbyteArray JNICALL
++Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_sampleVideoLuma(
++    JNIEnv *env,
++    jobject /* bridge */,
++    jlong handle,
++    jint maxDimension
++) {
++    if (handle == 0) return nullptr;
++    MpvWebPlayer *player = (__bridge MpvWebPlayer *)(void *)(intptr_t)handle;
++    NSData *luma = [player sampleVideoLuma:(int)maxDimension];
++    if (!luma || luma.length == 0) return nullptr;
++    jbyteArray array = env->NewByteArray((jsize)luma.length);
++    if (array) env->SetByteArrayRegion(array, 0, (jsize)luma.length, (const jbyte *)luma.bytes);
++    return array;
++}
++
+ extern "C" JNIEXPORT void JNICALL
+ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setResizeMode(
+     JNIEnv * /* env */,
+diff --git a/composeApp/src/desktopMain/native/windows/player_bridge.cpp b/composeApp/src/desktopMain/native/windows/player_bridge.cpp
+index 253de5dc..0d7fe67f 100644
+--- a/composeApp/src/desktopMain/native/windows/player_bridge.cpp
++++ b/composeApp/src/desktopMain/native/windows/player_bridge.cpp
+@@ -18,6 +18,7 @@
+ #include <cctype>
+ #include <cstdint>
+ #include <cstdio>
++#include <cstring>
+ #include <cwctype>
+ #include <deque>
+ #include <functional>
+@@ -43,8 +44,35 @@ typedef enum mpv_format {
+     MPV_FORMAT_FLAG = 3,
+     MPV_FORMAT_INT64 = 4,
+     MPV_FORMAT_DOUBLE = 5,
++    MPV_FORMAT_NODE = 6,
++    MPV_FORMAT_NODE_ARRAY = 7,
++    MPV_FORMAT_NODE_MAP = 8,
++    MPV_FORMAT_BYTE_ARRAY = 9,
+ } mpv_format;
+ 
++typedef struct mpv_node {
++    union {
++        char *string;
++        int flag;
++        int64_t int64;
++        double double_;
++        struct mpv_node_list *list;
++        struct mpv_byte_array *ba;
++    } u;
++    mpv_format format;
++} mpv_node;
++
++typedef struct mpv_node_list {
++    int num;
++    mpv_node *values;
++    char **keys;
++} mpv_node_list;
++
++typedef struct mpv_byte_array {
++    void *data;
++    size_t size;
++} mpv_byte_array;
++
+ typedef enum mpv_event_id {
+     MPV_EVENT_NONE = 0,
+     MPV_EVENT_SHUTDOWN = 1,
+@@ -625,6 +653,72 @@ MpvApi &mpvApi() {
+     return api;
+ }
+ 
++// Custom Stretch: downscale a screenshot-raw result (bgr0) to luma for black bar detection.
++// Output layout: width and height as little-endian uint16, then width * height luma bytes.
++bool nuvioLumaFromScreenshot(const mpv_node &result, int maxDimension, std::vector<uint8_t> &out) {
++    if (result.format != MPV_FORMAT_NODE_MAP || !result.u.list || maxDimension <= 0) return false;
++    int64_t width = 0, height = 0, stride = 0;
++    const char *format = "bgr0";
++    const uint8_t *pixels = nullptr;
++    size_t pixelBytes = 0;
++    const mpv_node_list *list = result.u.list;
++    for (int i = 0; i < list->num; i++) {
++        const char *key = list->keys ? list->keys[i] : nullptr;
++        if (!key) continue;
++        const mpv_node &value = list->values[i];
++        if (std::strcmp(key, "w") == 0 && value.format == MPV_FORMAT_INT64) width = value.u.int64;
++        else if (std::strcmp(key, "h") == 0 && value.format == MPV_FORMAT_INT64) height = value.u.int64;
++        else if (std::strcmp(key, "stride") == 0 && value.format == MPV_FORMAT_INT64) stride = value.u.int64;
++        else if (std::strcmp(key, "format") == 0 && value.format == MPV_FORMAT_STRING && value.u.string) format = value.u.string;
++        else if (std::strcmp(key, "data") == 0 && value.format == MPV_FORMAT_BYTE_ARRAY && value.u.ba) {
++            pixels = static_cast<const uint8_t *>(value.u.ba->data);
++            pixelBytes = value.u.ba->size;
++        }
++    }
++    if (std::strcmp(format, "bgr0") != 0 || width <= 0 || height <= 0 || stride < width * 4 || !pixels ||
++        pixelBytes < static_cast<size_t>(stride * height)) {
++        return false;
++    }
++    double scale = std::min(1.0, static_cast<double>(maxDimension) / static_cast<double>(std::max(width, height)));
++    int outWidth = std::max(8, static_cast<int>(std::lround(static_cast<double>(width) * scale)));
++    int outHeight = std::max(8, static_cast<int>(std::lround(static_cast<double>(height) * scale)));
++    out.assign(4 + static_cast<size_t>(outWidth) * outHeight, 0);
++    out[0] = static_cast<uint8_t>(outWidth & 0xFF);
++    out[1] = static_cast<uint8_t>((outWidth >> 8) & 0xFF);
++    out[2] = static_cast<uint8_t>(outHeight & 0xFF);
++    out[3] = static_cast<uint8_t>((outHeight >> 8) & 0xFF);
++    for (int y = 0; y < outHeight; y++) {
++        int64_t sourceY = std::min<int64_t>(height - 1, (y * height + height / 2) / outHeight);
++        const uint8_t *row = pixels + sourceY * stride;
++        for (int x = 0; x < outWidth; x++) {
++            int64_t sourceX = std::min<int64_t>(width - 1, (x * width + width / 2) / outWidth);
++            const uint8_t *pixel = row + sourceX * 4;
++            out[4 + static_cast<size_t>(y) * outWidth + x] =
++                static_cast<uint8_t>((pixel[2] * 77 + pixel[1] * 150 + pixel[0] * 29) >> 8);
++        }
++    }
++    return true;
++}
++
++// Custom Stretch needs mpv_command_ret; resolved on first use so an older libmpv still loads.
++using mpv_command_ret_fn = int (*)(mpv_handle *, const char **, mpv_node *);
++using mpv_free_node_contents_fn = void (*)(mpv_node *);
++
++bool resolveScreenshotApi(mpv_command_ret_fn &commandRet, mpv_free_node_contents_fn &freeNode) {
++    static std::once_flag once;
++    static mpv_command_ret_fn resolvedCommandRet = nullptr;
++    static mpv_free_node_contents_fn resolvedFreeNode = nullptr;
++    std::call_once(once, []() {
++        HMODULE library = mpvApi().library;
++        if (!library) return;
++        resolvedCommandRet = reinterpret_cast<mpv_command_ret_fn>(GetProcAddress(library, "mpv_command_ret"));
++        resolvedFreeNode = reinterpret_cast<mpv_free_node_contents_fn>(GetProcAddress(library, "mpv_free_node_contents"));
++    });
++    commandRet = resolvedCommandRet;
++    freeNode = resolvedFreeNode;
++    return commandRet && freeNode;
++}
++
+ class WindowsMpvWebPlayer;
+ LRESULT CALLBACK messageWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+ LRESULT CALLBACK containerWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+@@ -1164,6 +1258,8 @@ public:
+     }
+ 
+     void setResizeMode(int mode) {
++        // 4 = custom stretch: like 3, the picture area is then set with setVideoTransform
++        setVideoTransform(1.0, 1.0, 0.0, 0.0);
+         switch (mode) {
+             case 1:
+             case 2:
+@@ -1172,6 +1268,7 @@ public:
+                 setStringProperty("video-unscaled", "no");
+                 break;
+             case 3:
++            case 4:
+                 setStringProperty("keepaspect", "no");
+                 setStringProperty("panscan", "0.0");
+                 setStringProperty("video-unscaled", "no");
+@@ -1184,6 +1281,28 @@ public:
+         }
+     }
+ 
++    void setVideoTransform(double scaleX, double scaleY, double panX, double panY) {
++        std::lock_guard<std::mutex> lock(mpvMutex);
++        if (!mpv) return;
++        double values[4] = {scaleX, scaleY, panX, panY};
++        const char *names[4] = {"video-scale-x", "video-scale-y", "video-pan-x", "video-pan-y"};
++        for (int i = 0; i < 4; i++) mpvApi().setProperty(mpv, names[i], MPV_FORMAT_DOUBLE, &values[i]);
++    }
++
++    bool sampleVideoLuma(int maxDimension, std::vector<uint8_t> &out) {
++        mpv_command_ret_fn commandRet = nullptr;
++        mpv_free_node_contents_fn freeNode = nullptr;
++        if (!resolveScreenshotApi(commandRet, freeNode)) return false;
++        std::lock_guard<std::mutex> lock(mpvMutex);
++        if (!mpv) return false;
++        const char *args[] = {"screenshot-raw", "video", nullptr};
++        mpv_node result;
++        if (commandRet(mpv, args, &result) < 0) return false;
++        bool ok = nuvioLumaFromScreenshot(result, maxDimension, out);
++        freeNode(&result);
++        return ok;
++    }
++
+     long long durationMs() {
+         return (long long)std::llround(doubleProperty("duration", 0.0) * 1000.0);
+     }
+@@ -2857,6 +2976,24 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setResizeMode(JNIE
+     if (player) player->setResizeMode(mode);
+ }
+ 
++extern "C" JNIEXPORT void JNICALL
++Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setVideoTransform(
++    JNIEnv *, jobject, jlong handle, jdouble scaleX, jdouble scaleY, jdouble panX, jdouble panY) {
++    auto player = playerFromHandle(handle);
++    if (player) player->setVideoTransform(scaleX, scaleY, panX, panY);
++}
++
++extern "C" JNIEXPORT jbyteArray JNICALL
++Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_sampleVideoLuma(
++    JNIEnv *env, jobject, jlong handle, jint maxDimension) {
++    auto player = playerFromHandle(handle);
++    std::vector<uint8_t> luma;
++    if (!player || !player->sampleVideoLuma(maxDimension, luma)) return nullptr;
++    jbyteArray array = env->NewByteArray(static_cast<jsize>(luma.size()));
++    if (array) env->SetByteArrayRegion(array, 0, static_cast<jsize>(luma.size()), reinterpret_cast<const jbyte *>(luma.data()));
++    return array;
++}
++
+ extern "C" JNIEXPORT jstring JNICALL
+ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_audioTracksJson(JNIEnv *env, jobject, jlong handle) {
+     auto player = playerFromHandle(handle);
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerEngine.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerEngine.ios.kt
+index 15164015..88dd8c4f 100644
+--- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerEngine.ios.kt
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerEngine.ios.kt
+@@ -322,6 +322,7 @@ actual fun PlatformPlayerSurface(
+                 PlayerResizeMode.Fill -> 1
+                 PlayerResizeMode.Zoom -> 2
+                 PlayerResizeMode.Stretch -> 0
++                PlayerResizeMode.CustomStretch -> 0
+             }
+         )
+     }
