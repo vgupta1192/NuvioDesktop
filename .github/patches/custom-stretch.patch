@@ -34,10 +34,10 @@ index 693c5f13..aaae46d0 100644
      <string name="compose_player_seek_delta_backward">-%1$ds</string>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
 new file mode 100644
-index 00000000..1abf4e26
+index 00000000..4ecaf40e
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
-@@ -0,0 +1,256 @@
+@@ -0,0 +1,281 @@
 +package com.nuvio.app.features.player
 +
 +import androidx.compose.runtime.Composable
@@ -46,6 +46,8 @@ index 00000000..1abf4e26
 +import kotlinx.coroutines.delay
 +import kotlinx.coroutines.isActive
 +import kotlin.math.abs
++import kotlin.math.ceil
++import kotlin.math.floor
 +import kotlin.math.max
 +import kotlin.math.min
 +
@@ -89,29 +91,35 @@ index 00000000..1abf4e26
 +}
 +
 +/**
-+ * mpv geometry for a picture area, used with `keepaspect=no`: `video-scale-x/y` enlarge the
-+ * frame so the picture area covers the window and `video-pan-x/y` move the picture area to the
-+ * window center. mpv clips the result to the window, so subtitles stay on screen.
++ * mpv `video-crop` value for a picture area, in source pixels ([sourceWidth] x [sourceHeight]
++ * from `video-params/w` and `video-params/h`). Used with `keepaspect=no`: mpv drops the bars
++ * and stretches the rest over the window. mpv ignores video-zoom, video-scale and video-pan
++ * when keepaspect is off, so cropping is the only way to do this inside mpv. The edges are
++ * rounded outward, so no picture row or column is lost. Returns "" (no crop) for the whole
++ * frame or unknown sizes.
 + */
-+data class MpvStretchTransform(
-+    val scaleX: Double,
-+    val scaleY: Double,
-+    val panX: Double,
-+    val panY: Double,
-+) {
-+    companion object {
-+        val Identity = MpvStretchTransform(1.0, 1.0, 0.0, 0.0)
-+    }
++fun VideoContentRect?.toMpvVideoCrop(sourceWidth: Int, sourceHeight: Int): String {
++    if (this == null || sourceWidth <= 0 || sourceHeight <= 0) return ""
++    val x0 = floor(left * sourceWidth).toInt().coerceIn(0, sourceWidth - 1)
++    val y0 = floor(top * sourceHeight).toInt().coerceIn(0, sourceHeight - 1)
++    val x1 = ceil(right * sourceWidth).toInt().coerceIn(x0 + 1, sourceWidth)
++    val y1 = ceil(bottom * sourceHeight).toInt().coerceIn(y0 + 1, sourceHeight)
++    if (x0 == 0 && y0 == 0 && x1 == sourceWidth && y1 == sourceHeight) return ""
++    return "${x1 - x0}x${y1 - y0}+$x0+$y0"
 +}
 +
 +/**
-+ * Map a picture area measured on the rendered output (what is on screen while [transform] is
-+ * active with `keepaspect=no`) back to frame fractions, clipped to the frame.
++ * Map a picture area measured on a cropped image (only [crop] of the frame, stretched to the
++ * whole image) back to frame fractions.
 + */
-+fun VideoContentRect.mapFromScreen(transform: MpvStretchTransform): VideoContentRect {
-+    fun frameX(x: Float) = ((x - 0.5) / transform.scaleX + 0.5 - transform.panX).toFloat().coerceIn(0f, 1f)
-+    fun frameY(y: Float) = ((y - 0.5) / transform.scaleY + 0.5 - transform.panY).toFloat().coerceIn(0f, 1f)
-+    return VideoContentRect(frameX(left), frameY(top), frameX(right), frameY(bottom))
++fun VideoContentRect.mapFromCrop(crop: VideoContentRect?): VideoContentRect {
++    if (crop == null) return this
++    return VideoContentRect(
++        left = (crop.left + left * crop.width).coerceIn(0f, 1f),
++        top = (crop.top + top * crop.height).coerceIn(0f, 1f),
++        right = (crop.left + right * crop.width).coerceIn(0f, 1f),
++        bottom = (crop.top + bottom * crop.height).coerceIn(0f, 1f),
++    )
 +}
 +
 +/** Bars of letterboxed and pillarboxed video are centered. Use the thicker bar on both sides. */
@@ -122,18 +130,35 @@ index 00000000..1abf4e26
 +}
 +
 +/** A downscaled luma (0..255) picture of one video frame. */
-+class LumaFrame(val luma: ByteArray, val width: Int, val height: Int) {
++class LumaFrame(
++    val luma: ByteArray,
++    val width: Int,
++    val height: Int,
++    /** True when the image is only the current mpv video-crop region, not the whole frame. */
++    val cropped: Boolean = false,
++) {
 +    fun detectContent(): VideoContentRect? = BlackBarDetector.detect(luma, width, height)
-+}
 +
-+fun VideoContentRect.toMpvStretchTransform(): MpvStretchTransform {
-+    if (width <= 0f || height <= 0f) return MpvStretchTransform.Identity
-+    return MpvStretchTransform(
-+        scaleX = 1.0 / width,
-+        scaleY = 1.0 / height,
-+        panX = 0.5 - (left + right) / 2.0,
-+        panY = 0.5 - (top + bottom) / 2.0,
-+    )
++    companion object {
++        /**
++         * Parse a native sample: width and height as little-endian UInt16, a cropped flag byte,
++         * then width * height luma bytes.
++         */
++        fun fromNative(raw: ByteArray): LumaFrame? {
++            if (raw.size <= HEADER_BYTES) return null
++            val width = (raw[0].toInt() and 0xFF) or ((raw[1].toInt() and 0xFF) shl 8)
++            val height = (raw[2].toInt() and 0xFF) or ((raw[3].toInt() and 0xFF) shl 8)
++            if (width <= 0 || height <= 0 || raw.size < HEADER_BYTES + width * height) return null
++            return LumaFrame(
++                luma = raw.copyOfRange(HEADER_BYTES, HEADER_BYTES + width * height),
++                width = width,
++                height = height,
++                cropped = raw[4].toInt() != 0,
++            )
++        }
++
++        const val HEADER_BYTES = 5
++    }
 +}
 +
 +object BlackBarDetector {
@@ -401,79 +426,95 @@ index f8d84e4c..d5521c48 100644
          controller.updateControls(playerControlsState)
          DesktopPlayerPictureInPicture.setWindowTitle(playerControlsState.pipWindowTitle)
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
-index 45ecfe6c..2d92532a 100644
+index 45ecfe6c..3298e097 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
-@@ -68,6 +68,9 @@ internal object NativePlayerBridge {
+@@ -68,6 +68,10 @@ internal object NativePlayerBridge {
      external fun setVolume(handle: Long, level: Float)
      external fun volume(handle: Long): Float
      external fun setResizeMode(handle: Long, mode: Int)
-+    external fun setVideoTransform(handle: Long, scaleX: Double, scaleY: Double, panX: Double, panY: Double)
-+    /** Luma of the current decoded frame: UInt16 LE width, UInt16 LE height, then the luma bytes. */
++    /** Custom Stretch: crop mpv's source to this picture area (frame fractions). False while the size is unknown. */
++    external fun setVideoCrop(handle: Long, left: Double, top: Double, right: Double, bottom: Double): Boolean
++    /** Luma of the current decoded frame, in the layout [com.nuvio.app.features.player.LumaFrame.fromNative] reads. */
 +    external fun sampleVideoLuma(handle: Long, maxDimension: Int): ByteArray?
      external fun durationMs(handle: Long): Long
      external fun positionMs(handle: Long): Long
      external fun bufferedPositionMs(handle: Long): Long
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 1033850f..df5817dc 100644
+index 1033850f..e1dfe688 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -17,6 +17,11 @@ import com.nuvio.app.features.player.PlayerControlsState
+@@ -17,6 +17,10 @@ import com.nuvio.app.features.player.PlayerControlsState
  import com.nuvio.app.features.player.PlayerEngineController
  import com.nuvio.app.features.player.PlayerPlaybackSnapshot
  import com.nuvio.app.features.player.PlayerResizeMode
 +import com.nuvio.app.features.player.BlackBarTracker
 +import com.nuvio.app.features.player.LumaFrame
-+import com.nuvio.app.features.player.MpvStretchTransform
++import com.nuvio.app.features.player.mapFromCrop
 +import com.nuvio.app.features.player.VideoContentRect
-+import com.nuvio.app.features.player.toMpvStretchTransform
  import com.nuvio.app.features.player.SUBTITLE_DELAY_MAX_MS
  import com.nuvio.app.features.player.findPreferredAudioTrackIndex
  import com.nuvio.app.features.player.SUBTITLE_DELAY_MIN_MS
-@@ -510,11 +515,41 @@ internal class NativePlayerController(
+@@ -510,9 +514,57 @@ internal class NativePlayerController(
                      PlayerResizeMode.Fill -> 1
                      PlayerResizeMode.Zoom -> 2
                      PlayerResizeMode.Stretch -> 3
 +                    PlayerResizeMode.CustomStretch -> 4
                  },
              )
-+            if (mode == PlayerResizeMode.CustomStretch) applyVideoTransform(current, customStretchTransform)
          }
-     }
- 
-+    private var customStretchTransform = MpvStretchTransform.Identity
++        customStretchCropApplied = false
++        appliedCustomStretchRect = null
++        applyCustomStretchCrop()
++    }
++
++    private var customStretchRect: VideoContentRect? = null
++    /** Picture area mpv currently crops to (null = whole frame). */
++    private var appliedCustomStretchRect: VideoContentRect? = null
++    private var customStretchCropApplied = false
 +
 +    /** Custom Stretch picture area (null = stretch the whole frame). */
 +    fun setCustomStretchContent(rect: VideoContentRect?) {
-+        customStretchTransform = rect?.toMpvStretchTransform() ?: MpvStretchTransform.Identity
-+        if (rememberedResizeMode != PlayerResizeMode.CustomStretch) return
-+        handle.takeIf { it != 0L }?.let { applyVideoTransform(it, customStretchTransform) }
++        customStretchRect = rect
++        customStretchCropApplied = false
++        applyCustomStretchCrop()
 +    }
 +
-+    private fun applyVideoTransform(current: Long, transform: MpvStretchTransform) {
-+        runCatching {
-+            NativePlayerBridge.setVideoTransform(current, transform.scaleX, transform.scaleY, transform.panX, transform.panY)
++    /** The crop needs mpv's source size, so it is retried on every sample until it is known. */
++    private fun applyCustomStretchCrop() {
++        if (rememberedResizeMode != PlayerResizeMode.CustomStretch || customStretchCropApplied) return
++        val current = handle.takeIf { it != 0L } ?: return
++        val rect = customStretchRect ?: VideoContentRect.Full
++        val applied = runCatching {
++            NativePlayerBridge.setVideoCrop(
++                current,
++                rect.left.toDouble(),
++                rect.top.toDouble(),
++                rect.right.toDouble(),
++                rect.bottom.toDouble(),
++            )
++        }.getOrDefault(false)
++        if (applied) {
++            customStretchCropApplied = true
++            appliedCustomStretchRect = customStretchRect
 +        }
 +    }
 +
 +    /** Picture area of the current decoded frame, or null when there is no usable frame. */
 +    fun sampleCustomStretchContent(): VideoContentRect? {
++        applyCustomStretchCrop()
 +        val current = handle.takeIf { it != 0L } ?: return null
 +        val raw = runCatching {
 +            NativePlayerBridge.sampleVideoLuma(current, BlackBarTracker.SAMPLE_MAX_DIMENSION)
 +        }.getOrNull() ?: return null
-+        if (raw.size <= 4) return null
-+        val width = (raw[0].toInt() and 0xFF) or ((raw[1].toInt() and 0xFF) shl 8)
-+        val height = (raw[2].toInt() and 0xFF) or ((raw[3].toInt() and 0xFF) shl 8)
-+        if (width <= 0 || height <= 0 || raw.size < 4 + width * height) return null
-+        return LumaFrame(raw.copyOfRange(4, 4 + width * height), width, height).detectContent()
-+    }
-+
++        val frame = LumaFrame.fromNative(raw) ?: return null
++        val rect = frame.detectContent() ?: return null
++        return if (frame.cropped) rect.mapFromCrop(appliedCustomStretchRect) else rect
+     }
+ 
      private fun handlePlayerEvent(type: String, value: Double) {
-         if (type.shouldLogNativeControlEvent()) {
-             log.d { "event received handle=$handle type=$type value=$value" }
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-index f2d8a49a..95312560 100644
+index f2d8a49a..3c5364fa 100644
 --- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 @@ -26,6 +26,7 @@
@@ -484,20 +525,29 @@ index f2d8a49a..95312560 100644
  #include <cstring>
  #include <functional>
  #include <mutex>
-@@ -1499,6 +1500,60 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
+@@ -1499,6 +1500,77 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
      return JNI_VERSION_1_6;
  }
  
-+// Custom Stretch geometry (used with keepaspect=no): the picture area covers the window.
-+static void nuvioSetVideoTransform(mpv_handle *mpv, double scaleX, double scaleY, double panX, double panY) {
-+    double values[4] = {scaleX, scaleY, panX, panY};
-+    const char *names[4] = {"video-scale-x", "video-scale-y", "video-pan-x", "video-pan-y"};
-+    for (int i = 0; i < 4; i++) mpv_set_property(mpv, names[i], MPV_FORMAT_DOUBLE, &values[i]);
++// Custom Stretch: mpv video-crop value for a picture area given as frame fractions, in source
++// pixels. mpv ignores video-zoom/scale/pan with keepaspect=no, so the black bars are cropped
++// and keepaspect=no stretches the rest. Edges are rounded outward so no picture is lost.
++// Returns "" (no crop) for the whole frame.
++static std::string nuvioVideoCrop(int64_t width, int64_t height, double left, double top, double right, double bottom) {
++    if (width <= 0 || height <= 0) return "";
++    int64_t x0 = std::max<int64_t>(0, std::min<int64_t>(width - 1, static_cast<int64_t>(std::floor(left * width))));
++    int64_t y0 = std::max<int64_t>(0, std::min<int64_t>(height - 1, static_cast<int64_t>(std::floor(top * height))));
++    int64_t x1 = std::max<int64_t>(x0 + 1, std::min<int64_t>(width, static_cast<int64_t>(std::ceil(right * width))));
++    int64_t y1 = std::max<int64_t>(y0 + 1, std::min<int64_t>(height, static_cast<int64_t>(std::ceil(bottom * height))));
++    if (x0 == 0 && y0 == 0 && x1 == width && y1 == height) return "";
++    return std::to_string(x1 - x0) + "x" + std::to_string(y1 - y0) + "+" + std::to_string(x0) + "+" + std::to_string(y0);
 +}
 +
 +// Custom Stretch: downscale a screenshot-raw result (bgr0) to luma for black bar detection.
-+// Output layout: width and height as little-endian uint16, then width * height luma bytes.
-+static bool nuvioLumaFromScreenshot(const mpv_node &result, int maxDimension, std::vector<uint8_t> &out) {
++// Output layout: width and height as little-endian uint16, a flag byte (1 when the screenshot is
++// only the video-crop region, i.e. smaller than the source), then width * height luma bytes.
++static bool nuvioLumaFromScreenshot(const mpv_node &result, int64_t sourceWidth, int64_t sourceHeight,
++                                    int maxDimension, std::vector<uint8_t> &out) {
 +    if (result.format != MPV_FORMAT_NODE_MAP || !result.u.list || maxDimension <= 0) return false;
 +    int64_t width = 0, height = 0, stride = 0;
 +    const char *format = "bgr0";
@@ -521,37 +571,45 @@ index f2d8a49a..95312560 100644
 +        pixelBytes < static_cast<size_t>(stride * height)) {
 +        return false;
 +    }
++    bool cropped = sourceWidth > 0 && sourceHeight > 0 && (width != sourceWidth || height != sourceHeight);
 +    double scale = std::min(1.0, static_cast<double>(maxDimension) / static_cast<double>(std::max(width, height)));
 +    int outWidth = std::max(8, static_cast<int>(std::lround(static_cast<double>(width) * scale)));
 +    int outHeight = std::max(8, static_cast<int>(std::lround(static_cast<double>(height) * scale)));
-+    out.assign(4 + static_cast<size_t>(outWidth) * outHeight, 0);
++    out.assign(5 + static_cast<size_t>(outWidth) * outHeight, 0);
 +    out[0] = static_cast<uint8_t>(outWidth & 0xFF);
 +    out[1] = static_cast<uint8_t>((outWidth >> 8) & 0xFF);
 +    out[2] = static_cast<uint8_t>(outHeight & 0xFF);
 +    out[3] = static_cast<uint8_t>((outHeight >> 8) & 0xFF);
++    out[4] = cropped ? 1 : 0;
 +    for (int y = 0; y < outHeight; y++) {
 +        int64_t sourceY = std::min<int64_t>(height - 1, (y * height + height / 2) / outHeight);
 +        const uint8_t *row = pixels + sourceY * stride;
 +        for (int x = 0; x < outWidth; x++) {
 +            int64_t sourceX = std::min<int64_t>(width - 1, (x * width + width / 2) / outWidth);
 +            const uint8_t *pixel = row + sourceX * 4;
-+            out[4 + static_cast<size_t>(y) * outWidth + x] =
++            out[5 + static_cast<size_t>(y) * outWidth + x] =
 +                static_cast<uint8_t>((pixel[2] * 77 + pixel[1] * 150 + pixel[0] * 29) >> 8);
 +        }
 +    }
 +    return true;
 +}
 +
++static int64_t nuvioInt64Property(mpv_handle *mpv, const char *name) {
++    int64_t value = 0;
++    if (mpv_get_property(mpv, name, MPV_FORMAT_INT64, &value) < 0) return 0;
++    return value;
++}
++
  extern "C" {
  
  #define NP(name) \
-@@ -1849,9 +1904,11 @@ JNIEXPORT jfloat JNICALL NP(speed)(JNIEnv *, jobject, jlong handle) {
+@@ -1849,9 +1921,11 @@ JNIEXPORT jfloat JNICALL NP(speed)(JNIEnv *, jobject, jlong handle) {
  JNIEXPORT void JNICALL NP(setResizeMode)(JNIEnv *, jobject, jlong handle, jint mode) {
      Player *p = asPlayer(handle);
      if (!p) return;
 -    // 0 fit, 1 fill, 2 zoom, 3 stretch
-+    // 0 fit, 1 fill, 2 zoom, 3 stretch, 4 custom stretch (picture area set by setVideoTransform)
-+    nuvioSetVideoTransform(p->mpv, 1.0, 1.0, 0.0, 0.0);
++    // 0 fit, 1 fill, 2 zoom, 3 stretch, 4 custom stretch (bars cropped through setVideoCrop)
++    if (mode != 4) mpv_set_property_string(p->mpv, "video-crop", "");
      switch (mode) {
 -        case 3: mpv_set_property_string(p->mpv, "keepaspect", "no");
 +        case 3:
@@ -559,25 +617,32 @@ index f2d8a49a..95312560 100644
                  mpv_set_property_string(p->mpv, "panscan", "0.0");
                  mpv_set_property_string(p->mpv, "video-unscaled", "no"); break;
          case 1:
-@@ -1864,6 +1921,28 @@ JNIEXPORT void JNICALL NP(setResizeMode)(JNIEnv *, jobject, jlong handle, jint m
+@@ -1864,6 +1938,35 @@ JNIEXPORT void JNICALL NP(setResizeMode)(JNIEnv *, jobject, jlong handle, jint m
      }
  }
  
-+JNIEXPORT void JNICALL NP(setVideoTransform)(JNIEnv *, jobject, jlong handle, jdouble scaleX, jdouble scaleY,
-+                                             jdouble panX, jdouble panY) {
++JNIEXPORT jboolean JNICALL NP(setVideoCrop)(JNIEnv *, jobject, jlong handle, jdouble left, jdouble top,
++                                            jdouble right, jdouble bottom) {
 +    Player *p = asPlayer(handle);
-+    if (!p || !p->mpv) return;
-+    nuvioSetVideoTransform(p->mpv, scaleX, scaleY, panX, panY);
++    if (!p || !p->mpv) return JNI_FALSE;
++    int64_t width = nuvioInt64Property(p->mpv, "video-params/w");
++    int64_t height = nuvioInt64Property(p->mpv, "video-params/h");
++    if (width <= 0 || height <= 0) return JNI_FALSE;
++    std::string crop = nuvioVideoCrop(width, height, left, top, right, bottom);
++    mpv_set_property_string(p->mpv, "video-crop", crop.c_str());
++    return JNI_TRUE;
 +}
 +
 +JNIEXPORT jbyteArray JNICALL NP(sampleVideoLuma)(JNIEnv *env, jobject, jlong handle, jint maxDimension) {
 +    Player *p = asPlayer(handle);
 +    if (!p || !p->mpv) return nullptr;
++    int64_t sourceWidth = nuvioInt64Property(p->mpv, "video-params/w");
++    int64_t sourceHeight = nuvioInt64Property(p->mpv, "video-params/h");
 +    const char *args[] = {"screenshot-raw", "video", nullptr};
 +    mpv_node result;
 +    if (mpv_command_ret(p->mpv, args, &result) < 0) return nullptr;
 +    std::vector<uint8_t> luma;
-+    bool ok = nuvioLumaFromScreenshot(result, maxDimension, luma);
++    bool ok = nuvioLumaFromScreenshot(result, sourceWidth, sourceHeight, maxDimension, luma);
 +    mpv_free_node_contents(&result);
 +    if (!ok) return nullptr;
 +    jbyteArray array = env->NewByteArray(static_cast<jsize>(luma.size()));
@@ -589,10 +654,10 @@ index f2d8a49a..95312560 100644
  
  JNIEXPORT jstring JNICALL NP(audioTracksJson)(JNIEnv *env, jobject, jlong handle) {
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index 1b844c01..c921033b 100644
+index 1b844c01..52d36e65 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-@@ -14,7 +14,10 @@
+@@ -14,7 +14,11 @@
  #include <mpv/render_gl.h>
  
  #include <atomic>
@@ -600,16 +665,33 @@ index 1b844c01..c921033b 100644
  #include <cmath>
 +#include <cstdint>
 +#include <cstring>
++#include <string>
  #include <dlfcn.h>
  #include <string>
  #include <vector>
-@@ -117,6 +120,53 @@ static constexpr double kMaxVolumePercent = 200.0;
+@@ -117,6 +121,71 @@ static constexpr double kMaxVolumePercent = 200.0;
  
  @end
  
++// Custom Stretch: mpv video-crop value for a picture area given as frame fractions, in source
++// pixels. mpv ignores video-zoom/scale/pan with keepaspect=no, so the black bars are cropped
++// and keepaspect=no stretches the rest. Edges are rounded outward so no picture is lost.
++// Returns "" (no crop) for the whole frame.
++static std::string nuvioVideoCrop(int64_t width, int64_t height, double left, double top, double right, double bottom) {
++    if (width <= 0 || height <= 0) return "";
++    int64_t x0 = std::max<int64_t>(0, std::min<int64_t>(width - 1, static_cast<int64_t>(std::floor(left * width))));
++    int64_t y0 = std::max<int64_t>(0, std::min<int64_t>(height - 1, static_cast<int64_t>(std::floor(top * height))));
++    int64_t x1 = std::max<int64_t>(x0 + 1, std::min<int64_t>(width, static_cast<int64_t>(std::ceil(right * width))));
++    int64_t y1 = std::max<int64_t>(y0 + 1, std::min<int64_t>(height, static_cast<int64_t>(std::ceil(bottom * height))));
++    if (x0 == 0 && y0 == 0 && x1 == width && y1 == height) return "";
++    return std::to_string(x1 - x0) + "x" + std::to_string(y1 - y0) + "+" + std::to_string(x0) + "+" + std::to_string(y0);
++}
++
 +// Custom Stretch: downscale a screenshot-raw result (bgr0) to luma for black bar detection.
-+// Output layout: width and height as little-endian uint16, then width * height luma bytes.
-+static bool nuvioLumaFromScreenshot(const mpv_node &result, int maxDimension, std::vector<uint8_t> &out) {
++// Output layout: width and height as little-endian uint16, a flag byte (1 when the screenshot is
++// only the video-crop region, i.e. smaller than the source), then width * height luma bytes.
++static bool nuvioLumaFromScreenshot(const mpv_node &result, int64_t sourceWidth, int64_t sourceHeight,
++                                    int maxDimension, std::vector<uint8_t> &out) {
 +    if (result.format != MPV_FORMAT_NODE_MAP || !result.u.list || maxDimension <= 0) return false;
 +    int64_t width = 0, height = 0, stride = 0;
 +    const char *format = "bgr0";
@@ -633,21 +715,23 @@ index 1b844c01..c921033b 100644
 +        pixelBytes < static_cast<size_t>(stride * height)) {
 +        return false;
 +    }
++    bool cropped = sourceWidth > 0 && sourceHeight > 0 && (width != sourceWidth || height != sourceHeight);
 +    double scale = std::min(1.0, static_cast<double>(maxDimension) / static_cast<double>(std::max(width, height)));
 +    int outWidth = std::max(8, static_cast<int>(std::lround(static_cast<double>(width) * scale)));
 +    int outHeight = std::max(8, static_cast<int>(std::lround(static_cast<double>(height) * scale)));
-+    out.assign(4 + static_cast<size_t>(outWidth) * outHeight, 0);
++    out.assign(5 + static_cast<size_t>(outWidth) * outHeight, 0);
 +    out[0] = static_cast<uint8_t>(outWidth & 0xFF);
 +    out[1] = static_cast<uint8_t>((outWidth >> 8) & 0xFF);
 +    out[2] = static_cast<uint8_t>(outHeight & 0xFF);
 +    out[3] = static_cast<uint8_t>((outHeight >> 8) & 0xFF);
++    out[4] = cropped ? 1 : 0;
 +    for (int y = 0; y < outHeight; y++) {
 +        int64_t sourceY = std::min<int64_t>(height - 1, (y * height + height / 2) / outHeight);
 +        const uint8_t *row = pixels + sourceY * stride;
 +        for (int x = 0; x < outWidth; x++) {
 +            int64_t sourceX = std::min<int64_t>(width - 1, (x * width + width / 2) / outWidth);
 +            const uint8_t *pixel = row + sourceX * 4;
-+            out[4 + static_cast<size_t>(y) * outWidth + x] =
++            out[5 + static_cast<size_t>(y) * outWidth + x] =
 +                static_cast<uint8_t>((pixel[2] * 77 + pixel[1] * 150 + pixel[0] * 29) >> 8);
 +        }
 +    }
@@ -657,49 +741,65 @@ index 1b844c01..c921033b 100644
  @interface MpvWebPlayer : NSObject
  - (instancetype)initWithHostView:(NSView *)hostView
                         sourceUrl:(NSString *)sourceUrl
-@@ -142,6 +192,8 @@ static constexpr double kMaxVolumePercent = 200.0;
+@@ -142,6 +211,8 @@ static constexpr double kMaxVolumePercent = 200.0;
  - (void)setVolume:(double)level;
  - (double)volume;
  - (void)setResizeMode:(int)mode;
-+- (void)setVideoTransformScaleX:(double)scaleX scaleY:(double)scaleY panX:(double)panX panY:(double)panY;
++- (BOOL)setVideoCropLeft:(double)left top:(double)top right:(double)right bottom:(double)bottom;
 +- (NSData *)sampleVideoLuma:(int)maxDimension;
  - (long long)durationMs;
  - (long long)positionMs;
  - (long long)bufferedPositionMs;
-@@ -2287,12 +2339,14 @@ static void nuvioMpvWakeup(void *ctx) {
+@@ -2287,14 +2358,17 @@ static void nuvioMpvWakeup(void *ctx) {
              panscan = @"1.0";
              break;
          case 3:
-+        case 4: // custom stretch: the picture area is then set with setVideoTransform
++        case 4: // custom stretch: the bars are cropped through setVideoCrop
              keepAspect = @"no";
              break;
          default:
              break;
      }
++    BOOL clearCrop = mode != 4;
  
-+    [self setVideoTransformScaleX:1.0 scaleY:1.0 panX:0.0 panY:0.0];
      dispatch_queue_t queue = _mpvEventQueue;
      if (!queue) {
++        if (clearCrop) [self setStringProperty:"video-crop" value:@""];
          [self setStringProperty:"keepaspect" value:keepAspect];
-@@ -2312,6 +2366,46 @@ static void nuvioMpvWakeup(void *ctx) {
+         [self setStringProperty:"panscan" value:panscan];
+         [self setStringProperty:"video-unscaled" value:@"no"];
+@@ -2306,12 +2380,63 @@ static void nuvioMpvWakeup(void *ctx) {
+         if (!mpv) {
+             return;
+         }
++        if (clearCrop) mpv_set_property_string(mpv, "video-crop", "");
+         mpv_set_property_string(mpv, "keepaspect", keepAspect.UTF8String);
+         mpv_set_property_string(mpv, "panscan", panscan.UTF8String);
+         mpv_set_property_string(mpv, "video-unscaled", "no");
      });
  }
  
-+- (void)setVideoTransformScaleX:(double)scaleX scaleY:(double)scaleY panX:(double)panX panY:(double)panY {
-+    if (!_mpv) return;
-+    void (^apply)(void) = ^{
-+        mpv_handle *mpv = self->_mpv;
-+        if (!mpv) return;
-+        double values[4] = {scaleX, scaleY, panX, panY};
-+        const char *names[4] = {"video-scale-x", "video-scale-y", "video-pan-x", "video-pan-y"};
-+        for (int i = 0; i < 4; i++) mpv_set_property(mpv, names[i], MPV_FORMAT_DOUBLE, &values[i]);
-+    };
-+    dispatch_queue_t queue = _mpvEventQueue;
-+    if (queue) {
-+        dispatch_async(queue, apply);
-+    } else {
-+        apply();
++- (BOOL)setVideoCropLeft:(double)left top:(double)top right:(double)right bottom:(double)bottom {
++    mpv_handle *current = _mpv;
++    if (!current) return NO;
++    int64_t width = 0;
++    int64_t height = 0;
++    if (mpv_get_property(current, "video-params/w", MPV_FORMAT_INT64, &width) < 0 ||
++        mpv_get_property(current, "video-params/h", MPV_FORMAT_INT64, &height) < 0 ||
++        width <= 0 || height <= 0) {
++        return NO;
 +    }
++    std::string crop = nuvioVideoCrop(width, height, left, top, right, bottom);
++    dispatch_queue_t queue = _mpvEventQueue;
++    if (!queue) {
++        mpv_set_property_string(current, "video-crop", crop.c_str());
++        return YES;
++    }
++    dispatch_async(queue, ^{
++        mpv_handle *mpv = self->_mpv;
++        if (mpv) mpv_set_property_string(mpv, "video-crop", crop.c_str());
++    });
++    return YES;
 +}
 +
 +- (NSData *)sampleVideoLuma:(int)maxDimension {
@@ -709,10 +809,14 @@ index 1b844c01..c921033b 100644
 +    void (^sample)(void) = ^{
 +        mpv_handle *mpv = self->_mpv;
 +        if (!mpv) return;
++        int64_t sourceWidth = 0;
++        int64_t sourceHeight = 0;
++        mpv_get_property(mpv, "video-params/w", MPV_FORMAT_INT64, &sourceWidth);
++        mpv_get_property(mpv, "video-params/h", MPV_FORMAT_INT64, &sourceHeight);
 +        const char *args[] = {"screenshot-raw", "video", nullptr};
 +        mpv_node result;
 +        if (mpv_command_ret(mpv, args, &result) < 0) return;
-+        ok = nuvioLumaFromScreenshot(result, maxDimension, luma);
++        ok = nuvioLumaFromScreenshot(result, sourceWidth, sourceHeight, maxDimension, luma);
 +        mpv_free_node_contents(&result);
 +    };
 +    dispatch_queue_t queue = _mpvEventQueue;
@@ -728,26 +832,23 @@ index 1b844c01..c921033b 100644
  - (long long)durationMs {
      return (long long)llround(fmax(_cachedDurationSeconds.load(), 0.0) * 1000.0);
  }
-@@ -3495,6 +3589,40 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_volume(
+@@ -3495,6 +3620,37 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_volume(
      return (jfloat)[player volume];
  }
  
-+extern "C" JNIEXPORT void JNICALL
-+Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setVideoTransform(
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setVideoCrop(
 +    JNIEnv * /* env */,
 +    jobject /* bridge */,
 +    jlong handle,
-+    jdouble scaleX,
-+    jdouble scaleY,
-+    jdouble panX,
-+    jdouble panY
++    jdouble left,
++    jdouble top,
++    jdouble right,
++    jdouble bottom
 +) {
-+    if (handle == 0) return;
++    if (handle == 0) return JNI_FALSE;
 +    MpvWebPlayer *player = (__bridge MpvWebPlayer *)(void *)(intptr_t)handle;
-+    // Same path as setResizeMode, so the identity reset there never lands after this transform.
-+    runOnMainAsync(^{
-+        [player setVideoTransformScaleX:scaleX scaleY:scaleY panX:panX panY:panY];
-+    });
++    return [player setVideoCropLeft:left top:top right:right bottom:bottom] ? JNI_TRUE : JNI_FALSE;
 +}
 +
 +extern "C" JNIEXPORT jbyteArray JNICALL
@@ -770,7 +871,7 @@ index 1b844c01..c921033b 100644
  Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setResizeMode(
      JNIEnv * /* env */,
 diff --git a/composeApp/src/desktopMain/native/windows/player_bridge.cpp b/composeApp/src/desktopMain/native/windows/player_bridge.cpp
-index 253de5dc..0d7fe67f 100644
+index 253de5dc..acc11a37 100644
 --- a/composeApp/src/desktopMain/native/windows/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/windows/player_bridge.cpp
 @@ -18,6 +18,7 @@
@@ -817,13 +918,29 @@ index 253de5dc..0d7fe67f 100644
  typedef enum mpv_event_id {
      MPV_EVENT_NONE = 0,
      MPV_EVENT_SHUTDOWN = 1,
-@@ -625,6 +653,72 @@ MpvApi &mpvApi() {
+@@ -625,6 +653,90 @@ MpvApi &mpvApi() {
      return api;
  }
  
++// Custom Stretch: mpv video-crop value for a picture area given as frame fractions, in source
++// pixels. mpv ignores video-zoom/scale/pan with keepaspect=no, so the black bars are cropped
++// and keepaspect=no stretches the rest. Edges are rounded outward so no picture is lost.
++// Returns "" (no crop) for the whole frame.
++std::string nuvioVideoCrop(int64_t width, int64_t height, double left, double top, double right, double bottom) {
++    if (width <= 0 || height <= 0) return "";
++    int64_t x0 = std::max<int64_t>(0, std::min<int64_t>(width - 1, static_cast<int64_t>(std::floor(left * width))));
++    int64_t y0 = std::max<int64_t>(0, std::min<int64_t>(height - 1, static_cast<int64_t>(std::floor(top * height))));
++    int64_t x1 = std::max<int64_t>(x0 + 1, std::min<int64_t>(width, static_cast<int64_t>(std::ceil(right * width))));
++    int64_t y1 = std::max<int64_t>(y0 + 1, std::min<int64_t>(height, static_cast<int64_t>(std::ceil(bottom * height))));
++    if (x0 == 0 && y0 == 0 && x1 == width && y1 == height) return "";
++    return std::to_string(x1 - x0) + "x" + std::to_string(y1 - y0) + "+" + std::to_string(x0) + "+" + std::to_string(y0);
++}
++
 +// Custom Stretch: downscale a screenshot-raw result (bgr0) to luma for black bar detection.
-+// Output layout: width and height as little-endian uint16, then width * height luma bytes.
-+bool nuvioLumaFromScreenshot(const mpv_node &result, int maxDimension, std::vector<uint8_t> &out) {
++// Output layout: width and height as little-endian uint16, a flag byte (1 when the screenshot is
++// only the video-crop region, i.e. smaller than the source), then width * height luma bytes.
++bool nuvioLumaFromScreenshot(const mpv_node &result, int64_t sourceWidth, int64_t sourceHeight,
++                                    int maxDimension, std::vector<uint8_t> &out) {
 +    if (result.format != MPV_FORMAT_NODE_MAP || !result.u.list || maxDimension <= 0) return false;
 +    int64_t width = 0, height = 0, stride = 0;
 +    const char *format = "bgr0";
@@ -847,21 +964,23 @@ index 253de5dc..0d7fe67f 100644
 +        pixelBytes < static_cast<size_t>(stride * height)) {
 +        return false;
 +    }
++    bool cropped = sourceWidth > 0 && sourceHeight > 0 && (width != sourceWidth || height != sourceHeight);
 +    double scale = std::min(1.0, static_cast<double>(maxDimension) / static_cast<double>(std::max(width, height)));
 +    int outWidth = std::max(8, static_cast<int>(std::lround(static_cast<double>(width) * scale)));
 +    int outHeight = std::max(8, static_cast<int>(std::lround(static_cast<double>(height) * scale)));
-+    out.assign(4 + static_cast<size_t>(outWidth) * outHeight, 0);
++    out.assign(5 + static_cast<size_t>(outWidth) * outHeight, 0);
 +    out[0] = static_cast<uint8_t>(outWidth & 0xFF);
 +    out[1] = static_cast<uint8_t>((outWidth >> 8) & 0xFF);
 +    out[2] = static_cast<uint8_t>(outHeight & 0xFF);
 +    out[3] = static_cast<uint8_t>((outHeight >> 8) & 0xFF);
++    out[4] = cropped ? 1 : 0;
 +    for (int y = 0; y < outHeight; y++) {
 +        int64_t sourceY = std::min<int64_t>(height - 1, (y * height + height / 2) / outHeight);
 +        const uint8_t *row = pixels + sourceY * stride;
 +        for (int x = 0; x < outWidth; x++) {
 +            int64_t sourceX = std::min<int64_t>(width - 1, (x * width + width / 2) / outWidth);
 +            const uint8_t *pixel = row + sourceX * 4;
-+            out[4 + static_cast<size_t>(y) * outWidth + x] =
++            out[5 + static_cast<size_t>(y) * outWidth + x] =
 +                static_cast<uint8_t>((pixel[2] * 77 + pixel[1] * 150 + pixel[0] * 29) >> 8);
 +        }
 +    }
@@ -890,16 +1009,16 @@ index 253de5dc..0d7fe67f 100644
  class WindowsMpvWebPlayer;
  LRESULT CALLBACK messageWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
  LRESULT CALLBACK containerWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
-@@ -1164,6 +1258,8 @@ public:
+@@ -1164,6 +1276,8 @@ public:
      }
  
      void setResizeMode(int mode) {
-+        // 4 = custom stretch: like 3, the picture area is then set with setVideoTransform
-+        setVideoTransform(1.0, 1.0, 0.0, 0.0);
++        // 4 = custom stretch: like 3, with the bars cropped through setVideoCrop
++        if (mode != 4) setStringProperty("video-crop", "");
          switch (mode) {
              case 1:
              case 2:
-@@ -1172,6 +1268,7 @@ public:
+@@ -1172,6 +1286,7 @@ public:
                  setStringProperty("video-unscaled", "no");
                  break;
              case 3:
@@ -907,16 +1026,25 @@ index 253de5dc..0d7fe67f 100644
                  setStringProperty("keepaspect", "no");
                  setStringProperty("panscan", "0.0");
                  setStringProperty("video-unscaled", "no");
-@@ -1184,6 +1281,28 @@ public:
+@@ -1184,6 +1299,39 @@ public:
          }
      }
  
-+    void setVideoTransform(double scaleX, double scaleY, double panX, double panY) {
++    int64_t int64PropertyLocked(const char *name) {
++        int64_t value = 0;
++        if (mpvApi().getProperty(mpv, name, MPV_FORMAT_INT64, &value) < 0) return 0;
++        return value;
++    }
++
++    bool setVideoCrop(double left, double top, double right, double bottom) {
 +        std::lock_guard<std::mutex> lock(mpvMutex);
-+        if (!mpv) return;
-+        double values[4] = {scaleX, scaleY, panX, panY};
-+        const char *names[4] = {"video-scale-x", "video-scale-y", "video-pan-x", "video-pan-y"};
-+        for (int i = 0; i < 4; i++) mpvApi().setProperty(mpv, names[i], MPV_FORMAT_DOUBLE, &values[i]);
++        if (!mpv) return false;
++        int64_t width = int64PropertyLocked("video-params/w");
++        int64_t height = int64PropertyLocked("video-params/h");
++        if (width <= 0 || height <= 0) return false;
++        std::string crop = nuvioVideoCrop(width, height, left, top, right, bottom);
++        mpvApi().setPropertyString(mpv, "video-crop", crop.c_str());
++        return true;
 +    }
 +
 +    bool sampleVideoLuma(int maxDimension, std::vector<uint8_t> &out) {
@@ -925,10 +1053,12 @@ index 253de5dc..0d7fe67f 100644
 +        if (!resolveScreenshotApi(commandRet, freeNode)) return false;
 +        std::lock_guard<std::mutex> lock(mpvMutex);
 +        if (!mpv) return false;
++        int64_t sourceWidth = int64PropertyLocked("video-params/w");
++        int64_t sourceHeight = int64PropertyLocked("video-params/h");
 +        const char *args[] = {"screenshot-raw", "video", nullptr};
 +        mpv_node result;
 +        if (commandRet(mpv, args, &result) < 0) return false;
-+        bool ok = nuvioLumaFromScreenshot(result, maxDimension, out);
++        bool ok = nuvioLumaFromScreenshot(result, sourceWidth, sourceHeight, maxDimension, out);
 +        freeNode(&result);
 +        return ok;
 +    }
@@ -936,15 +1066,15 @@ index 253de5dc..0d7fe67f 100644
      long long durationMs() {
          return (long long)std::llround(doubleProperty("duration", 0.0) * 1000.0);
      }
-@@ -2857,6 +2976,24 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setResizeMode(JNIE
+@@ -2857,6 +3005,24 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setResizeMode(JNIE
      if (player) player->setResizeMode(mode);
  }
  
-+extern "C" JNIEXPORT void JNICALL
-+Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setVideoTransform(
-+    JNIEnv *, jobject, jlong handle, jdouble scaleX, jdouble scaleY, jdouble panX, jdouble panY) {
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setVideoCrop(
++    JNIEnv *, jobject, jlong handle, jdouble left, jdouble top, jdouble right, jdouble bottom) {
 +    auto player = playerFromHandle(handle);
-+    if (player) player->setVideoTransform(scaleX, scaleY, panX, panY);
++    return player && player->setVideoCrop(left, top, right, bottom) ? JNI_TRUE : JNI_FALSE;
 +}
 +
 +extern "C" JNIEXPORT jbyteArray JNICALL
