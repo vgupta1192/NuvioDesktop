@@ -74,7 +74,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RT='composeApp/src/desktopMain/native/macos/runtime/**'
+          # Gradle bundles only the runner's own arch folder (arm64 on macos-latest)
+          ARCH_DIR="composeApp/src/desktopMain/native/macos/runtime/$(uname -m)"
+          RT="$ARCH_DIR/**"
           if git lfs pull --include "$RT"; then echo "LFS runtime fetched"; exit 0; fi
           echo "::warning::upstream Git LFS unavailable; reusing the libmpv runtime from the last fork macOS build"
           TAG=$(gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json tagName -q '.[].tagName' | grep '^desktop-jellyfin-livetv-mac-' | grep -v debug | head -1)
@@ -90,7 +92,7 @@ jobs:
           done
           hdiutil detach /tmp/prev-dmg -force
           if [ "$MISSING" != 0 ]; then echo "::error::previous fork build lacks some runtime dylibs"; exit 1; fi
-          if grep -rl 'git-lfs.github.com/spec' composeApp/src/desktopMain/native/macos/runtime; then echo "::error::LFS pointer files left"; exit 1; fi
+          if grep -rl 'git-lfs.github.com/spec' "$ARCH_DIR"; then echo "::error::LFS pointer files left"; exit 1; fi
           echo "runtime restored from $TAG"
 
       - uses: actions/setup-java@v4
