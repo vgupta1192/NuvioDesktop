@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeCatalogDefinitions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeCatalogDefinitions.kt
-index f4e50dd7..5bc1703d 100644
+index d459c358..23b4e2d0 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeCatalogDefinitions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeCatalogDefinitions.kt
-@@ -47,6 +47,7 @@ fun buildHomeCatalogDefinitions(addons: List<ManagedAddon>): List<HomeCatalogDef
+@@ -49,6 +49,7 @@ fun buildHomeCatalogDefinitions(addons: List<ManagedAddon>): List<HomeCatalogDef
      }.flatMap { (addon, manifest) ->
          manifest.catalogs
              .filter { catalog -> catalog.extra.none { it.isRequired } }
@@ -37,10 +37,10 @@ index f38d5cd7..755bd891 100644
 +    )
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
-index fddc9b29..d7c59dc4 100644
+index 5d87d88c..fb4dec5d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
-@@ -111,7 +111,10 @@ fun LibraryScreen(
+@@ -121,7 +121,10 @@ fun LibraryScreen(
      val uiState by remember {
          LibraryRepository.ensureLoaded()
          LibraryRepository.uiState
@@ -49,9 +49,9 @@ index fddc9b29..d7c59dc4 100644
 +        // Live TV channels belong to the Live TV screen, not the Library
 +        remember { androidx.compose.runtime.derivedStateOf { state.value.withoutLiveTvItems() } }
 +    }
-     val cloudUiState by CloudLibraryRepository.uiState.collectAsStateWithLifecycle()
-     val cloudSettings by remember {
-         DebridSettingsRepository.ensureLoaded()
+     val libraryPosterPattern by remember {
+         CustomPosterUrlRepository.ensureLoaded()
+         CustomPosterUrlRepository.pattern
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
 index a7c0c83e..66cac7fa 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
@@ -157,10 +157,10 @@ index 86d3cf6e..5f9232ef 100644
      private fun loadSet(key: String): Set<String>? =
          LiveTvStorage.loadString(key)?.split('\n')?.filter { it.isNotBlank() }?.toSet()
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
-index f6a7ad6b..07e0d2ae 100644
+index 182e6308..ded9279d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
-@@ -407,6 +407,7 @@ object SearchRepository {
+@@ -439,6 +439,7 @@ object SearchRepository {
          }.flatMap { (addon, manifest) ->
              manifest.catalogs
                  .filter { catalog -> catalog.supportsSearch() }
@@ -168,7 +168,7 @@ index f6a7ad6b..07e0d2ae 100644
                  .map { catalog ->
                      SearchCatalogRequest(
                          addon = addon,
-@@ -426,6 +427,7 @@ object SearchRepository {
+@@ -458,6 +459,7 @@ object SearchRepository {
          }.flatMap { (addon, manifest) ->
              manifest.catalogs
                  .filter { catalog -> catalog.supportsDiscover() }
@@ -177,10 +177,10 @@ index f6a7ad6b..07e0d2ae 100644
                      val genreExtra = catalog.genreExtra()
                      DiscoverCatalogOption(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-index b88346f3..b4cfa714 100644
+index 2b861b65..d82c2b79 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-@@ -1238,6 +1238,13 @@ object WatchProgressRepository {
+@@ -1255,6 +1255,13 @@ object WatchProgressRepository {
          persist: Boolean,
          syncRemote: Boolean,
      ) {

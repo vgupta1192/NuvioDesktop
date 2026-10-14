@@ -46,20 +46,22 @@ index 00000000..81353c9e
 +    val name: String? = null,
 +)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
-index fe40e401..c45795e6 100644
+index cdd759d6..b9c288cb 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
-@@ -139,7 +139,8 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded(): Bool
+@@ -139,7 +139,10 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded(): Bool
                      selectedAddonSubtitleId = preference.addonSubtitleId ?: persistedUrl
                      selectedSubtitleIndex = -1
                      useCustomSubtitles = true
--                    playerController?.setSubtitleUri(persistedUrl)
-+                    val autoSync = playerController as? AutoSyncPlayerController
-+                    if (autoSync != null) autoSync.setSubtitleUriWithAutoSync(persistedUrl) else playerController?.setSubtitleUri(persistedUrl)
+-                    if (!maybeAutoSyncRestoredSubtitleAtStart(persistedUrl)) {
++                    val autoSync = playerController as? AutoSyncPlayerController // desktop libmpv AutoSync
++                    if (autoSync != null) {
++                        autoSync.setSubtitleUriWithAutoSync(persistedUrl)
++                    } else if (!maybeAutoSyncRestoredSubtitleAtStart(persistedUrl)) {
+                         playerController?.setSubtitleUri(persistedUrl)
+                     }
                      preferredSubtitleSelectionApplied = true
-                     isUserExplicitSubtitleSelection = true
-                 } else if (belongsToCurrentItem) {
-@@ -159,7 +160,8 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded(): Bool
+@@ -161,7 +164,8 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded(): Bool
                          selectedAddonSubtitleId = subtitle.selectionKey
                          selectedSubtitleIndex = -1
                          useCustomSubtitles = true
@@ -69,17 +71,19 @@ index fe40e401..c45795e6 100644
                          preferredSubtitleSelectionApplied = true
                          isUserExplicitSubtitleSelection = true
                      } else {
-@@ -293,7 +295,8 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+@@ -295,7 +299,10 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
                  selectedAddonSubtitleId = primaryAddonMatch.selectionKey
                  selectedSubtitleIndex = -1
                  useCustomSubtitles = true
--                playerController?.setSubtitleUri(primaryAddonMatch.url)
-+                val autoSync = playerController as? AutoSyncPlayerController
-+                if (autoSync != null) autoSync.setSubtitleUriWithAutoSync(primaryAddonMatch.url) else playerController?.setSubtitleUri(primaryAddonMatch.url)
+-                if (!maybeAutoSyncPreferredSubtitleAtStart(primaryAddonMatch)) { // AutoSync hook
++                val autoSync = playerController as? AutoSyncPlayerController // desktop libmpv AutoSync
++                if (autoSync != null) {
++                    autoSync.setSubtitleUriWithAutoSync(primaryAddonMatch.url)
++                } else if (!maybeAutoSyncPreferredSubtitleAtStart(primaryAddonMatch)) { // AutoSync hook
+                     playerController?.setSubtitleUri(primaryAddonMatch.url)
+                 }
                  return
-             }
-         }
-@@ -335,7 +338,8 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+@@ -339,7 +346,8 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
              selectedAddonSubtitleId = forcedAddonMatch.selectionKey
              selectedSubtitleIndex = -1
              useCustomSubtitles = true
@@ -89,21 +93,23 @@ index fe40e401..c45795e6 100644
          } else {
              disableAutomaticSubtitleSelection()
          }
-@@ -373,7 +377,8 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+@@ -378,7 +386,10 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
          selectedAddonSubtitleId = addonMatch.selectionKey
          selectedSubtitleIndex = -1
          useCustomSubtitles = true
--        playerController?.setSubtitleUri(addonMatch.url)
-+        val autoSync = playerController as? AutoSyncPlayerController
-+        if (autoSync != null) autoSync.setSubtitleUriWithAutoSync(addonMatch.url) else playerController?.setSubtitleUri(addonMatch.url)
+-        if (!maybeAutoSyncPreferredSubtitleAtStart(addonMatch)) { // AutoSync hook
++        val autoSync = playerController as? AutoSyncPlayerController // desktop libmpv AutoSync
++        if (autoSync != null) {
++            autoSync.setSubtitleUriWithAutoSync(addonMatch.url)
++        } else if (!maybeAutoSyncPreferredSubtitleAtStart(addonMatch)) { // AutoSync hook
+             playerController?.setSubtitleUri(addonMatch.url)
+         }
      } else if (!preferredSubtitleSelectionApplied) {
-         disableAutomaticSubtitleSelection()
-         preferredSubtitleSelectionApplied = true
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 666bf407..a5cc4c51 100644
+index d6b0b403..1c00be2e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -539,6 +539,15 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -543,6 +543,15 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                      playerController = controller.takeIf { sourceAvailable }
                      playerLifecycleController = controller
                      playerControllerSourceUrl = surfaceSource?.sourceUrl
@@ -119,7 +125,7 @@ index 666bf407..a5cc4c51 100644
                  },
                  onSnapshot = { snapshot ->
                      if (!updatePlaybackSnapshot(snapshot)) return@PlatformPlayerSurface
-@@ -1041,7 +1050,8 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
+@@ -1045,7 +1054,8 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
              selectedSubtitleIndex = -1
              useCustomSubtitles = true
              persistAddonSubtitlePreference(addon)
@@ -129,13 +135,13 @@ index 666bf407..a5cc4c51 100644
          }
          "subtitleDelayDelta" -> setSubtitleDelay((subtitleDelayMs + value.toInt()).coerceIn(SUBTITLE_DELAY_MIN_MS, SUBTITLE_DELAY_MAX_MS))
          "subtitleDelayReset" -> setSubtitleDelay(0)
-@@ -1800,7 +1810,8 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+@@ -1804,7 +1814,8 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
              useCustomSubtitles = true
              preferredSubtitleSelectionApplied = true
              persistAddonSubtitlePreference(addon)
--            playerController?.setSubtitleUri(addon.url)
-+            val autoSync = playerController as? AutoSyncPlayerController
-+            if (autoSync != null) autoSync.setSubtitleUriWithSelectedAutoSync(addon.url) else playerController?.setSubtitleUri(addon.url)
+-            attachSelectedAddonSubtitleWithAutoSync(addon.url) // AutoSync hook
++            val autoSync = playerController as? AutoSyncPlayerController // desktop libmpv AutoSync
++            if (autoSync != null) autoSync.setSubtitleUriWithSelectedAutoSync(addon.url) else attachSelectedAddonSubtitleWithAutoSync(addon.url) // AutoSync hook
              if (hasBurnedInServerSubtitle) clearServerSubtitleTrack()
          },
          onFetchAddonSubtitles = { fetchAddonSubtitlesForActiveItem() },
@@ -156,10 +162,10 @@ index 00000000..55b1734e
 +@Composable
 +internal expect fun AutoSyncSettingsContent(enabled: Boolean, isTablet: Boolean)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index 56d83ea0..2650357a 100644
+index c8d3188d..d84127f7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -616,6 +616,16 @@ private fun PlaybackSettingsSection(
+@@ -624,6 +624,16 @@ private fun PlaybackSettingsSection(
              }
          }
  

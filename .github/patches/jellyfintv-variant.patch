@@ -1,8 +1,8 @@
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index 8a4f2646..5044ce4b 100644
+index 5b8c7850..651a2388 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
-@@ -1336,7 +1336,7 @@ compose.desktop {
+@@ -1277,7 +1277,7 @@ compose.desktop {
  
          nativeDistributions {
              targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
@@ -11,7 +11,7 @@ index 8a4f2646..5044ce4b 100644
              packageVersion = desktopReleasePackageVersion
              vendor = "Nuvio Media"
              if (isMacHost) {
-@@ -1351,7 +1351,7 @@ compose.desktop {
+@@ -1292,7 +1292,7 @@ compose.desktop {
                  "jdk.unsupported",
              )
              macOS {
@@ -20,7 +20,7 @@ index 8a4f2646..5044ce4b 100644
                  iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.icns"))
                  infoPlist {
                      extraKeysRawXml = """
-@@ -1359,10 +1359,10 @@ compose.desktop {
+@@ -1300,10 +1300,10 @@ compose.desktop {
                          <array>
                              <dict>
                                  <key>CFBundleURLName</key>
@@ -33,7 +33,7 @@ index 8a4f2646..5044ce4b 100644
                                  </array>
                              </dict>
                          </array>
-@@ -1413,8 +1413,8 @@ fun renameMacosDmgOutput(release: Boolean) {
+@@ -1354,8 +1354,8 @@ fun renameMacosDmgOutput(release: Boolean) {
  
      val distributionName = if (release) "main-release" else "main"
      val outputDir = layout.buildDirectory.dir("compose/binaries/$distributionName/dmg").get().asFile
@@ -44,7 +44,7 @@ index 8a4f2646..5044ce4b 100644
      val sourceDmg = defaultDmg.takeIf { it.exists() }
          ?: finalDmg.takeIf { it.exists() }
          ?: error("Expected macOS DMG output in ${outputDir.absolutePath}")
-@@ -1718,8 +1718,8 @@ if (isMacHost) {
+@@ -1659,8 +1659,8 @@ if (isMacHost) {
          dependsOn("packageReleaseDmg")
          dmgDir.set(layout.buildDirectory.dir("compose/binaries/main-release/dmg"))
          artifactDir.set(layout.buildDirectory.dir("compose/release-dmgs"))
@@ -56,7 +56,7 @@ index 8a4f2646..5044ce4b 100644
          keychainPath.set(macosNotaryKeychainPath.orEmpty())
          signingIdentity.set(macosSigningIdentity.orEmpty())
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-index c6fa4849..a1d3f24f 100644
+index c6fa4849..7bc0c1de 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 @@ -128,7 +128,7 @@ fun main(args: Array<String>) {
@@ -109,7 +109,7 @@ index 6cfe8951..ac3897bd 100644
          }
      }
 diff --git a/scripts/linux/linux-shortcut-definition.sh b/scripts/linux/linux-shortcut-definition.sh
-index 172e1e41..cbbcbb88 100644
+index 172e1e41..04ccf53b 100644
 --- a/scripts/linux/linux-shortcut-definition.sh
 +++ b/scripts/linux/linux-shortcut-definition.sh
 @@ -1,12 +1,12 @@

@@ -2185,10 +2185,10 @@ index 00000000..76e8719b
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
-index d40ef0fc..f1fd4432 100644
+index ded9279d..57bea73c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
-@@ -21,6 +21,7 @@ import com.nuvio.app.features.catalog.nextCatalogPaginationState
+@@ -22,6 +22,7 @@ import com.nuvio.app.features.catalog.nextCatalogPaginationState
  import com.nuvio.app.features.catalog.supportsPagination
  import com.nuvio.app.features.home.HomeCatalogSettingsRepository
  import com.nuvio.app.features.home.HomeCatalogSection
@@ -2196,40 +2196,40 @@ index d40ef0fc..f1fd4432 100644
  import com.nuvio.app.features.home.MetaPreview
  import com.nuvio.app.features.home.filterReleasedItems
  import com.nuvio.app.core.poster.withCustomPosterUrls
-@@ -90,7 +91,10 @@ object SearchRepository {
+@@ -91,7 +92,10 @@ object SearchRepository {
          val addonManifestErrorMessage = enabledAddons.firstEnabledManifestError()
          val activeAddons = enabledAddons.filter { it.manifest != null }
-         val serverLibraries = ServerCatalog.titleLibraries()
--        if (activeAddons.isEmpty() && serverLibraries.isEmpty()) {
+         val serverSearches = ServerCatalog.searchTargets()
+-        if (activeAddons.isEmpty() && serverSearches.isEmpty()) {
 +        // Jellyfin fork feature: the user's Jellyfin server is a search source of its own, so a
 +        // signed-in Jellyfin session keeps search alive even with no addons installed.
 +        val jellyfinSearch = JellyfinRepository.hasSession
-+        if (activeAddons.isEmpty() && serverLibraries.isEmpty() && !jellyfinSearch) {
++        if (activeAddons.isEmpty() && serverSearches.isEmpty() && !jellyfinSearch) {
              activeJob?.cancel()
              lastRequestKey = null
              _uiState.value = SearchUiState(
-@@ -109,7 +113,7 @@ object SearchRepository {
+@@ -110,7 +114,7 @@ object SearchRepository {
              addons = activeAddons,
              query = normalizedQuery,
          )
--        if (requests.isEmpty() && serverLibraries.isEmpty()) {
-+        if (requests.isEmpty() && serverLibraries.isEmpty() && !jellyfinSearch) {
+-        if (requests.isEmpty() && serverSearches.isEmpty()) {
++        if (requests.isEmpty() && serverSearches.isEmpty() && !jellyfinSearch) {
              activeJob?.cancel()
              lastRequestKey = null
              _uiState.value = SearchUiState(
-@@ -132,8 +136,10 @@ object SearchRepository {
-                 },
-             )
-             serverLibraries.forEach { ref -> append("|server:${ref.connection.id}:${ref.library.id}") }
+@@ -136,8 +140,10 @@ object SearchRepository {
+                 append("|server:${ref.connection.id}:${ref.kind.contentType}:")
+                 append(ref.connection.selectedLibraries(ref.kind).joinToString(",") { it.id })
+             }
 +            append('|')
 +            append(JellyfinRepository.sessionKey.orEmpty())
          }
 -        val loaders: List<suspend () -> HomeCatalogSection> =
 +        val loaders: List<suspend () -> HomeCatalogSection?> =
              requests.map { request -> suspend { request.toSection(forceRefresh = forceRefresh) } } +
-                 serverLibraries.map { ref ->
+                 serverSearches.map { ref ->
                      suspend {
-@@ -143,6 +149,11 @@ object SearchRepository {
+@@ -147,6 +153,11 @@ object SearchRepository {
                              }
                          }
                      }
