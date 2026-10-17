@@ -188,6 +188,19 @@ jobs:
           set -o pipefail
           ./gradlew :composeApp:packageReleaseDmg --no-configuration-cache --stacktrace 2>&1 | tee build-log-macos.txt
 
+      # Kotlin compile errors are not visible in check annotations (unlike the TV fork),
+      # and the ci-debug-logs asset can lag; surface them directly so a failing build
+      # is diagnosable from the anonymous annotations API.
+      - name: Surface Kotlin compile errors
+        if: failure()
+        run: |
+          grep -h "^e: " build-log-macos.txt 2>/dev/null | head -40 | while IFS= read -r line; do
+            echo "::error::${line#e: }"
+          done
+          grep -h "Caused by:\|Unresolved reference" build-log-macos.txt 2>/dev/null | head -10 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+
       - name: Verify native player libraries inside dmg
         if: steps.ver.outputs.should_build == 'true'
         run: |
@@ -429,6 +442,16 @@ jobs:
           DEB=$(find composeApp/build/compose/binaries -name "*.deb" | head -1)
           echo "deb: $DEB"
           test -n "$DEB" && cp "$DEB" "./NuvioJellyfinTV-${{ steps.ver.outputs.ver }}-b${{ github.run_number }}.deb"
+
+      - name: Surface Kotlin compile errors
+        if: failure()
+        run: |
+          grep -h "^e: " build-log-linux.txt 2>/dev/null | head -40 | while IFS= read -r line; do
+            echo "::error::${line#e: }"
+          done
+          grep -h "Caused by:\|Unresolved reference" build-log-linux.txt 2>/dev/null | head -10 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
 
       - name: Upload artifacts
         if: steps.ver.outputs.should_build == 'true'
