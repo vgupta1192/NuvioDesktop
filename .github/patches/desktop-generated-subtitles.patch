@@ -429,10 +429,10 @@ index a1f0b278a..044276a52 100644
          // Add-ons can finish after Nuvio has completed its first track scan with no subtitle.
          // Retry that automatic pick only for AutoSync, while the user still has no selection.
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
-index b9c288cb6..54fab4e7d 100644
+index b9c288cb6..b586b6768 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
-@@ -22,10 +22,12 @@ internal val PlayerScreenRuntime.visibleAddonSubtitles: List<AddonSubtitle>
+@@ -22,10 +22,28 @@ internal val PlayerScreenRuntime.visibleAddonSubtitles: List<AddonSubtitle>
              subtitles = addonSubtitles,
              settings = playerSettingsUiState,
          )
@@ -446,9 +446,84 @@ index b9c288cb6..54fab4e7d 100644
 +        }
 +        val selectedSub = addonSubtitles.findSelectedAddon(selectedId) ?: return GeneratedSubtitles.withEntry(filtered)
 +        return GeneratedSubtitles.withEntry(listOf(selectedSub) + filtered)
++    }
++
++/**
++ * The addon subtitles Nuvio may pick on its own. The generated subtitle joins them as the user
++ * chose: "always" puts it first; "when none found" keeps it last (any real subtitle in the
++ * language wins) and only once the real ones have loaded; otherwise it is left out.
++ */
++private val PlayerScreenRuntime.addonSubtitlesForAutoPick: List<AddonSubtitle>
++    get() = when (GeneratedSubtitles.mode.value) {
++        GeneratedSubtitles.MODE_ALWAYS -> addonSubtitles.sortedBy { !GeneratedSubtitles.isGenerated(it.url) }
++        GeneratedSubtitles.MODE_MISSING -> if (isLoadingAddonSubtitles) {
++            addonSubtitles.filterNot { GeneratedSubtitles.isGenerated(it.url) }
++        } else {
++            addonSubtitles
++        }
++        else -> addonSubtitles.filterNot { GeneratedSubtitles.isGenerated(it.url) }
      }
  
  internal val PlayerScreenRuntime.selectedAddonSubtitle: AddonSubtitle?
+@@ -247,7 +265,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+         val isPrimarySatisfied = primaryTarget != null && currentSelectedLang != null &&
+             SubtitleLanguageMatching.matchesLanguageCode(currentSelectedLang, primaryTarget)
+         val hasBetterAddonMatch = !isPrimarySatisfied && primaryTarget != null &&
+-            addonSubtitles.any { SubtitleLanguageMatching.matchesLanguageCode(it.language, primaryTarget) }
++            addonSubtitlesForAutoPick.any { SubtitleLanguageMatching.matchesLanguageCode(it.language, primaryTarget) }
+         if (!hasBetterAddonMatch) return
+     }
+ 
+@@ -291,7 +309,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+             return
+         }
+         if (matchedTargetPosition > 0 && !isLoadingAddonSubtitles) {
+-            val primaryAddonMatch = addonSubtitles.firstOrNull { subtitle ->
++            val primaryAddonMatch = addonSubtitlesForAutoPick.firstOrNull { subtitle ->
+                 SubtitleLanguageMatching.matchesLanguageCode(subtitle.language, selectionPlan.targets.first())
+             }
+             if (primaryAddonMatch != null) {
+@@ -333,7 +351,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+             return
+         }
+         val forcedAddonMatch = if (selectedAudioTrack != null) {
+-            addonSubtitles.firstOrNull { subtitle ->
++            addonSubtitlesForAutoPick.firstOrNull { subtitle ->
+                 addonSubtitleIsForced(subtitle) &&
+                     addonSubtitleMatchesLanguage(subtitle, requiredForcedTarget) &&
+                     addonSubtitleMatchesSelectedAudioLanguage(subtitle, selectedAudioTrack)
+@@ -376,7 +394,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+     if (playbackSnapshot.isLoading) return
+ 
+     val addonMatch = selectionPlan.targets.firstNotNullOfOrNull { target ->
+-        addonSubtitles.firstOrNull { subtitle ->
++        addonSubtitlesForAutoPick.firstOrNull { subtitle ->
+             (!subtitleStyle.useForcedSubtitles || !addonSubtitleIsForced(subtitle)) &&
+                 SubtitleLanguageMatching.matchesLanguageCode(subtitle.language, target)
+         }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.kt
+new file mode 100644
+index 000000000..ba2e02e52
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.kt
+@@ -0,0 +1,17 @@
++package com.nuvio.app.features.player
++
++import androidx.compose.runtime.Composable
++
++/**
++ * User-supplied subtitle font. [fontName] is null while the built-in font is used.
++ * Platforms that cannot import fonts return null from [rememberSubtitleFontPicker].
++ */
++class SubtitleFontPickerState(
++    val fontName: String?,
++    val isImporting: Boolean,
++    val pick: () -> Unit,
++    val reset: () -> Unit,
++)
++
++@Composable
++expect fun rememberSubtitleFontPicker(): SubtitleFontPickerState?
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
 new file mode 100644
 index 000000000..d3f4225c5
@@ -655,18 +730,79 @@ index 000000000..d3f4225c5
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index 855bc3004..8a71acbb8 100644
+index 855bc3004..8fe762aeb 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -583,6 +583,8 @@ private fun PlaybackSettingsSection(
+@@ -583,6 +583,10 @@ private fun PlaybackSettingsSection(
                      )
                  }
                  SettingsGroupDivider(isTablet = isTablet)
 +                GeneratedSubtitleSettingsRows(isTablet = isTablet) // Generated subtitles hook
 +                SettingsGroupDivider(isTablet = isTablet)
++                SubtitleFontSettingsSection(isTablet = isTablet) // Nuvio fork: custom subtitle font
++                SettingsGroupDivider(isTablet = isTablet)
                  SettingsSwitchRow(
                      title = stringResource(Res.string.settings_playback_subtitle_strip_sdh),
                      description = stringResource(Res.string.settings_playback_subtitle_strip_sdh_description),
+@@ -634,10 +638,6 @@ private fun PlaybackSettingsSection(
+             )
+         }
+ 
+-        SeekPreviewSettingsSection(isTablet = isTablet) // Seek previews hook
+-
+-        SeekPreviewSettingsSection(isTablet = isTablet) // Seek previews hook
+-
+         SettingsSection(
+             title = stringResource(Res.string.settings_playback_section_subtitle_rendering),
+             isTablet = isTablet,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SubtitleFontSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SubtitleFontSettings.kt
+new file mode 100644
+index 000000000..e190153e8
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SubtitleFontSettings.kt
+@@ -0,0 +1,42 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import com.nuvio.app.features.player.rememberSubtitleFontPicker
++
++/**
++ * Nuvio fork (ported from NuvioMobile-Reshaped): import a TTF/OTF font for subtitles, used by
++ * ExoPlayer and libmpv. Hidden where fonts can't be imported (iOS).
++ */
++@Composable
++internal fun SubtitleFontSettingsSection(isTablet: Boolean) {
++    val picker = rememberSubtitleFontPicker() ?: return
++    SettingsSection(
++        title = "Subtitle font",
++        isTablet = isTablet,
++    ) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsNavigationRow(
++                title = "Subtitle font",
++                description = when {
++                    picker.isImporting -> "Importing font…"
++                    picker.fontName != null -> picker.fontName
++                    else -> "Default. Tap to import a .ttf or .otf file"
++                },
++                enabled = !picker.isImporting,
++                isTablet = isTablet,
++                trailingContent = if (picker.fontName != null) {
++                    {
++                        TextButton(onClick = picker.reset) {
++                            Text("Reset")
++                        }
++                    }
++                } else {
++                    null
++                },
++                onClick = picker.pick,
++            )
++        }
++    }
++}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 index d61c6d1bf..3299dbe87 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
@@ -679,6 +815,260 @@ index d61c6d1bf..3299dbe87 100644
      configureLinuxSwingGlobalsBeforeAwt()
      installDesktopOpenUriHandler()
      handleDesktopLaunchArgs(args)
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/NativePlayerBridgeSubtitleFont.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/NativePlayerBridgeSubtitleFont.kt
+new file mode 100644
+index 000000000..8d879a600
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/NativePlayerBridgeSubtitleFont.kt
+@@ -0,0 +1,28 @@
++package com.nuvio.app.features.player
++
++import com.nuvio.app.features.player.desktop.NativePlayerBridge
++
++/**
++ * Applies the user-imported subtitle font to the live native mpv instance. sub-fonts-dir must
++ * be set before libass initialises, so the controller also re-applies both options on every
++ * attach - the calls are idempotent and cheap.
++ */
++internal object NativePlayerBridgeSubtitleFont {
++    @Volatile var activeHandle: Long = 0
++
++    fun applyToPlayer() {
++        val handle = activeHandle
++        if (handle == 0L) return
++        runCatching {
++            val font = SubtitleFontStore.current()
++            NativePlayerBridge.command(
++                handle,
++                arrayOf("set", "sub-fonts-dir", SubtitleFontStore.fontsDir().absolutePath),
++            )
++            NativePlayerBridge.command(
++                handle,
++                arrayOf("set", "sub-font", font?.familyName ?: "sans-serif"),
++            )
++        }
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.desktop.kt
+new file mode 100644
+index 000000000..00afa7545
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.desktop.kt
+@@ -0,0 +1,54 @@
++package com.nuvio.app.features.player
++
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.setValue
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++import java.awt.FileDialog
++import java.awt.Frame
++
++@Composable
++actual fun rememberSubtitleFontPicker(): SubtitleFontPickerState? {
++    val scope = rememberCoroutineScope()
++    val invalidMessage = "That file isn't a usable TTF or OTF font."
++    // First read touches disk, so keep it off the main thread.
++    LaunchedEffect(Unit) { withContext(Dispatchers.IO) { SubtitleFontStore.current() } }
++    val font by SubtitleFontStore.font.collectAsState()
++    var isImporting by remember { mutableStateOf(false) }
++    return SubtitleFontPickerState(
++        fontName = font?.familyName,
++        isImporting = isImporting,
++        pick = {
++            if (!isImporting) {
++                isImporting = true
++                scope.launch {
++                    val ok = withContext(Dispatchers.IO) {
++                        runCatching {
++                            val dialog = FileDialog(null as Frame?, "Choose a subtitle font", FileDialog.LOAD).apply {
++                                setFilenameFilter { _, name -> name.endsWith(".ttf", true) || name.endsWith(".otf", true) }
++                            }
++                            dialog.isVisible = true
++                            dialog.files.firstOrNull()
++                        }.getOrNull()
++                        if (ok != null) SubtitleFontStore.import(ok) else true
++                    }
++                    isImporting = false
++                    if (!ok) {
++                        println("[nuvio] $invalidMessage")
++                    }
++                }
++            }
++        },
++        reset = {
++            SubtitleFontStore.clear()
++            NativePlayerBridgeSubtitleFont.applyToPlayer()
++        },
++    )
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontStore.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontStore.kt
+new file mode 100644
+index 000000000..6436bef50
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontStore.kt
+@@ -0,0 +1,154 @@
++package com.nuvio.app.features.player
++
++import com.nuvio.app.core.storage.DesktopStorage
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.withContext
++import java.io.File
++import java.io.RandomAccessFile
++
++/**
++ * Keeps at most one user-imported subtitle font in app storage. The font file itself is the
++ * persisted setting; the family name (parsed from the font's name table) is what mpv/libass
++ * matches fonts by.
++ */
++internal class CustomSubtitleFont(
++    val file: File,
++    /** Family name from the font's `name` table; libass (mpv) matches fonts by it. */
++    val familyName: String,
++)
++
++internal object SubtitleFontStore {
++    private const val MAX_FONT_BYTES = 30L * 1024 * 1024
++
++    private val _font = MutableStateFlow<CustomSubtitleFont?>(null)
++    val font: StateFlow<CustomSubtitleFont?> = _font.asStateFlow()
++
++    @Volatile
++    private var loaded = false
++
++    fun fontsDir(): File =
++        File(DesktopStorage.rootDir.toFile(), "subtitle_fonts").apply { mkdirs() }
++
++    /** Returns the imported font, loading it from disk on first use. */
++    fun current(): CustomSubtitleFont? {
++        if (!loaded) {
++            synchronized(this) {
++                if (!loaded) {
++                    _font.value = fontsDir().listFiles()
++                        ?.firstOrNull { it.isFile }
++                        ?.let(::loadFont)
++                    loaded = true
++                }
++            }
++        }
++        return _font.value
++    }
++
++    suspend fun import(source: File): Boolean = withContext(Dispatchers.IO) {
++        val extension = source.name.substringAfterLast('.', "").lowercase()
++            ?.takeIf { it == "ttf" || it == "otf" } ?: "ttf"
++        val dir = fontsDir()
++        val staging = File(dir, ".import.tmp")
++        val copied = runCatching {
++            source.inputStream().use { input ->
++                staging.outputStream().use { output ->
++                    val buffer = ByteArray(64 * 1024)
++                    var total = 0L
++                    while (true) {
++                        val read = input.read(buffer)
++                        if (read < 0) break
++                        total += read
++                        if (total > MAX_FONT_BYTES) error("font too large")
++                        output.write(buffer, 0, read)
++                    }
++                }
++            } != null
++        }.getOrElse {
++            false
++        }
++        val stagedFont = if (copied) loadFont(staging) else null
++        if (stagedFont == null) {
++            staging.delete()
++            return@withContext false
++        }
++        dir.listFiles()?.filter { it != staging }?.forEach { it.delete() }
++        val target = File(dir, "subtitle_font.$extension")
++        if (!staging.renameTo(target)) {
++            staging.delete()
++            return@withContext false
++        }
++        synchronized(this@SubtitleFontStore) {
++            _font.value = loadFont(target)
++            loaded = true
++        }
++        _font.value != null
++    }
++
++    fun clear() {
++        synchronized(this) {
++            fontsDir().listFiles()?.forEach { it.delete() }
++            _font.value = null
++            loaded = true
++        }
++    }
++
++    private fun loadFont(file: File): CustomSubtitleFont? = runCatching {
++        val family = readFontFamilyName(file) ?: return@runCatching null
++        CustomSubtitleFont(file = file, familyName = family)
++    }.getOrElse {
++        null
++    }
++}
++
++/** Reads name ID 1 (font family) from a TrueType/OpenType `name` table. Pure JVM. */
++private fun readFontFamilyName(file: File): String? = runCatching {
++    RandomAccessFile(file, "r").use { raf ->
++        val version = raf.readInt()
++        if (version != 0x00010000 && version != 0x4F54544F && version != 0x74727565) return@use null
++        val numTables = raf.readUnsignedShort()
++        raf.skipBytes(6)
++        var nameOffset = -1L
++        repeat(numTables) {
++            val tag = raf.readInt()
++            raf.skipBytes(4)
++            val offset = raf.readInt()
++            val length = raf.readInt()
++            if (tag == 0x6e616d65) nameOffset = offset.toLong() and 0xFFFFFFFFL
++            raf.skipBytes(4)
++        }
++        if (nameOffset < 0) return@use null
++        raf.seek(nameOffset)
++        val format = raf.readUnsignedShort()
++        val count = raf.readUnsignedShort()
++        val stringOffset = nameOffset + raf.readUnsignedShort()
++        var family: String? = null
++        repeat(count) {
++            val platformId = raf.readUnsignedShort()
++            raf.skipBytes(2) // encoding
++            val languageId = raf.readUnsignedShort()
++            val nameId = raf.readUnsignedShort()
++            val length = raf.readUnsignedShort()
++            val offset = raf.readUnsignedShort()
++            if (nameId == 1 && family == null) {
++                val pos = raf.filePointer
++                raf.seek(stringOffset + offset)
++                val bytes = ByteArray(length).also { raf.readFully(it) }
++                family = when (platformId) {
++                    3 -> String(bytes, Charsets.UTF_16BE)
++                    else -> String(bytes, Charsets.ISO_8859_1)
++                }
++                raf.seek(pos)
++                if (format != 1) return@use family
++                // format 1 tables carry a language-tag record first: only Windows-platform
++                // entries live after it, so keep scanning Windows/Unicode ones.
++                if (platformId == 3 && languageId >= 0) family = family
++            } else {
++                raf.skipBytes(2)
++            }
++        }
++        family
++    }
++}.getOrNull()
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt
 new file mode 100644
 index 000000000..e1981af33
@@ -719,10 +1109,10 @@ index 66a2513f5..3b1a26e0b 100644
          ensureLoaded()
          controlsPageAssets.url
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 2c8dd3439..fea2a8886 100644
+index 2c8dd3439..63a17172e 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -2,6 +2,8 @@ package com.nuvio.app.features.player.desktop
+@@ -2,10 +2,11 @@ package com.nuvio.app.features.player.desktop
  
  import androidx.compose.ui.graphics.Color
  import co.touchlab.kermit.Logger
@@ -731,7 +1121,72 @@ index 2c8dd3439..fea2a8886 100644
  import com.nuvio.app.features.player.PlayerControlAddonSubtitleItem
  import com.nuvio.app.features.player.PlayerControlEpisodeItem
  import com.nuvio.app.features.player.PlayerControlFilterItem
-@@ -1099,6 +1101,22 @@ internal class NativePlayerController(
+-import com.nuvio.app.features.player.PlayerControlPartyState
+ import com.nuvio.app.features.player.PlayerControlSeasonItem
+ import com.nuvio.app.features.player.PlayerControlSourceItem
+ import com.nuvio.app.features.player.PlayerControlSubtitleCueItem
+@@ -55,10 +56,7 @@ internal typealias NativePlayerCreate = (
+ 
+ internal class NativePlayerController(
+     private val host: NativePlayerHost,
+-    private val nativeCreate: NativePlayerCreate = { hostViewPtr, source, headers, playWhenReady, positionMs, controlsUrl, decoder, rtx, sink ->
+-        NativePlayerBridge.ensureLoaded()
+-        NativePlayerBridge.create(hostViewPtr, source, headers, playWhenReady, positionMs, controlsUrl, decoder, rtx, sink)
+-    },
++    private val nativeCreate: NativePlayerCreate = NativePlayerBridge::create,
+     private val nativeDispose: (Long) -> Unit = NativePlayerBridge::dispose,
+     private val nativeSeekTo: (Long, Long) -> Unit = NativePlayerBridge::seekTo,
+     private val isHostDisplayable: () -> Boolean = { host.isDisplayable },
+@@ -102,8 +100,6 @@ internal class NativePlayerController(
+     private var pendingSource: PendingSource? = null
+     @Volatile
+     private var releaseRequested: Boolean = false
+-    val isReleasing: Boolean
+-        get() = releaseRequested
+     private val createsInFlight = mutableSetOf<Thread>()
+     private var createWaitInFlight: Thread? = null
+     private val releaseCallbacks = mutableListOf<ReleaseCallback>()
+@@ -333,6 +329,11 @@ internal class NativePlayerController(
+                             .onFailure { error -> recordTerminalDisposeFailure(error, "superseded create", created) }
+                         return@onSuccess
+                     }
++                    // Custom subtitle font (Nuvio fork): sub-fonts-dir must be set before the
++                    // first subtitle renders, and sub-font picks the imported family.
++                    com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.activeHandle = created
++                    com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.applyToPlayer()
++                    }
+                     SwingUtilities.invokeLater {
+                         val shouldConfigure = synchronized(lifecycleLock) {
+                             when {
+@@ -458,15 +459,7 @@ internal class NativePlayerController(
+                 "speed=${stateWithVolume.playbackSpeedLabel} audioLabel=${stateWithVolume.audioLabel} " +
+                 "subsLabel=${stateWithVolume.subtitlesLabel} fullscreen=$isFullscreen"
+         }
+-        NativePlayerBridge.updateControls(current, stateWithVolume.toControlsJson(isFullscreen, ::refreshControlsForImage))
+-    }
+-
+-    private fun refreshControlsForImage() {
+-        SwingUtilities.invokeLater {
+-            if (releaseRequested) return@invokeLater
+-            lastSentControlsStructureKey = null
+-            updateControls(controlsState)
+-        }
++        NativePlayerBridge.updateControls(current, stateWithVolume.toControlsJson(isFullscreen))
+     }
+ 
+     fun onDesktopFullscreenChanged() {
+@@ -615,8 +608,8 @@ internal class NativePlayerController(
+             "volumeChange" -> setFallbackVolume(value.toFloat())
+             "volumeChangeTemporary" -> setTemporaryVolume(value.toFloat())
+             "setPlaybackSpeed" -> {
+-                if (onEvent(type, value)) return
+-                setPlaybackSpeed(value.toFloat())
++                val speed = value.toFloat()
++                setPlaybackSpeed(speed)
+             }
+             else -> {
+                 val eventHandled = onEvent(type, value)
+@@ -1099,6 +1092,22 @@ internal class NativePlayerController(
  
      override fun setSubtitleUri(url: String) {
          log.d { "setSubtitleUri ${url.toPlaybackLogKey()} handle=$handle" }
@@ -750,10 +1205,61 @@ index 2c8dd3439..fea2a8886 100644
 +        ) {
 +            return
 +        }
-+        GeneratedSubtitlesDesktop.stopGeneration()
++        com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.applyToPlayer()
          handle.takeIf { it != 0L }?.let { current ->
              NativePlayerBridge.clearExternalSubtitles(current)
              NativePlayerBridge.addSubtitleUrl(current, url)
+@@ -1301,7 +1310,7 @@ private data class NativeControlsStructureKey(
+     val isInPip: Boolean,
+ )
+ 
+-private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageReady: () -> Unit): String =
++private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
+     buildString {
+         append('{')
+         appendJsonField("title", title)
+@@ -1514,8 +1523,6 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+         append(',')
+         appendJsonField("themeBorderDefaultColor", themeBorderDefaultColor)
+         append(',')
+-        appendJsonField("themeDangerColor", themeDangerColor)
+-        append(',')
+         appendJsonField("isPlaying", isPlaying)
+         append(',')
+         appendJsonField("isLoading", isLoading)
+@@ -1595,8 +1602,6 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+         append(',')
+         appendJsonField("positionMs", positionMs)
+         append(',')
+-        appendJsonField("bufferedPositionMs", bufferedPositionMs)
+-        append(',')
+         appendJsonField("sourceIsLoading", sourceIsLoading)
+         append(',')
+         appendJsonArrayField("sourceFilters", sourceFilters) { appendFilterItemJson(it) }
+@@ -1684,23 +1689,15 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+         appendJsonField("autoSyncBubbleMessage", autoSyncBubbleMessage)
+         append(',')
+         appendJsonField("autoSyncBubbleToken", autoSyncBubbleToken)
+-        append(",\"party\":")
+-        append(partyJson.encodeToString(PlayerControlPartyState.serializer(), party.withWebviewImages(onImageReady)))
+         append('}')
+     }
+ 
+-private val partyJson = Json { encodeDefaults = true }
+-
+-private fun PlayerControlPartyState.withWebviewImages(onImageReady: () -> Unit): PlayerControlPartyState =
+-    copy(profile = profile.copy(imageUrl = if (active) "" else WebviewImages.resolve(profile.imageUrl, onImageReady)))
+-
+ private fun PlayerControlsState.nativeControlsStructureKey(): PlayerControlsState =
+     copy(
+         isPlaying = false,
+         isLoading = false,
+         durationMs = 0L,
+         positionMs = 0L,
+-        bufferedPositionMs = 0L,
+     )
+ 
+ private fun StringBuilder.appendJsonField(name: String, value: String) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt
 new file mode 100644
 index 000000000..654b0f31a
