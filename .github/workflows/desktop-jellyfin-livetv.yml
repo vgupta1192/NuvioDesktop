@@ -167,6 +167,17 @@ jobs:
             fi
           done
 
+      # Fork feature (applies on top of the whole chain, mandatory): Jellyfin screen rewrite —
+      # cinematic home (hero pager + row per library) + full-screen detail page reusing the
+      # app's DetailHero/DetailMetaInfo/DetailCastSection, with media badges and cast photos.
+      - name: Apply Jellyfin cinematic UI patch
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          if ! git apply fork-src/.github/patches/desktop-jellyfin-cinematic-ui.patch; then
+            echo "::error::desktop-jellyfin-cinematic-ui.patch no longer applies to upstream Dev"
+            exit 1
+          fi
+
       - name: Create local.properties (self-hosted backend)
         if: steps.ver.outputs.should_build == 'true'
         run: |
@@ -413,6 +424,17 @@ jobs:
               echo "::warning::$P.patch no longer applies to upstream; building without it"
             fi
           done
+
+      # Fork feature (applies on top of the whole chain, mandatory): Jellyfin screen rewrite —
+      # cinematic home (hero pager + row per library) + full-screen detail page reusing the
+      # app's DetailHero/DetailMetaInfo/DetailCastSection, with media badges and cast photos.
+      - name: Apply Jellyfin cinematic UI patch
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          if ! git apply fork-src/.github/patches/desktop-jellyfin-cinematic-ui.patch; then
+            echo "::error::desktop-jellyfin-cinematic-ui.patch no longer applies to upstream Dev"
+            exit 1
+          fi
 
       - name: Create local.properties (self-hosted backend)
         if: steps.ver.outputs.should_build == 'true'
