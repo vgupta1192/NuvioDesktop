@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncContracts.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncContracts.kt
-index 81353c9e..a0c55557 100644
+index 81353c9e3..a0c55557c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncContracts.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncContracts.kt
 @@ -17,6 +17,13 @@ interface AutoSyncPlayerController {
@@ -17,24 +17,24 @@ index 81353c9e..a0c55557 100644
  
  /** One downloadable add-on subtitle AutoSync may analyse or swap in as a better match. */
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
-index 5d8f870a..dae848bc 100644
+index 9f276d756..194b45fe2 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
-@@ -260,6 +260,9 @@ data class PlayerControlsState(
+@@ -262,6 +262,9 @@ data class PlayerControlsState(
      val submitIntroSuccessToken: Long = 0L,
      val notificationMessage: String = "",
      val notificationToken: Long = 0L,
 +    val autoSyncBubbleKind: String = "",
 +    val autoSyncBubbleMessage: String = "",
 +    val autoSyncBubbleToken: Long = 0L,
+     val party: PlayerControlPartyState = PlayerControlPartyState(),
  )
  
- data class PlayerControlFilterItem(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-index 74183eef..5237e8df 100644
+index a7d46fa5f..e37d87937 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-@@ -216,6 +216,9 @@ internal class PlayerScreenRuntime(
+@@ -219,6 +219,9 @@ internal class PlayerScreenRuntime(
      var playerControlsSubmitIntroSuccessToken by mutableStateOf(0L)
      var playerNotificationMessage by mutableStateOf("")
      var playerNotificationToken by mutableStateOf(0L)
@@ -45,20 +45,28 @@ index 74183eef..5237e8df 100644
      var playerMetaVideos by mutableStateOf<List<MetaVideo>>(emptyList())
      var playerMeta by mutableStateOf<MetaDetails?>(null)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 1c00be2e..8f8109d2 100644
+index 7eeb4b01c..9e4b15118 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -419,6 +419,9 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -35,6 +35,7 @@ import com.nuvio.app.features.p2p.P2pStreamingState
+ import com.nuvio.app.features.party.PartyRepository
+ import com.nuvio.app.features.p2p.formatP2pMegabytes
+ import com.nuvio.app.features.p2p.formatP2pSpeed
++import com.nuvio.app.features.autosync.AutoSyncPlayerController
+ import com.nuvio.app.features.player.skip.SkipIntroRepository
+ import com.nuvio.app.features.streams.AddonStreamGroup
+ import com.nuvio.app.features.streams.StreamBadgeSettingsRepository
+@@ -428,6 +429,9 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
          submitIntroSuccessToken = playerControlsSubmitIntroSuccessToken,
          notificationMessage = playerNotificationMessage,
          notificationToken = playerNotificationToken,
 +        autoSyncBubbleKind = autoSyncBubbleKind,
 +        autoSyncBubbleMessage = autoSyncBubbleMessage,
 +        autoSyncBubbleToken = autoSyncBubbleToken,
+         party = partyControls,
          showOpeningOverlay = openingOverlayWanted,
          openingArtwork = background ?: poster,
-         openingLogo = logo,
-@@ -552,6 +555,13 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -562,6 +566,13 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                              playerNotificationToken += 1L
                          }
                      }
@@ -73,7 +81,7 @@ index 1c00be2e..8f8109d2 100644
                  onSnapshot = { snapshot ->
                      if (!updatePlaybackSnapshot(snapshot)) return@PlatformPlayerSurface
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-index 5b2a7623..4bac8910 100644
+index 5b2a7623e..4bac8910e 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 @@ -21,6 +21,17 @@ import kotlinx.coroutines.launch
@@ -219,7 +227,7 @@ index 5b2a7623..4bac8910 100644
      }
  
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferences.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferences.kt
-index bdc285c6..c777a902 100644
+index bdc285c67..c777a9026 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferences.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferences.kt
 @@ -17,6 +17,7 @@ internal object AutoSyncPreferences {
@@ -263,25 +271,8 @@ index bdc285c6..c777a902 100644
      fun claimStartupRun(sessionKey: Int, playbackKey: String): Boolean {
          synchronized(lock) {
              if (!_enabled.value) return false
-diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 7055eb0e..e9f5ed0c 100644
---- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-+++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -1608,6 +1608,12 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
-         appendJsonField("notificationMessage", notificationMessage)
-         append(',')
-         appendJsonField("notificationToken", notificationToken)
-+        append(',')
-+        appendJsonField("autoSyncBubbleKind", autoSyncBubbleKind)
-+        append(',')
-+        appendJsonField("autoSyncBubbleMessage", autoSyncBubbleMessage)
-+        append(',')
-+        appendJsonField("autoSyncBubbleToken", autoSyncBubbleToken)
-         append('}')
-     }
- 
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/AutoSyncSettings.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/AutoSyncSettings.desktop.kt
-index 2002c23b..6473a209 100644
+index 2002c23b2..6473a2090 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/AutoSyncSettings.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/AutoSyncSettings.desktop.kt
 @@ -64,5 +64,16 @@ internal actual fun AutoSyncSettingsContent(enabled: Boolean, isTablet: Boolean)
@@ -302,10 +293,10 @@ index 2002c23b..6473a209 100644
      }
  }
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/composeApp/src/desktopMain/resources/player-ui/controls.css
-index 842849f0..f0e5eb18 100644
+index e9227237b..c909994f8 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.css
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
-@@ -286,6 +286,139 @@ button:disabled {
+@@ -292,6 +292,139 @@ button:disabled {
    pointer-events: none;
  }
  
@@ -446,10 +437,10 @@ index 842849f0..f0e5eb18 100644
    display: none !important;
  }
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
-index ab7c65e1..3abde645 100644
+index a6854130a..5b359e2c5 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.html
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.html
-@@ -239,6 +239,19 @@
+@@ -258,6 +258,19 @@
            </div>
          </div>
        </section>
@@ -470,10 +461,10 @@ index ab7c65e1..3abde645 100644
          <svg class="player-toast-icon" id="playerToastIcon" aria-hidden="true" hidden><use id="playerToastIconUse" href="#icon-speed"></use></svg>
          <span class="player-toast-text" id="playerToastText"></span>
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index dc99eeb1..aca456b1 100644
+index bf6b22009..3a995123e 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
-@@ -355,6 +355,9 @@ let state = {
+@@ -356,6 +356,9 @@ let state = {
    submitIntroContentKey: "",
    notificationMessage: "",
    notificationToken: 0,
@@ -483,7 +474,7 @@ index dc99eeb1..aca456b1 100644
  };
  let isScrubbing = false;
  let scrubPositionMs = 0;
-@@ -467,6 +470,45 @@ const chromeActivityThrottleMs = 300;
+@@ -468,6 +471,45 @@ const chromeActivityThrottleMs = 300;
  const hiddenCursorHideDelayMs = 3000;
  const cursorActivityThrottleMs = 100;
  const playerToastDurationMs = 1400;
@@ -529,7 +520,7 @@ index dc99eeb1..aca456b1 100644
  const chromeInteractionSelector = [
    "button",
    "input",
-@@ -3191,6 +3233,7 @@ window.playerControls = nextState => {
+@@ -3225,6 +3267,7 @@ window.playerControls = nextState => {
    const previousCloseToken = Number(state.closeModalsToken) || 0;
    const previousSubmitIntroSuccessToken = Number(state.submitIntroSuccessToken) || 0;
    const previousNotificationToken = Number(state.notificationToken) || 0;
@@ -537,14 +528,3 @@ index dc99eeb1..aca456b1 100644
    const previousResizeLabel = state.resizeModeLabel || "";
    const previousSpeedLabel = state.playbackSpeedLabel || "";
    const previousEpisodeStreamsVisible = Boolean(state.episodeStreamsVisible);
-@@ -3225,6 +3268,10 @@ window.playerControls = nextState => {
-   if (notificationToken !== previousNotificationToken) {
-     showPlayerToast(state.notificationMessage);
-   }
-+  const autoSyncBubbleToken = Number(state.autoSyncBubbleToken) || 0;
-+  if (autoSyncBubbleToken !== previousAutoSyncBubbleToken) {
-+    showAutoSyncBubble(state.autoSyncBubbleKind || "", state.autoSyncBubbleMessage || "");
-+  }
-   if (state.showP2pConsent && activeModal !== "p2pConsent") {
-     openPlayerModal("p2pConsent");
-   } else if (!state.showP2pConsent && activeModal === "p2pConsent") {

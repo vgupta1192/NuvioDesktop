@@ -44,10 +44,10 @@ index b3665232a..90d5c0737 100644
      if (isSeries) {
          PlayerEpisodesPanel(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 25411d498..3a6dea5e0 100644
+index 9e4b15118..741281115 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -475,6 +475,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -479,6 +479,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
      val enableSurfaceGestures = !isDesktop && !isInPip
  
      BindAutoSyncRuntimeEffects() // AutoSync hook
@@ -55,7 +55,7 @@ index 25411d498..3a6dea5e0 100644
  
      Box(
          modifier = Modifier
-@@ -1855,6 +1856,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+@@ -1815,6 +1816,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
              preferredSubtitleSelectionApplied = true
              persistAddonSubtitlePreference(addon)
              val autoSync = playerController as? AutoSyncPlayerController // desktop libmpv AutoSync

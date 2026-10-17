@@ -1,6 +1,6 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrKeyPreferencesAndroid.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrKeyPreferencesAndroid.kt
 new file mode 100644
-index 00000000..80e0b00c
+index 000000000..80e0b00c2
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrKeyPreferencesAndroid.kt
 @@ -0,0 +1,21 @@
@@ -27,7 +27,7 @@ index 00000000..80e0b00c
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrPlatform.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrPlatform.android.kt
 new file mode 100644
-index 00000000..6ade06b3
+index 000000000..6ade06b3f
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrPlatform.android.kt
 @@ -0,0 +1,27 @@
@@ -60,7 +60,7 @@ index 00000000..6ade06b3
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/KeyframeThumbnailDecoder.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/KeyframeThumbnailDecoder.kt
 new file mode 100644
-index 00000000..c5291b54
+index 000000000..c5291b543
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/KeyframeThumbnailDecoder.kt
 @@ -0,0 +1,247 @@
@@ -313,7 +313,7 @@ index 00000000..c5291b54
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/LocalPreviewSources.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/LocalPreviewSources.kt
 new file mode 100644
-index 00000000..f5882055
+index 000000000..f5882055e
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/LocalPreviewSources.kt
 @@ -0,0 +1,144 @@
@@ -463,7 +463,7 @@ index 00000000..f5882055
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/LocalPreviewTrack.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/LocalPreviewTrack.kt
 new file mode 100644
-index 00000000..faf1c2a6
+index 000000000..faf1c2a68
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/LocalPreviewTrack.kt
 @@ -0,0 +1,645 @@
@@ -1114,7 +1114,7 @@ index 00000000..faf1c2a6
 +private data class CachedFrame(val slot: Int, val keyMs: Long, val bytes: ByteArray, val dark: Boolean)
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/StreamPreviewFiller.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/StreamPreviewFiller.kt
 new file mode 100644
-index 00000000..5586d6b5
+index 000000000..5586d6b53
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/StreamPreviewFiller.kt
 @@ -0,0 +1,157 @@
@@ -1277,7 +1277,7 @@ index 00000000..5586d6b5
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/VideoKeyframeTap.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/VideoKeyframeTap.kt
 new file mode 100644
-index 00000000..399e095d
+index 000000000..399e095d7
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/seekpreview/local/VideoKeyframeTap.kt
 @@ -0,0 +1,250 @@
@@ -1533,7 +1533,7 @@ index 00000000..399e095d
 +}
 diff --git a/composeApp/src/commonMain/composeResources/values-ar/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-ar/seekr_key_strings.xml
 new file mode 100644
-index 00000000..912ad39a
+index 000000000..912ad39a0
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-ar/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1548,7 +1548,7 @@ index 00000000..912ad39a
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-bg/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-bg/seekr_key_strings.xml
 new file mode 100644
-index 00000000..b78aad7f
+index 000000000..b78aad7f8
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-bg/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1563,7 +1563,7 @@ index 00000000..b78aad7f
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-cs/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-cs/seekr_key_strings.xml
 new file mode 100644
-index 00000000..322fd3c3
+index 000000000..322fd3c3e
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-cs/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1578,7 +1578,7 @@ index 00000000..322fd3c3
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-de/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-de/seekr_key_strings.xml
 new file mode 100644
-index 00000000..e723ab94
+index 000000000..e723ab944
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-de/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1593,7 +1593,7 @@ index 00000000..e723ab94
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-el/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-el/seekr_key_strings.xml
 new file mode 100644
-index 00000000..38a0f654
+index 000000000..38a0f6544
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-el/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1608,7 +1608,7 @@ index 00000000..38a0f654
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-es/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-es/seekr_key_strings.xml
 new file mode 100644
-index 00000000..1f79ca87
+index 000000000..1f79ca87f
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-es/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1623,7 +1623,7 @@ index 00000000..1f79ca87
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-fr/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-fr/seekr_key_strings.xml
 new file mode 100644
-index 00000000..c111e226
+index 000000000..c111e226b
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-fr/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1638,7 +1638,7 @@ index 00000000..c111e226
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-hu/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-hu/seekr_key_strings.xml
 new file mode 100644
-index 00000000..f0e80b5f
+index 000000000..f0e80b5f3
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-hu/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1653,7 +1653,7 @@ index 00000000..f0e80b5f
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-id/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-id/seekr_key_strings.xml
 new file mode 100644
-index 00000000..cb1d97d0
+index 000000000..cb1d97d02
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-id/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1668,7 +1668,7 @@ index 00000000..cb1d97d0
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-in/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-in/seekr_key_strings.xml
 new file mode 100644
-index 00000000..cb1d97d0
+index 000000000..cb1d97d02
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-in/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1683,7 +1683,7 @@ index 00000000..cb1d97d0
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-it/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-it/seekr_key_strings.xml
 new file mode 100644
-index 00000000..3fdb732b
+index 000000000..3fdb732b5
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-it/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1698,7 +1698,7 @@ index 00000000..3fdb732b
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-ja/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-ja/seekr_key_strings.xml
 new file mode 100644
-index 00000000..d459326f
+index 000000000..d459326f4
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-ja/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1713,7 +1713,7 @@ index 00000000..d459326f
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-nb/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-nb/seekr_key_strings.xml
 new file mode 100644
-index 00000000..7b7d2840
+index 000000000..7b7d28404
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-nb/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1728,7 +1728,7 @@ index 00000000..7b7d2840
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-nl/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-nl/seekr_key_strings.xml
 new file mode 100644
-index 00000000..5b84951b
+index 000000000..5b84951b9
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-nl/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1743,7 +1743,7 @@ index 00000000..5b84951b
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-pl/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-pl/seekr_key_strings.xml
 new file mode 100644
-index 00000000..ef525136
+index 000000000..ef5251365
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-pl/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1758,7 +1758,7 @@ index 00000000..ef525136
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-pt-rBR/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-pt-rBR/seekr_key_strings.xml
 new file mode 100644
-index 00000000..84004855
+index 000000000..84004855e
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-pt-rBR/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1773,7 +1773,7 @@ index 00000000..84004855
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-pt/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-pt/seekr_key_strings.xml
 new file mode 100644
-index 00000000..bcc8976d
+index 000000000..bcc8976d1
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-pt/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1788,7 +1788,7 @@ index 00000000..bcc8976d
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-ro/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-ro/seekr_key_strings.xml
 new file mode 100644
-index 00000000..fa833737
+index 000000000..fa8337371
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-ro/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1803,7 +1803,7 @@ index 00000000..fa833737
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-ru/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-ru/seekr_key_strings.xml
 new file mode 100644
-index 00000000..075a79dd
+index 000000000..075a79dd2
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-ru/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1818,7 +1818,7 @@ index 00000000..075a79dd
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-sk/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-sk/seekr_key_strings.xml
 new file mode 100644
-index 00000000..006eb64f
+index 000000000..006eb64f6
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-sk/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1833,7 +1833,7 @@ index 00000000..006eb64f
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-tr/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-tr/seekr_key_strings.xml
 new file mode 100644
-index 00000000..b2a594d9
+index 000000000..b2a594d95
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-tr/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1848,7 +1848,7 @@ index 00000000..b2a594d9
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values-vi/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values-vi/seekr_key_strings.xml
 new file mode 100644
-index 00000000..075aeb67
+index 000000000..075aeb67e
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values-vi/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1863,7 +1863,7 @@ index 00000000..075aeb67
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values/seek_preview_strings.xml b/composeApp/src/commonMain/composeResources/values/seek_preview_strings.xml
 new file mode 100644
-index 00000000..830a7813
+index 000000000..830a7813c
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values/seek_preview_strings.xml
 @@ -0,0 +1,12 @@
@@ -1881,7 +1881,7 @@ index 00000000..830a7813
 +</resources>
 diff --git a/composeApp/src/commonMain/composeResources/values/seekr_key_strings.xml b/composeApp/src/commonMain/composeResources/values/seekr_key_strings.xml
 new file mode 100644
-index 00000000..f4855b0f
+index 000000000..f4855b0f8
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values/seekr_key_strings.xml
 @@ -0,0 +1,9 @@
@@ -1895,7 +1895,7 @@ index 00000000..f4855b0f
 +    <string name="settings_seekr_api_key_invalid">Seekr didn't accept this key.</string>
 +</resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
-index 05bd9d1d..793227be 100644
+index 05bd9d1d5..793227be0 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
 @@ -183,6 +183,6 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
@@ -1907,10 +1907,10 @@ index 05bd9d1d..793227be 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-index 3136f017..94d3668e 100644
+index 6e07c060e..bd215c9c7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-@@ -47,6 +47,7 @@ internal fun PlayerScreenRuntime.showGestureMessage(message: String) {
+@@ -49,6 +49,7 @@ internal fun PlayerScreenRuntime.showGestureMessage(message: String) {
  
  internal fun PlayerScreenRuntime.clearLiveGestureFeedback() {
      liveGestureFeedback = null
@@ -1918,7 +1918,7 @@ index 3136f017..94d3668e 100644
  }
  
  internal fun PlayerScreenRuntime.revealLockedOverlay() {
-@@ -101,7 +102,8 @@ internal fun PlayerScreenRuntime.showSeekFeedback(direction: PlayerSeekDirection
+@@ -103,7 +104,8 @@ internal fun PlayerScreenRuntime.showSeekFeedback(direction: PlayerSeekDirection
      )
  }
  
@@ -1928,7 +1928,7 @@ index 3136f017..94d3668e 100644
      val deltaMs = previewPositionMs - baselinePositionMs
      val direction = if (deltaMs < 0L) PlayerSeekDirection.Backward else PlayerSeekDirection.Forward
      liveGestureFeedback = GestureFeedbackState(
-@@ -373,7 +375,8 @@ internal fun PlayerScreenRuntime.rememberSurfaceGestureCallbacks(): PlayerSurfac
+@@ -449,7 +451,8 @@ internal fun PlayerScreenRuntime.rememberSurfaceGestureCallbacks(): PlayerSurfac
          playerControlsLocked = rememberUpdatedState(playerControlsLocked),
          currentPositionMs = rememberUpdatedState(playbackSnapshot.positionMs.coerceAtLeast(0L)),
          currentDurationMs = rememberUpdatedState(playbackSnapshot.durationMs),
@@ -1939,7 +1939,7 @@ index 3136f017..94d3668e 100644
                  ownSeekTarget(requestedPositionMs) ?: return@rememberUpdatedState
              } else {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-index 676c18fd..053bdbb2 100644
+index 7c5987ab5..1da51a823 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 @@ -181,6 +181,7 @@ internal class PlayerScreenRuntime(
@@ -1951,10 +1951,10 @@ index 676c18fd..053bdbb2 100644
      var pausedOverlayVisible by mutableStateOf(false)
      var gestureFeedback by mutableStateOf<GestureFeedbackState?>(null)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 3a6dea5e..59e77662 100644
+index 741281115..887a42581 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -662,7 +662,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,
+@@ -668,7 +668,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,
      val partyState by PartyRepository.state.collectAsStateWithLifecycle()
      val partyActive = partyState.party != null
      AnimatedVisibility(
@@ -1963,18 +1963,18 @@ index 3a6dea5e..59e77662 100644
          enter = fadeIn(),
          exit = fadeOut(),
      ) {
-@@ -782,7 +782,8 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,
+@@ -788,7 +788,8 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,
                  isScrubbingTimeline = true
                  scrubbingPositionMs = positionMs
              },
--            onScrubFinished = { positionMs ->
-+            onScrubFinished = { rawPositionMs ->
-+                val positionMs = seekPreviewAligned(rawPositionMs) // Seek previews hook
-                 val targetMs = if (isPartyControlLocked) ownSeekTarget(positionMs) else positionMs
-                 if (targetMs == null) {
-                     isScrubbingTimeline = false
+-            onScrubFinished = { positionMs -> finishTimelineSeek(positionMs) },
++            onScrubFinished = { rawPositionMs -> finishTimelineSeek(seekPreviewAligned(rawPositionMs)) }, // Seek previews hook
++
+             horizontalSafePadding = horizontalSafePadding,
+             modifier = Modifier.fillMaxSize(),
+         )
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerTimeline.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerTimeline.kt
-index 9021309d..f2f6f823 100644
+index 9021309d5..f2f6f823c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerTimeline.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerTimeline.kt
 @@ -124,6 +124,7 @@ internal fun PlayerTimeline(
@@ -2003,7 +2003,7 @@ index 9021309d..f2f6f823 100644
              },
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SeekPreviewPlayerHooks.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SeekPreviewPlayerHooks.kt
 new file mode 100644
-index 00000000..7b946f8a
+index 000000000..7b946f8a7
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SeekPreviewPlayerHooks.kt
 @@ -0,0 +1,210 @@
@@ -2219,7 +2219,7 @@ index 00000000..7b946f8a
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/HybridSeekPreviewTrack.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/HybridSeekPreviewTrack.kt
 new file mode 100644
-index 00000000..4298630d
+index 000000000..4298630d7
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/HybridSeekPreviewTrack.kt
 @@ -0,0 +1,73 @@
@@ -2298,7 +2298,7 @@ index 00000000..4298630d
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/LocalSeekPreviews.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/LocalSeekPreviews.kt
 new file mode 100644
-index 00000000..98b82bd7
+index 000000000..98b82bd78
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/LocalSeekPreviews.kt
 @@ -0,0 +1,44 @@
@@ -2348,7 +2348,7 @@ index 00000000..98b82bd7
 +).joinToString("|")
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewCueGrid.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewCueGrid.kt
 new file mode 100644
-index 00000000..180c0f68
+index 000000000..180c0f683
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewCueGrid.kt
 @@ -0,0 +1,169 @@
@@ -2523,7 +2523,7 @@ index 00000000..180c0f68
 +internal const val SEEK_PREVIEW_KEYFRAME_SNAP_MS = 1_500L
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewFilmstrip.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewFilmstrip.kt
 new file mode 100644
-index 00000000..e8c19c63
+index 000000000..e8c19c637
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewFilmstrip.kt
 @@ -0,0 +1,156 @@
@@ -2685,7 +2685,7 @@ index 00000000..e8c19c63
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewSession.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewSession.kt
 new file mode 100644
-index 00000000..26481384
+index 000000000..26481384f
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewSession.kt
 @@ -0,0 +1,155 @@
@@ -2846,7 +2846,7 @@ index 00000000..26481384
 +internal val LocalSeekPreviewSession = staticCompositionLocalOf<SeekPreviewSession?> { null }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewSyncConfig.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewSyncConfig.kt
 new file mode 100644
-index 00000000..8831a1a5
+index 000000000..8831a1a57
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewSyncConfig.kt
 @@ -0,0 +1,27 @@
@@ -2879,7 +2879,7 @@ index 00000000..8831a1a5
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewSyncPanel.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewSyncPanel.kt
 new file mode 100644
-index 00000000..a4f4fa57
+index 000000000..a4f4fa57a
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewSyncPanel.kt
 @@ -0,0 +1,226 @@
@@ -3111,7 +3111,7 @@ index 00000000..a4f4fa57
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewThumbnailStrip.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewThumbnailStrip.kt
 new file mode 100644
-index 00000000..37b2eac0
+index 000000000..37b2eac0e
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewThumbnailStrip.kt
 @@ -0,0 +1,223 @@
@@ -3340,7 +3340,7 @@ index 00000000..37b2eac0
 +private val NoRevision = MutableStateFlow(0)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewTrack.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewTrack.kt
 new file mode 100644
-index 00000000..82d8b2f2
+index 000000000..82d8b2f2d
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekPreviewTrack.kt
 @@ -0,0 +1,52 @@
@@ -3398,7 +3398,7 @@ index 00000000..82d8b2f2
 +private val StaticRevision: StateFlow<Int> = MutableStateFlow(0)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrClient.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrClient.kt
 new file mode 100644
-index 00000000..5b22f619
+index 000000000..5b22f6190
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrClient.kt
 @@ -0,0 +1,160 @@
@@ -3564,7 +3564,7 @@ index 00000000..5b22f619
 +)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrConfig.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrConfig.kt
 new file mode 100644
-index 00000000..974930eb
+index 000000000..974930eba
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrConfig.kt
 @@ -0,0 +1,6 @@
@@ -3576,7 +3576,7 @@ index 00000000..974930eb
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrContentMapping.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrContentMapping.kt
 new file mode 100644
-index 00000000..61e4ceb6
+index 000000000..61e4ceb63
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrContentMapping.kt
 @@ -0,0 +1,36 @@
@@ -3618,7 +3618,7 @@ index 00000000..61e4ceb6
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrKeyRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrKeyRepository.kt
 new file mode 100644
-index 00000000..63bd7e6c
+index 000000000..63bd7e6c7
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrKeyRepository.kt
 @@ -0,0 +1,31 @@
@@ -3655,7 +3655,7 @@ index 00000000..63bd7e6c
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrTrack.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrTrack.kt
 new file mode 100644
-index 00000000..f2f565d8
+index 000000000..f2f565d81
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrTrack.kt
 @@ -0,0 +1,196 @@
@@ -3857,7 +3857,7 @@ index 00000000..f2f565d8
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrVtt.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrVtt.kt
 new file mode 100644
-index 00000000..5ccc2afa
+index 000000000..5ccc2afa8
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrVtt.kt
 @@ -0,0 +1,80 @@
@@ -3942,13 +3942,15 @@ index 00000000..5ccc2afa
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index d84127f7..96dc2eab 100644
+index d84127f79..855bc3004 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -634,6 +634,8 @@ private fun PlaybackSettingsSection(
+@@ -634,6 +634,10 @@ private fun PlaybackSettingsSection(
              )
          }
  
++        SeekPreviewSettingsSection(isTablet = isTablet) // Seek previews hook
++
 +        SeekPreviewSettingsSection(isTablet = isTablet) // Seek previews hook
 +
          SettingsSection(
@@ -3956,7 +3958,7 @@ index d84127f7..96dc2eab 100644
              isTablet = isTablet,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SeekPreviewSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SeekPreviewSettings.kt
 new file mode 100644
-index 00000000..b269ee05
+index 000000000..b269ee05b
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SeekPreviewSettings.kt
 @@ -0,0 +1,179 @@
@@ -4140,7 +4142,7 @@ index 00000000..b269ee05
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-index 7bc0c1de..d61c6d1b 100644
+index 7bc0c1deb..d61c6d1bf 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 @@ -26,6 +26,7 @@ import com.nuvio.app.features.discordrpc.DiscordPresenceManager
@@ -4161,7 +4163,7 @@ index 7bc0c1de..d61c6d1b 100644
      installDesktopOpenUriHandler()
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrPlatform.desktop.kt
 new file mode 100644
-index 00000000..e480ee75
+index 000000000..e480ee759
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrPlatform.desktop.kt
 @@ -0,0 +1,47 @@
@@ -4214,7 +4216,7 @@ index 00000000..e480ee75
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrPlatform.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrPlatform.ios.kt
 new file mode 100644
-index 00000000..79e8c0f7
+index 000000000..79e8c0f75
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/seekpreview/SeekrPlatform.ios.kt
 @@ -0,0 +1,16 @@
