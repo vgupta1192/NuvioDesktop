@@ -695,10 +695,10 @@ index 000000000..654b0f31a
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 new file mode 100644
-index 000000000..38f43231a
+index 000000000..1be7c6d3c
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-@@ -0,0 +1,238 @@
+@@ -0,0 +1,239 @@
 +package com.nuvio.app.features.player.generated
 +
 +import com.nuvio.app.core.storage.DesktopStorage
@@ -914,11 +914,12 @@ index 000000000..38f43231a
 +        offsetSec: Double,
 +        firstIndex: Int,
 +    ): String = buildString {
-+        spans.zip(lines).forEachIndexed { index, (start, end) ->
++        spans.zip(lines).forEachIndexed { index, (span, line) ->
++            val (start, end) = span
 +            val number = firstIndex + index + 1
 +            append(number).append('\n')
 +            append(formatSrtTime(offsetSec + start)).append(" --> ").append(formatSrtTime(offsetSec + end)).append('\n')
-+            append(lines[index].trim()).append("\n\n")
++            append(line.trim()).append("\n\n")
 +        }
 +    }
 +
