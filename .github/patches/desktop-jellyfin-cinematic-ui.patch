@@ -1955,3 +1955,93 @@ index 629c2f969..210f006fd 100644
 +        java.time.format.DateTimeFormatter.ofPattern("h:mm a").format(endTime).lowercase()
 +    }.getOrNull()
  }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+index 73374973f..3405f7c2e 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+@@ -1794,7 +1794,16 @@ internal fun MainAppContent(
+                 }
+                 entry<JellyfinDetailRoute> { route ->
+                     val onBack = rememberGuardedPopBackStack(navController, route)
+-                    JellyfinDetailScreen(route = route, onBack = onBack, onPlay = ::openJellyfinItem)
++                    JellyfinDetailScreen(
++                        route = route,
++                        onBack = onBack,
++                        onPlay = ::openJellyfinItem,
++                        onOpenCast = { personId, personName ->
++                            navController.navigate(
++                                PersonDetailRoute(personId = personId, personName = personName),
++                            )
++                        },
++                    )
+                 }
+                 entry<DownloadsRoute> { route ->
+                     DownloadsDestination(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
+index 2fc702914..aa0eb10af 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
+@@ -45,6 +45,9 @@ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.dp
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import androidx.compose.runtime.rememberCoroutineScope
++import com.nuvio.app.features.tmdb.TmdbMetadataService
++import kotlinx.coroutines.launch
+ import coil3.compose.AsyncImage
+ import com.nuvio.app.core.ui.nuvio
+ import com.nuvio.app.features.details.MetaPerson
+@@ -67,15 +70,20 @@ fun JellyfinDetailScreen(
+     route: JellyfinDetailRoute,
+     onBack: () -> Unit,
+     onPlay: (JellyfinItem) -> Unit,
++    onOpenCast: (Int, String) -> Unit = { _, _ -> },
+ ) {
+     val state by JellyfinRepository.uiState.collectAsStateWithLifecycle()
+     val tokens = MaterialTheme.nuvio
++    val castScope = rememberCoroutineScope()
+ 
+     LaunchedEffect(route.itemId) {
+         JellyfinRepository.initialize()
+         JellyfinRepository.selectItemById(route.itemId)
+     }
+ 
++    androidx.compose.runtime.CompositionLocalProvider(
++        com.nuvio.app.core.ui.LocalUseNativeNavigation provides false,
++    ) {
+     Box(
+         modifier = Modifier
+             .fillMaxSize()
+@@ -192,17 +200,16 @@ private fun JellyfinDetailContent(
+             meta = meta,
+             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+         )
+-        if (!item.overview.isNullOrBlank()) {
+-            ExpandableDescription(
+-                text = item.overview.orEmpty(),
+-                collapsedMaxLines = 4,
+-                modifier = Modifier.padding(horizontal = 24.dp),
+-                color = tokens.colors.textPrimary,
+-            )
+-        }
+         DetailCastSection(
+             cast = meta.cast,
+             modifier = Modifier.padding(top = 12.dp),
++            onCastClick = { person, _ ->
++                castScope.launch {
++                    TmdbMetadataService.searchPersonId(person.name)?.let { id ->
++                        onOpenCast(id, person.name)
++                    }
++                }
++            },
+         )
+         if (item.isSeries && state.seasons.isNotEmpty()) {
+             JellyfinSeasonsChips(
+@@ -219,6 +226,7 @@ private fun JellyfinDetailContent(
+         }
+         Spacer(modifier = Modifier.height(40.dp))
+     }
++    }
+ }
+ 
+ /** The TV photo's badge pills: "1080p H264 · English Dolby Atmos 5.1 · CC None (+38)" + Ends at. */
