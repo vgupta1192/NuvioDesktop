@@ -1061,14 +1061,13 @@ index 000000000..c74c81c30
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-index b7d15ba1f..16ef6ffbb 100644
+index b7d15ba1f..e1d3ee846 100644
 --- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-@@ -2193,3 +2193,63 @@ JNIEXPORT void JNICALL NP(reparentSurfaceNative)(JNIEnv *, jobject, jlong, jlong
+@@ -2191,5 +2191,65 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
+ JNIEXPORT void JNICALL NP(layoutNativeSubviews)(JNIEnv *, jobject, jlong) {}
+ JNIEXPORT void JNICALL NP(reparentSurfaceNative)(JNIEnv *, jobject, jlong, jlong) {}
  
- #undef NP
- } // extern "C"
-+
 +// Generated subtitles: dump [startSec, endSec) of url's audio as 16 kHz mono s16 WAV with a
 +// headless mpv instance (ao=pcm + untimed decodes as fast as the demuxer allows). Blocking on
 +// the calling thread - Kotlin dispatches it to IO.
@@ -1128,6 +1127,9 @@ index b7d15ba1f..16ef6ffbb 100644
 +    fclose(check);
 +    return (size > 44) ? JNI_TRUE : JNI_FALSE;
 +}
++
+ #undef NP
+ } // extern "C"
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
 index 4730c231f..62521d749 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
