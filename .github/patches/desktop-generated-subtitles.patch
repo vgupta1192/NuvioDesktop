@@ -524,6 +524,50 @@ index 000000000..ba2e02e52
 +
 +@Composable
 +expect fun rememberSubtitleFontPicker(): SubtitleFontPickerState?
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ConnectionFitSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ConnectionFitSettings.kt
+new file mode 100644
+index 000000000..78774b20b
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ConnectionFitSettings.kt
+@@ -0,0 +1,38 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.remember
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.streams.ConnectionSpeedEstimator
++import kotlin.math.roundToInt
++
++/**
++ * Nuvio fork (ported from NuvioMobile-Reshaped): "Match streams to connection". Speed is learned
++ * from the user's own playback, per network type; heavy streams go to the end of the list.
++ */
++@Composable
++internal fun ConnectionFitSettingsSection(isTablet: Boolean) {
++    val enabled by ConnectionSpeedEstimator.enabled.collectAsStateWithLifecycle()
++    val revision by ConnectionSpeedEstimator.revision.collectAsStateWithLifecycle()
++    val estimate = remember(revision) { ConnectionSpeedEstimator.estimateMbps() }
++    val status = if (estimate == null) {
++        "Learning your speed on this network from playback. Stream order is unchanged until then."
++    } else {
++        "About ${estimate.roundToInt()} Mbps on this network. Your stream order is kept; streams likely too heavy for it go last."
++    }
++    SettingsSection(
++        title = "Stream list",
++        isTablet = isTablet,
++    ) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsSwitchRow(
++                title = "Match streams to connection",
++                description = "Keep your addon's stream order, but move streams likely too heavy for your connection to the end. $status",
++                checked = enabled,
++                isTablet = isTablet,
++                onCheckedChange = ConnectionSpeedEstimator::setEnabled,
++            )
++        }
++    }
++}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
 new file mode 100644
 index 000000000..d3f4225c5
@@ -730,10 +774,10 @@ index 000000000..d3f4225c5
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index 855bc3004..8fe762aeb 100644
+index 855bc3004..769b3b9dd 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -583,6 +583,10 @@ private fun PlaybackSettingsSection(
+@@ -583,6 +583,12 @@ private fun PlaybackSettingsSection(
                      )
                  }
                  SettingsGroupDivider(isTablet = isTablet)
@@ -741,10 +785,12 @@ index 855bc3004..8fe762aeb 100644
 +                SettingsGroupDivider(isTablet = isTablet)
 +                SubtitleFontSettingsSection(isTablet = isTablet) // Nuvio fork: custom subtitle font
 +                SettingsGroupDivider(isTablet = isTablet)
++                ConnectionFitSettingsSection(isTablet = isTablet) // Nuvio fork: connection-speed fit
++                SettingsGroupDivider(isTablet = isTablet)
                  SettingsSwitchRow(
                      title = stringResource(Res.string.settings_playback_subtitle_strip_sdh),
                      description = stringResource(Res.string.settings_playback_subtitle_strip_sdh_description),
-@@ -634,10 +638,6 @@ private fun PlaybackSettingsSection(
+@@ -634,10 +640,6 @@ private fun PlaybackSettingsSection(
              )
          }
  
@@ -803,6 +849,468 @@ index 000000000..e190153e8
 +        }
 +    }
 +}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionFitSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionFitSettings.kt
+new file mode 100644
+index 000000000..78774b20b
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionFitSettings.kt
+@@ -0,0 +1,38 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.remember
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.streams.ConnectionSpeedEstimator
++import kotlin.math.roundToInt
++
++/**
++ * Nuvio fork (ported from NuvioMobile-Reshaped): "Match streams to connection". Speed is learned
++ * from the user's own playback, per network type; heavy streams go to the end of the list.
++ */
++@Composable
++internal fun ConnectionFitSettingsSection(isTablet: Boolean) {
++    val enabled by ConnectionSpeedEstimator.enabled.collectAsStateWithLifecycle()
++    val revision by ConnectionSpeedEstimator.revision.collectAsStateWithLifecycle()
++    val estimate = remember(revision) { ConnectionSpeedEstimator.estimateMbps() }
++    val status = if (estimate == null) {
++        "Learning your speed on this network from playback. Stream order is unchanged until then."
++    } else {
++        "About ${estimate.roundToInt()} Mbps on this network. Your stream order is kept; streams likely too heavy for it go last."
++    }
++    SettingsSection(
++        title = "Stream list",
++        isTablet = isTablet,
++    ) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsSwitchRow(
++                title = "Match streams to connection",
++                description = "Keep your addon's stream order, but move streams likely too heavy for your connection to the end. $status",
++                checked = enabled,
++                isTablet = isTablet,
++                onCheckedChange = ConnectionSpeedEstimator::setEnabled,
++            )
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.kt
+new file mode 100644
+index 000000000..116a13f21
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.kt
+@@ -0,0 +1,261 @@
++package com.nuvio.app.features.streams
++
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.update
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.decodeFromString
++import kotlinx.serialization.encodeToString
++import kotlinx.serialization.json.Json
++import kotlin.concurrent.Volatile
++import kotlin.time.TimeMark
++import kotlin.time.TimeSource
++
++/** Coarse network class. Throughput is learned separately for each one. */
++internal enum class NetworkKind {
++    WIFI,
++    CELLULAR,
++    OTHER,
++}
++
++/** The current default network, or null when offline or unknown. A memory read, kept current by a platform callback. */
++internal expect fun currentNetworkKind(): NetworkKind?
++
++/**
++ * Changes whenever the default network changes (a different Wi-Fi, Wi-Fi to mobile, offline).
++ * A measurement that spans a change describes neither network, so it is dropped.
++ */
++internal expect fun currentNetworkGeneration(): Int
++
++internal expect object ConnectionSpeedStorage {
++    fun load(): String?
++    fun save(value: String)
++    /** Nuvio fork: the "Match streams to connection" switch (null = never set, on by default). */
++    fun loadEnabled(): Boolean?
++    fun saveEnabled(enabled: Boolean)
++}
++
++@Serializable
++internal data class ConnectionSpeedSample(
++    val network: NetworkKind,
++    val mbps: Double,
++    val recordedAtMs: Long,
++)
++
++/**
++ * Learns sustained download throughput from real playback, per [NetworkKind].
++ *
++ * Samples come passively from [PlaybackThroughputSampler]; nothing is measured when a stream
++ * list loads, so reading the estimate is a memory lookup.
++ */
++internal object ConnectionSpeedEstimator {
++    private const val MAX_SAMPLES_PER_NETWORK = 3
++    private const val MIN_SAMPLES = 2
++    private const val MAX_SAMPLE_AGE_MS = 14L * 24 * 60 * 60 * 1000
++
++    private val json = Json { ignoreUnknownKeys = true }
++    @Volatile private var cachedSamples: List<ConnectionSpeedSample>? = null
++
++    private val _revision = MutableStateFlow(0)
++
++    /** Bumped on every recorded sample, so the settings status can refresh while it is shown. */
++    val revision: StateFlow<Int> = _revision.asStateFlow()
++
++    private val _enabled = MutableStateFlow(true)
++    @Volatile private var enabledLoaded = false
++
++    /** "Match streams to connection" (Nuvio fork: kept with the speed samples, on by default). */
++    val enabled: StateFlow<Boolean>
++        get() {
++            if (!enabledLoaded) {
++                _enabled.value = ConnectionSpeedStorage.loadEnabled() ?: true
++                enabledLoaded = true
++            }
++            return _enabled.asStateFlow()
++        }
++
++    fun isEnabled(): Boolean = enabled.value
++
++    fun setEnabled(value: Boolean) {
++        _enabled.value = value
++        enabledLoaded = true
++        ConnectionSpeedStorage.saveEnabled(value)
++    }
++
++    fun estimateMbps(): Double? {
++        val network = currentNetworkKind() ?: return null
++        return estimateMbps(loadedSamples(), network, epochMs())
++    }
++
++    /** Records a sample for [network], the network it was measured on (not necessarily the current one). */
++    fun record(network: NetworkKind, mbps: Double) {
++        if (!mbps.isValidThroughput()) return
++        val updated = appendSample(loadedSamples(), ConnectionSpeedSample(network, mbps, epochMs()))
++        cachedSamples = updated
++        ConnectionSpeedStorage.save(json.encodeToString(updated))
++        _revision.update { it + 1 }
++    }
++
++    /**
++     * The best of the last few samples. Each sample is capped by whichever server delivered it,
++     * so the fastest one is the tightest lower bound on the connection itself; one slow host
++     * must not make every other source look unplayable. Only the most recent samples count, so
++     * a connection that really got slower takes over within a few playbacks. At least two
++     * samples are required so a single session never drives ranking on its own.
++     */
++    internal fun estimateMbps(
++        samples: List<ConnectionSpeedSample>,
++        network: NetworkKind,
++        nowMs: Long,
++    ): Double? {
++        var count = 0
++        var best = 0.0
++        for (index in samples.indices.reversed()) {
++            val sample = samples[index]
++            if (sample.network != network) continue
++            if (nowMs - sample.recordedAtMs !in 0..MAX_SAMPLE_AGE_MS || !sample.mbps.isValidThroughput()) continue
++            if (sample.mbps > best) best = sample.mbps
++            if (++count == MAX_SAMPLES_PER_NETWORK) break
++        }
++        return best.takeIf { count >= MIN_SAMPLES }
++    }
++
++    internal fun appendSample(
++        samples: List<ConnectionSpeedSample>,
++        sample: ConnectionSpeedSample,
++    ): List<ConnectionSpeedSample> {
++        val (sameNetwork, otherNetworks) = samples.partition { it.network == sample.network }
++        return otherNetworks + sameNetwork.takeLast(MAX_SAMPLES_PER_NETWORK - 1) + sample
++    }
++
++    private fun loadedSamples(): List<ConnectionSpeedSample> =
++        cachedSamples ?: runCatching {
++            json.decodeFromString<List<ConnectionSpeedSample>>(ConnectionSpeedStorage.load().orEmpty())
++        }.getOrDefault(emptyList()).also { cachedSamples = it }
++}
++
++private const val MIN_VALID_MBPS = 0.2
++private const val MAX_VALID_MBPS = 1_000.0
++
++internal fun Double.isValidThroughput(): Boolean = isFinite() && this in MIN_VALID_MBPS..MAX_VALID_MBPS
++
++/**
++ * Measures sustained download throughput over one playback session and reports it once.
++ *
++ * Only ticks where the player is fetching and data actually arrives count. Players stop
++ * downloading once their buffer is full, and they also wait on connection setup, redirects and
++ * seeks (resume position, file index) without receiving anything; counting either would make a
++ * fast connection look slow. A genuinely slow link still delivers data on every tick.
++ *
++ * The first second of transfer is skipped: it is mostly TCP/TLS slow start and reads low on
++ * fast lines. The sample is tied to the network it was measured on and dropped if the
++ * default network changed during the measurement. Adds no requests and no polling of its own:
++ * it runs on the player's existing progress tick.
++ */
++internal class PlaybackThroughputSampler(
++    sourceUrl: String,
++    private val timeSource: TimeSource = TimeSource.Monotonic,
++    private val networkKind: () -> NetworkKind? = ::currentNetworkKind,
++    private val networkGeneration: () -> Int = ::currentNetworkGeneration,
++    private val onSample: (NetworkKind, Double) -> Unit = ConnectionSpeedEstimator::record,
++) {
++    // Live TV channels only arrive at their own bitrate, which says nothing about the connection.
++    private val isEligible = sourceUrl.isInternetPlaybackSource()
++    private var lastTick: TimeMark? = null
++    private var warmupMs = 0L
++    private var activeBytes = 0L
++    private var activeMs = 0L
++    private var measuredNetwork: NetworkKind? = null
++    private var measuredGeneration = 0
++    private var isFinished = false
++
++    /** [bytes] is the number of bytes received since the previous tick. */
++    fun onBytesTick(bytes: Long, isFetching: Boolean) {
++        tick(isFetching) { bytes }
++    }
++
++    /** For players that report a transfer rate rather than a byte count. */
++    fun onRateTick(bytesPerSecond: Long, isFetching: Boolean) {
++        tick(isFetching) { elapsedMs -> bytesPerSecond * elapsedMs / 1000 }
++    }
++
++    fun finish() {
++        if (isFinished) return
++        isFinished = true
++        val network = measuredNetwork ?: return
++        if (activeMs < MIN_WINDOW_MS) return
++        if (activeBytes < MIN_WINDOW_BYTES && activeMs < SLOW_WINDOW_MS) return
++        if (networkGeneration() != measuredGeneration) return
++        onSample(network, activeBytes * 8.0 / activeMs / 1000.0)
++    }
++
++    private inline fun tick(isFetching: Boolean, bytesFor: (elapsedMs: Long) -> Long) {
++        if (!isEligible || isFinished) return
++        val previous = lastTick
++        lastTick = timeSource.markNow()
++        val elapsedMs = previous?.elapsedNow()?.inWholeMilliseconds ?: return
++        // A long gap means the app was suspended; the interval says nothing about the network.
++        if (!isFetching || elapsedMs <= 0 || elapsedMs > MAX_TICK_GAP_MS) return
++        val bytes = bytesFor(elapsedMs)
++        if (bytes <= 0L) return
++        if (warmupMs < WARMUP_MS) {
++            if (warmupMs == 0L) {
++                measuredNetwork = networkKind() ?: run { isFinished = true; return }
++                measuredGeneration = networkGeneration()
++            }
++            warmupMs += elapsedMs
++            return
++        }
++        activeBytes += bytes
++        activeMs += elapsedMs
++        if (activeMs >= MAX_WINDOW_MS) finish()
++    }
++
++    private companion object {
++        const val WARMUP_MS = 1_000L
++        const val MIN_WINDOW_MS = 3_000L
++        const val MIN_WINDOW_BYTES = 8L * 1024 * 1024
++        const val SLOW_WINDOW_MS = 10_000L
++        const val MAX_WINDOW_MS = 10_000L
++        const val MAX_TICK_GAP_MS = 2_000L
++    }
++}
++
++/**
++ * True for http(s) sources reached over the internet. Local files, the on-device torrent
++ * proxy and LAN servers measure something other than the internet connection.
++ */
++internal fun String.isInternetPlaybackSource(): Boolean {
++    val value = trim()
++    val scheme = value.substringBefore("://", missingDelimiterValue = "").lowercase()
++    if (scheme != "http" && scheme != "https") return false
++    val authority = value.substringAfter("://")
++        .substringBefore('/')
++        .substringBefore('?')
++        .substringBefore('#')
++        .substringAfterLast('@')
++    val host = if (authority.startsWith("[")) {
++        authority.removePrefix("[").substringBefore(']')
++    } else {
++        authority.substringBefore(':')
++    }.lowercase()
++    if (host.isEmpty() || host == "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) {
++        return false
++    }
++    if (':' in host) {
++        return host != "::1" && !host.startsWith("fe80:") && !host.startsWith("fc") && !host.startsWith("fd")
++    }
++    val octets = host.split('.').map { it.toIntOrNull() }
++    if (octets.size != 4 || octets.any { it == null || it !in 0..255 }) return true
++    val first = octets[0]!!
++    val second = octets[1]!!
++    return !(
++        first == 0 ||
++            first == 10 ||
++            first == 127 ||
++            (first == 169 && second == 254) ||
++            (first == 172 && second in 16..31) ||
++            (first == 192 && second == 168)
++        )
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamConnectionFit.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamConnectionFit.kt
+new file mode 100644
+index 000000000..9d5df544d
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamConnectionFit.kt
+@@ -0,0 +1,114 @@
++package com.nuvio.app.features.streams
++
++import com.nuvio.app.features.details.MetaDetails
++import com.nuvio.app.features.details.MetaDetailsRepository
++import com.nuvio.app.features.details.parseRuntimeMinutes
++
++/**
++ * Moves streams likely too heavy for the current connection to the bottom of each list and
++ * leaves everything else exactly where the addon (or the user's sort) put it. Streams whose
++ * bitrate can't be known stay in place: missing metadata is not evidence of a heavy stream.
++ * Built once per stream load from a snapshot, so the order never shifts while a list is open.
++ */
++internal class StreamConnectionFit(
++    private val runtimeMinutes: Int,
++    private val connectionMbps: Double,
++) {
++    /** Streams whose average bitrate is above this can't sustain playback with headroom. */
++    private val maxBitrateMbps = connectionMbps / BITRATE_HEADROOM
++
++    fun apply(group: AddonStreamGroup): AddonStreamGroup {
++        val streams = apply(group.streams)
++        return if (streams === group.streams) group else group.copy(streams = streams)
++    }
++
++    /**
++     * Stable partition: kept streams in their order, then heavy streams in their order. Returns
++     * the same list when nothing needs to move, which is the common case, so unchanged groups
++     * keep their identity and their rows don't recompose.
++     */
++    fun apply(streams: List<StreamItem>): List<StreamItem> {
++        if (streams.size < 2) return streams
++        var firstHeavy = -1
++        var mustMove = false
++        for (index in streams.indices) {
++            if (isHeavy(streams[index])) {
++                if (firstHeavy < 0) firstHeavy = index
++            } else if (firstHeavy >= 0) {
++                mustMove = true
++                break
++            }
++        }
++        if (!mustMove) return streams
++
++        val ordered = ArrayList<StreamItem>(streams.size)
++        val heavy = ArrayList<StreamItem>(streams.size - firstHeavy)
++        for (index in 0 until firstHeavy) ordered += streams[index]
++        heavy += streams[firstHeavy]
++        for (index in firstHeavy + 1 until streams.size) {
++            val stream = streams[index]
++            if (isHeavy(stream)) heavy += stream else ordered += stream
++        }
++        ordered.addAll(heavy)
++        return ordered
++    }
++
++    private fun isHeavy(stream: StreamItem): Boolean {
++        val bitrateMbps = stream.averageBitrateMbps(runtimeMinutes) ?: return false
++        return bitrateMbps > maxBitrateMbps
++    }
++
++    companion object {
++        /** Bitrate peaks run well above a file's average; the player buffer only absorbs part of that. */
++        private const val BITRATE_HEADROOM = 1.5
++
++        /** Returns null, leaving order untouched, when disabled or when speed or runtime is unknown. */
++        fun capture(
++            type: String,
++            videoId: String,
++            parentMetaId: String?,
++            season: Int?,
++            episode: Int?,
++        ): StreamConnectionFit? {
++            if (!ConnectionSpeedEstimator.isEnabled()) return null
++            val connectionMbps = ConnectionSpeedEstimator.estimateMbps() ?: return null
++            val metas = listOfNotNull(
++                parentMetaId?.let { MetaDetailsRepository.peek(type, it) },
++                MetaDetailsRepository.peek(type, videoId),
++                MetaDetailsRepository.uiState.value.meta,
++            )
++            val runtimeMinutes = metas.firstNotNullOfOrNull { meta ->
++                meta.runtimeMinutesFor(videoId, season, episode)
++            } ?: return null
++            return StreamConnectionFit(runtimeMinutes, connectionMbps)
++        }
++    }
++}
++
++private const val MIN_RUNTIME_MINUTES = 10
++private const val MAX_RUNTIME_MINUTES = 600
++private const val MIN_SIZE_BYTES = 50L * 1024 * 1024
++private const val MIN_PLAUSIBLE_MBPS = 0.2
++private const val MAX_PLAUSIBLE_MBPS = 200.0
++
++/**
++ * Average bitrate from file size and runtime, or null when either is missing or the result is
++ * implausible (for example a season pack's size reported for a single episode).
++ */
++internal fun StreamItem.averageBitrateMbps(runtimeMinutes: Int): Double? {
++    if (runtimeMinutes !in MIN_RUNTIME_MINUTES..MAX_RUNTIME_MINUTES) return null
++    val sizeBytes = clientResolve?.stream?.raw?.size ?: behaviorHints.videoSize ?: return null
++    if (sizeBytes < MIN_SIZE_BYTES) return null
++    val mbps = sizeBytes * 8.0 / (runtimeMinutes * 60.0) / 1_000_000.0
++    return mbps.takeIf { it in MIN_PLAUSIBLE_MBPS..MAX_PLAUSIBLE_MBPS }
++}
++
++/** Runtime of [videoId], only when this meta is verifiably the same title. */
++internal fun MetaDetails.runtimeMinutesFor(videoId: String, season: Int?, episode: Int?): Int? {
++    val belongsToTitle = videoId == id || videoId.startsWith("$id:")
++    val video = videos.firstOrNull { it.id == videoId }
++        ?: videos.takeIf { belongsToTitle && season != null && episode != null }
++            ?.firstOrNull { it.season == season && it.episode == episode }
++    video?.runtime?.takeIf { it > 0 }?.let { return it }
++    return if (video != null || belongsToTitle) parseRuntimeMinutes(runtime) else null
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
+index f40580752..ab38fb4ad 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
+@@ -99,6 +99,13 @@ object StreamsRepository {
+             return
+         }
+ 
++        val connectionFit = StreamConnectionFit.capture( // Nuvio fork: connection-speed fit
++            type = type,
++            videoId = videoId,
++            parentMetaId = parentMetaId,
++            season = season,
++            episode = episode,
++        )
+         activeRequestKey = requestKey
+         activeJob?.cancel()
+         _uiState.value = StreamsUiState(requestToken = requestToken)
+@@ -321,10 +328,11 @@ object StreamsRepository {
+                     groups = listOf(group),
+                     rules = streamBadgeRules,
+                 ).firstOrNull() ?: group
+-                return DebridStreamPresentation.apply(
++                val presentedGroup = DebridStreamPresentation.apply(
+                     groups = listOf(badgeGroup),
+                     settings = debridSettings,
+                 ).firstOrNull() ?: badgeGroup
++                return connectionFit?.apply(presentedGroup) ?: presentedGroup // Nuvio fork: connection-speed fit
+             }
+ 
+             fun publishAddonGroup(group: AddonStreamGroup) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 index d61c6d1bf..3299dbe87 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
@@ -815,6 +1323,59 @@ index d61c6d1bf..3299dbe87 100644
      configureLinuxSwingGlobalsBeforeAwt()
      installDesktopOpenUriHandler()
      handleDesktopLaunchArgs(args)
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/ConnectionFitDesktopFeed.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/ConnectionFitDesktopFeed.kt
+new file mode 100644
+index 000000000..4ba7c29c1
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/ConnectionFitDesktopFeed.kt
+@@ -0,0 +1,47 @@
++package com.nuvio.app.features.player
++
++import com.nuvio.app.features.streams.ConnectionSpeedEstimator
++import com.nuvio.app.features.streams.NetworkKind
++import com.nuvio.app.features.streams.currentNetworkKind
++import com.nuvio.app.features.player.desktop.NativePlayerBridge
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.isActive
++import kotlinx.coroutines.launch
++
++/**
++ * Feeds the connection-fit estimator from the native player's network read rate (mpv's
++ * cache-speed, bytes/s) while a title is playing. Passive: nothing is measured on stream load.
++ */
++internal object ConnectionFitDesktopFeed {
++    @Volatile private var handle: Long = 0
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
++    private var loop: Job? = null
++
++    fun start(handle: Long) {
++        this.handle = handle
++        loop ?: run { loop = scope.launch { pollLoop() } }
++    }
++
++    fun stop() {
++        handle = 0
++    }
++
++    private suspend fun pollLoop() {
++        while (scope.isActive) {
++            delay(5_000)
++            val current = handle
++            if (current == 0L) continue
++            val bytesPerSecond = runCatching {
++                NativePlayerBridge.propGetString(current, "cache-speed")?.toDoubleOrNull()
++            }.getOrNull() ?: continue
++            if (bytesPerSecond > 0.0) {
++                val kind = currentNetworkKind() ?: NetworkKind.WIFI
++                ConnectionSpeedEstimator.record(kind, bytesPerSecond * 8.0 / 1_000_000.0)
++            }
++        }
++    }
++}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/NativePlayerBridgeSubtitleFont.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/NativePlayerBridgeSubtitleFont.kt
 new file mode 100644
 index 000000000..8d879a600
@@ -1109,7 +1670,7 @@ index 66a2513f5..3b1a26e0b 100644
          ensureLoaded()
          controlsPageAssets.url
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 2c8dd3439..63a17172e 100644
+index 2c8dd3439..e4d50f289 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 @@ -2,10 +2,11 @@ package com.nuvio.app.features.player.desktop
@@ -1146,7 +1707,7 @@ index 2c8dd3439..63a17172e 100644
      private val createsInFlight = mutableSetOf<Thread>()
      private var createWaitInFlight: Thread? = null
      private val releaseCallbacks = mutableListOf<ReleaseCallback>()
-@@ -333,6 +329,11 @@ internal class NativePlayerController(
+@@ -333,6 +329,12 @@ internal class NativePlayerController(
                              .onFailure { error -> recordTerminalDisposeFailure(error, "superseded create", created) }
                          return@onSuccess
                      }
@@ -1154,11 +1715,12 @@ index 2c8dd3439..63a17172e 100644
 +                    // first subtitle renders, and sub-font picks the imported family.
 +                    com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.activeHandle = created
 +                    com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.applyToPlayer()
++                    com.nuvio.app.features.player.ConnectionFitDesktopFeed.start(created)
 +                    }
                      SwingUtilities.invokeLater {
                          val shouldConfigure = synchronized(lifecycleLock) {
                              when {
-@@ -458,15 +459,7 @@ internal class NativePlayerController(
+@@ -458,15 +460,7 @@ internal class NativePlayerController(
                  "speed=${stateWithVolume.playbackSpeedLabel} audioLabel=${stateWithVolume.audioLabel} " +
                  "subsLabel=${stateWithVolume.subtitlesLabel} fullscreen=$isFullscreen"
          }
@@ -1175,7 +1737,7 @@ index 2c8dd3439..63a17172e 100644
      }
  
      fun onDesktopFullscreenChanged() {
-@@ -615,8 +608,8 @@ internal class NativePlayerController(
+@@ -615,8 +609,8 @@ internal class NativePlayerController(
              "volumeChange" -> setFallbackVolume(value.toFloat())
              "volumeChangeTemporary" -> setTemporaryVolume(value.toFloat())
              "setPlaybackSpeed" -> {
@@ -1186,7 +1748,7 @@ index 2c8dd3439..63a17172e 100644
              }
              else -> {
                  val eventHandled = onEvent(type, value)
-@@ -1099,6 +1092,22 @@ internal class NativePlayerController(
+@@ -1099,6 +1093,22 @@ internal class NativePlayerController(
  
      override fun setSubtitleUri(url: String) {
          log.d { "setSubtitleUri ${url.toPlaybackLogKey()} handle=$handle" }
@@ -1209,7 +1771,7 @@ index 2c8dd3439..63a17172e 100644
          handle.takeIf { it != 0L }?.let { current ->
              NativePlayerBridge.clearExternalSubtitles(current)
              NativePlayerBridge.addSubtitleUrl(current, url)
-@@ -1301,7 +1310,7 @@ private data class NativeControlsStructureKey(
+@@ -1301,7 +1311,7 @@ private data class NativeControlsStructureKey(
      val isInPip: Boolean,
  )
  
@@ -1218,7 +1780,7 @@ index 2c8dd3439..63a17172e 100644
      buildString {
          append('{')
          appendJsonField("title", title)
-@@ -1514,8 +1523,6 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+@@ -1514,8 +1524,6 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
          append(',')
          appendJsonField("themeBorderDefaultColor", themeBorderDefaultColor)
          append(',')
@@ -1227,7 +1789,7 @@ index 2c8dd3439..63a17172e 100644
          appendJsonField("isPlaying", isPlaying)
          append(',')
          appendJsonField("isLoading", isLoading)
-@@ -1595,8 +1602,6 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+@@ -1595,8 +1603,6 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
          append(',')
          appendJsonField("positionMs", positionMs)
          append(',')
@@ -1236,7 +1798,7 @@ index 2c8dd3439..63a17172e 100644
          appendJsonField("sourceIsLoading", sourceIsLoading)
          append(',')
          appendJsonArrayField("sourceFilters", sourceFilters) { appendFilterItemJson(it) }
-@@ -1684,23 +1689,15 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+@@ -1684,23 +1690,15 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
          appendJsonField("autoSyncBubbleMessage", autoSyncBubbleMessage)
          append(',')
          appendJsonField("autoSyncBubbleToken", autoSyncBubbleToken)
@@ -1733,6 +2295,46 @@ index 000000000..c74c81c30
 +        private const val RETRY_DELAY_MS = 3_000L
 +        private const val NO_SPEECH_LIMIT = 0.6
 +    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.desktop.kt
+new file mode 100644
+index 000000000..1cb25b85b
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.desktop.kt
+@@ -0,0 +1,34 @@
++package com.nuvio.app.features.streams
++
++import com.nuvio.app.core.storage.DesktopStorage
++import java.net.NetworkInterface
++
++internal enum class NetworkKind {
++    WIFI,
++    CELLULAR,
++    OTHER,
++}
++
++/** The current default network, or null when offline or unknown. Best-effort on desktop. */
++internal actual fun currentNetworkKind(): NetworkKind? = runCatching {
++    val interfaces = NetworkInterface.getNetworkInterfaces()?.asSequence()?.filter { it.isUp && !it.isLoopback }?.toList()
++    if (interfaces.isNullOrEmpty()) return@runCatching null
++    val names = interfaces.joinToString(" ") { it.name + " " + (it.displayName ?: "") }.lowercase()
++    when {
++        "wi-fi" in names || "wlan" in names || "wifi" in names || "airport" in names -> NetworkKind.WIFI
++        "ethernet" in names || "eth" in names || "enp" in names -> NetworkKind.OTHER
++        else -> NetworkKind.WIFI
++    }
++}.getOrNull()
++
++/** Cellular generation has no meaning on desktop. */
++internal actual fun currentNetworkGeneration(): Int = 0
++
++internal actual object ConnectionSpeedStorage {
++    private val store by lazy { DesktopStorage.store("connection_speed") }
++
++    actual fun load(): String? = store.getString("samples")
++    actual fun save(value: String) = store.putString("samples", value)
++    actual fun loadEnabled(): Boolean? = store.getBoolean("enabled")
++    actual fun saveEnabled(enabled: Boolean) = store.putBoolean("enabled", enabled)
 +}
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 index b7d15ba1f..311758d31 100644
