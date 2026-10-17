@@ -595,7 +595,7 @@ index 566765fc2..58a8334fe 100644
      external fun positionMs(handle: Long): Long
      external fun bufferedPositionMs(handle: Long): Long
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 98d64b7d5..45c048b2f 100644
+index 1bed913b7..2c8dd3439 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 @@ -18,6 +18,10 @@ import com.nuvio.app.features.player.PlayerControlsState

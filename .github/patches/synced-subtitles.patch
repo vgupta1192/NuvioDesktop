@@ -44,7 +44,7 @@ index b3665232a..90d5c0737 100644
      if (isSeries) {
          PlayerEpisodesPanel(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 9e4b15118..741281115 100644
+index ccba8eb71..71068ab16 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 @@ -479,6 +479,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {

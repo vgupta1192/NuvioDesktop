@@ -1951,7 +1951,7 @@ index 7c5987ab5..1da51a823 100644
      var pausedOverlayVisible by mutableStateOf(false)
      var gestureFeedback by mutableStateOf<GestureFeedbackState?>(null)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 741281115..887a42581 100644
+index 71068ab16..e25b324b4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 @@ -668,7 +668,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,

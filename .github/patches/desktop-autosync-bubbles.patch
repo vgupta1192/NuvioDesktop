@@ -45,14 +45,14 @@ index a7d46fa5f..e37d87937 100644
      var playerMetaVideos by mutableStateOf<List<MetaVideo>>(emptyList())
      var playerMeta by mutableStateOf<MetaDetails?>(null)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 7eeb4b01c..9e4b15118 100644
+index 7eeb4b01c..ccba8eb71 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 @@ -35,6 +35,7 @@ import com.nuvio.app.features.p2p.P2pStreamingState
  import com.nuvio.app.features.party.PartyRepository
  import com.nuvio.app.features.p2p.formatP2pMegabytes
  import com.nuvio.app.features.p2p.formatP2pSpeed
-+import com.nuvio.app.features.autosync.AutoSyncPlayerController
++import com.nuvio.app.features.player.AutoSyncPlayerController
  import com.nuvio.app.features.player.skip.SkipIntroRepository
  import com.nuvio.app.features.streams.AddonStreamGroup
  import com.nuvio.app.features.streams.StreamBadgeSettingsRepository
@@ -271,6 +271,23 @@ index bdc285c67..c777a9026 100644
      fun claimStartupRun(sessionKey: Int, playbackKey: String): Boolean {
          synchronized(lock) {
              if (!_enabled.value) return false
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index 98d64b7d5..1bed913b7 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -1626,6 +1626,12 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+         appendJsonField("notificationMessage", notificationMessage)
+         append(',')
+         appendJsonField("notificationToken", notificationToken)
++        append(',')
++        appendJsonField("autoSyncBubbleKind", autoSyncBubbleKind)
++        append(',')
++        appendJsonField("autoSyncBubbleMessage", autoSyncBubbleMessage)
++        append(',')
++        appendJsonField("autoSyncBubbleToken", autoSyncBubbleToken)
+         append(",\"party\":")
+         append(partyJson.encodeToString(PlayerControlPartyState.serializer(), party.withWebviewImages(onImageReady)))
+         append('}')
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/AutoSyncSettings.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/AutoSyncSettings.desktop.kt
 index 2002c23b2..6473a2090 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/AutoSyncSettings.desktop.kt
@@ -461,7 +478,7 @@ index a6854130a..5b359e2c5 100644
          <svg class="player-toast-icon" id="playerToastIcon" aria-hidden="true" hidden><use id="playerToastIconUse" href="#icon-speed"></use></svg>
          <span class="player-toast-text" id="playerToastText"></span>
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index bf6b22009..3a995123e 100644
+index bf6b22009..c08be48c0 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
 @@ -356,6 +356,9 @@ let state = {
@@ -528,3 +545,14 @@ index bf6b22009..3a995123e 100644
    const previousResizeLabel = state.resizeModeLabel || "";
    const previousSpeedLabel = state.playbackSpeedLabel || "";
    const previousEpisodeStreamsVisible = Boolean(state.episodeStreamsVisible);
+@@ -3261,6 +3304,10 @@ window.playerControls = nextState => {
+   if (notificationToken !== previousNotificationToken) {
+     showPlayerToast(state.notificationMessage);
+   }
++  const autoSyncBubbleToken = Number(state.autoSyncBubbleToken) || 0;
++  if (autoSyncBubbleToken !== previousAutoSyncBubbleToken) {
++    showAutoSyncBubble(state.autoSyncBubbleKind || "", state.autoSyncBubbleMessage || "");
++  }
+   if (!replayingParty) applyPartyControls(previousParty);
+   if (state.showP2pConsent && activeModal !== "p2pConsent") {
+     openPlayerModal("p2pConsent");
