@@ -159,7 +159,7 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           # optional-ports
-          for P in ttml-framerate desktop-autosync-bubbles custom-stretch jellyfin-subtitles synced-subtitles library-calendar; do
+          for P in ttml-framerate desktop-autosync-bubbles custom-stretch jellyfin-subtitles synced-subtitles library-calendar desktop-native-props; do
             if git apply "fork-src/.github/patches/$P.patch"; then
               echo "applied $P.patch"
             else
@@ -393,7 +393,7 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           # optional-ports
-          for P in ttml-framerate desktop-autosync-bubbles custom-stretch jellyfin-subtitles synced-subtitles library-calendar; do
+          for P in ttml-framerate desktop-autosync-bubbles custom-stretch jellyfin-subtitles synced-subtitles library-calendar desktop-native-props; do
             if git apply "fork-src/.github/patches/$P.patch"; then
               echo "applied $P.patch"
             else

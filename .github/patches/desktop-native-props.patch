@@ -1,0 +1,159 @@
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
+index e1f5d106..30b967d1 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
+@@ -135,6 +135,15 @@ internal object NativePlayerBridge {
+     external fun shutdownWebView2Warmup()
+     external fun setWindowsDisplaySleepInhibited(inhibited: Boolean): Boolean
+ 
++    // Generic mpv escape hatch so feature work (seek previews, generated
++    // subtitles, per-title styling) does not need a bespoke JNI function each.
++    // propGetString returns null when the property is missing/errors; the
++    // Windows bridge does not implement these, so calls must be fail-soft
++    // (runCatching) and Windows-only paths need a feature guard.
++    external fun propGetString(handle: Long, name: String): String?
++    external fun propSetString(handle: Long, name: String, value: String): Boolean
++    external fun command(handle: Long, args: Array<String>): Boolean
++
+     val controlsPageUrl: String by lazy {
+         ensureLoaded()
+         controlsPageAssets.url
+diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
+index 3c2791ec..b7d15ba1 100644
+--- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
++++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
+@@ -2021,6 +2021,49 @@ JNIEXPORT void JNICALL NP(addSubtitleUrl)(JNIEnv *env, jobject, jlong handle, js
+     mpv_command(p->mpv, cmd);
+ }
+ 
++// Generic mpv escape hatch so feature work (seek previews, generated
++// subtitles, per-title styling) does not need a bespoke JNI function each.
++JNIEXPORT jstring JNICALL NP(propGetString)(JNIEnv *env, jobject, jlong handle, jstring name) {
++    Player *p = asPlayer(handle);
++    if (!p || !p->mpv || !name) return nullptr;
++    char *value = nullptr;
++    if (mpv_get_property(p->mpv, jstringToUtf8(env, name).c_str(), MPV_FORMAT_STRING, &value) < 0 || !value) {
++        return nullptr;
++    }
++    jstring out = utf8ToJstring(env, value);
++    mpv_free(value);
++    return out;
++}
++
++JNIEXPORT jboolean JNICALL NP(propSetString)(JNIEnv *env, jobject, jlong handle, jstring name, jstring value) {
++    Player *p = asPlayer(handle);
++    if (!p || !p->mpv || !name || !value) return JNI_FALSE;
++    int err = mpv_set_property_string(p->mpv, jstringToUtf8(env, name).c_str(),
++                                      jstringToUtf8(env, value).c_str());
++    return err >= 0 ? JNI_TRUE : JNI_FALSE;
++}
++
++JNIEXPORT jboolean JNICALL NP(command)(JNIEnv *env, jobject, jlong handle, jobjectArray args) {
++    Player *p = asPlayer(handle);
++    if (!p || !p->mpv || !args) return JNI_FALSE;
++    jsize count = env->GetArrayLength(args);
++    if (count <= 0) return JNI_FALSE;
++    // Storage must outlive argv: mpv_command reads the strings synchronously.
++    std::vector<std::string> storage;
++    storage.reserve(count);
++    std::vector<const char *> argv;
++    argv.reserve(count + 1);
++    for (jsize i = 0; i < count; ++i) {
++        jstring item = (jstring) env->GetObjectArrayElement(args, i);
++        storage.push_back(item ? jstringToUtf8(env, item) : std::string());
++        if (item) env->DeleteLocalRef(item);
++        argv.push_back(storage.back().c_str());
++    }
++    argv.push_back(nullptr);
++    int err = mpv_command(p->mpv, argv.data());
++    return err >= 0 ? JNI_TRUE : JNI_FALSE;
++}
++
+ JNIEXPORT void JNICALL NP(clearExternalSubtitles)(JNIEnv *, jobject, jlong handle) {
+     Player *p = asPlayer(handle);
+     if (!p) return;
+diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
+index ae95de61..0bbd8da7 100644
+--- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
++++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
+@@ -2709,6 +2709,25 @@ static void nuvioMpvWakeup(void *ctx) {
+     mpv_set_property_string(_mpv, name, (value ?: @"").UTF8String);
+ }
+ 
++// Error-signalling variants of the helpers above for the generic JNI escape
++// hatch (propGetString/propSetString): callers need to distinguish a missing
++// property from an empty one.
++- (NSString *)rawStringProperty:(const char *)name {
++    if (!_mpv || !name) return nil;
++    char *value = nullptr;
++    if (mpv_get_property(_mpv, name, MPV_FORMAT_STRING, &value) < 0 || !value) {
++        return nil;
++    }
++    NSString *result = [NSString stringWithUTF8String:value];
++    mpv_free(value);
++    return result;
++}
++
++- (BOOL)rawSetStringProperty:(const char *)name value:(NSString *)value {
++    if (!_mpv || !name) return NO;
++    return mpv_set_property_string(_mpv, name, (value ?: @"").UTF8String) >= 0;
++}
++
+ - (void)command:(NSArray<NSString *> *)args {
+     if (!_mpv || args.count == 0) return;
+     std::vector<const char *> cargs;
+@@ -3369,6 +3388,54 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_updateControls(
+     });
+ }
+ 
++// Generic mpv escape hatch so feature work (seek previews, generated
++// subtitles, per-title styling) does not need a bespoke JNI function each.
++extern "C" JNIEXPORT jstring JNICALL
++Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_propGetString(
++    JNIEnv *env,
++    jobject /* bridge */,
++    jlong handle,
++    jstring name
++) {
++    if (handle == 0 || !name) return nullptr;
++    MpvWebPlayer *player = (__bridge MpvWebPlayer *)(void *)(intptr_t)handle;
++    std::string prop = jstringToString(env, name);
++    NSString *value = [player rawStringProperty:prop.c_str()];
++    return value ? env->NewStringUTF(value.UTF8String) : nullptr;
++}
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_propSetString(
++    JNIEnv *env,
++    jobject /* bridge */,
++    jlong handle,
++    jstring name,
++    jstring value
++) {
++    if (handle == 0 || !name || !value) return JNI_FALSE;
++    MpvWebPlayer *player = (__bridge MpvWebPlayer *)(void *)(intptr_t)handle;
++    std::string prop = jstringToString(env, name);
++    std::string val = jstringToString(env, value);
++    return [player rawSetStringProperty:prop.c_str()
++                                  value:[NSString stringWithUTF8String:val.c_str()]]
++               ? JNI_TRUE : JNI_FALSE;
++}
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_command(
++    JNIEnv *env,
++    jobject /* bridge */,
++    jlong handle,
++    jobjectArray args
++) {
++    if (handle == 0 || !args) return JNI_FALSE;
++    MpvWebPlayer *player = (__bridge MpvWebPlayer *)(void *)(intptr_t)handle;
++    NSArray<NSString *> *argv = jstringArrayToNSArray(env, args);
++    if (argv.count == 0) return JNI_FALSE;
++    [player command:argv];
++    return JNI_TRUE;
++}
++
+ extern "C" JNIEXPORT void JNICALL
+ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setNowPlayingMetadata(
+     JNIEnv *env,

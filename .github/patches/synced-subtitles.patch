@@ -44,10 +44,10 @@ index b3665232..90d5c073 100644
      if (isSeries) {
          PlayerEpisodesPanel(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 8f8109d2..cf5b9dc7 100644
+index 25411d49..3a6dea5e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -468,6 +468,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -475,6 +475,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
      val enableSurfaceGestures = !isDesktop && !isInPip
  
      BindAutoSyncRuntimeEffects() // AutoSync hook
@@ -55,7 +55,7 @@ index 8f8109d2..cf5b9dc7 100644
  
      Box(
          modifier = Modifier
-@@ -1825,6 +1826,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+@@ -1855,6 +1856,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
              preferredSubtitleSelectionApplied = true
              persistAddonSubtitlePreference(addon)
              val autoSync = playerController as? AutoSyncPlayerController // desktop libmpv AutoSync
@@ -425,20 +425,20 @@ index 00000000..f22e7989
 +    controller.setSubtitleUri(target.url)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
-index 184ded98..6e5ff2ca 100644
+index 743752f2..55e9365b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
-@@ -67,6 +67,7 @@ internal fun StreamCard(
-     isCurrent: Boolean = false,
-     currentLabel: String? = null,
- ) {
+@@ -80,6 +80,7 @@ internal fun StreamCard(
+     val highlightLabel = if (isCurrent) null else LocalStreamHighlight.current(stream)
+     val marked = isCurrent || highlightLabel != null
+     val markedLabel = if (isCurrent) currentLabel else highlightLabel
 +    val hasSyncedSubtitles = rememberSyncedSubtitlesMark(stream) // Nuvio fork: synced subtitles
      val cardShape = RoundedCornerShape(12.dp)
      val badgeImages = stream.badges.filter { it.imageURL.isNotBlank() }
      val hasBadges = badgeImages.isNotEmpty() || (showFileSizeBadges && stream.behaviorHints.videoSize != null)
-@@ -142,6 +143,10 @@ internal fun StreamCard(
+@@ -155,6 +156,10 @@ internal fun StreamCard(
                      Spacer(modifier = Modifier.width(8.dp))
-                     CurrentStreamBadge(label = currentLabel)
+                     CurrentStreamBadge(label = markedLabel)
                  }
 +                if (hasSyncedSubtitles) { // Nuvio fork: synced subtitles
 +                    Spacer(modifier = Modifier.width(8.dp))
@@ -448,7 +448,7 @@ index 184ded98..6e5ff2ca 100644
  
              val subtitle = stream.streamSubtitle
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index 89651cc9..14410996 100644
+index 06a74098..a4244774 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 @@ -250,6 +250,9 @@ fun StreamsScreen(
