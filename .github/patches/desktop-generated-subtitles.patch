@@ -268,6 +268,20 @@ index 000000000..6426f118a
 +interface GeneratedSubtitleModelActions {
 +    fun deleteModels()
 +}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
+index a1f0b278a..044276a52 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
+@@ -54,6 +54,9 @@ internal fun PlayerScreenRuntime.BindAutoSyncRuntimeEffects() {
+         activeController?.let { configureAutoSyncController(it) }
+         onDispose { activeController?.setAutoSyncAppliedListener(null) }
+     }
++    LaunchedEffect(playbackSession.videoId) {
++        GeneratedSubtitles.contentId = playbackSession.videoId // Generated subtitles hook: lines are saved per title
++    }
+     LaunchedEffect(playerController, playbackSnapshot.isLoading, isLoadingAddonSubtitles, addonSubtitles) {
+         // Add-ons can finish after Nuvio has completed its first track scan with no subtitle.
+         // Retry that automatic pick only for AutoSync, while the user still has no selection.
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
 index b9c288cb6..54fab4e7d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
@@ -559,7 +573,7 @@ index 66a2513f5..3b1a26e0b 100644
          ensureLoaded()
          controlsPageAssets.url
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 2c8dd3439..3d47d40fd 100644
+index 2c8dd3439..fea2a8886 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 @@ -2,6 +2,8 @@ package com.nuvio.app.features.player.desktop
@@ -571,7 +585,7 @@ index 2c8dd3439..3d47d40fd 100644
  import com.nuvio.app.features.player.PlayerControlAddonSubtitleItem
  import com.nuvio.app.features.player.PlayerControlEpisodeItem
  import com.nuvio.app.features.player.PlayerControlFilterItem
-@@ -1099,6 +1101,21 @@ internal class NativePlayerController(
+@@ -1099,6 +1101,22 @@ internal class NativePlayerController(
  
      override fun setSubtitleUri(url: String) {
          log.d { "setSubtitleUri ${url.toPlaybackLogKey()} handle=$handle" }
@@ -590,6 +604,7 @@ index 2c8dd3439..3d47d40fd 100644
 +        ) {
 +            return
 +        }
++        GeneratedSubtitlesDesktop.stopGeneration()
          handle.takeIf { it != 0L }?.let { current ->
              NativePlayerBridge.clearExternalSubtitles(current)
              NativePlayerBridge.addSubtitleUrl(current, url)
@@ -695,10 +710,10 @@ index 000000000..654b0f31a
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 new file mode 100644
-index 000000000..1be7c6d3c
+index 000000000..486ec5a75
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-@@ -0,0 +1,239 @@
+@@ -0,0 +1,246 @@
 +package com.nuvio.app.features.player.generated
 +
 +import com.nuvio.app.core.storage.DesktopStorage
@@ -749,6 +764,13 @@ index 000000000..1be7c6d3c
 +    @Volatile private var job: Job? = null
 +    @Volatile var running: Boolean = false
 +        private set
++
++    /** Called when playback moves to a real subtitle/title: the background dump loses its purpose. */
++    fun stopGeneration() {
++        job?.cancel()
++        job = null
++        running = false
++    }
 +
 +    /**
 +     * Returns true when [url] is a generated-subtitle entry and generation started (or the
@@ -1061,10 +1083,10 @@ index 000000000..c74c81c30
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-index b7d15ba1f..e1d3ee846 100644
+index b7d15ba1f..311758d31 100644
 --- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-@@ -2191,5 +2191,65 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
+@@ -2191,5 +2191,66 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
  JNIEXPORT void JNICALL NP(layoutNativeSubviews)(JNIEnv *, jobject, jlong) {}
  JNIEXPORT void JNICALL NP(reparentSurfaceNative)(JNIEnv *, jobject, jlong, jlong) {}
  
@@ -1079,6 +1101,7 @@ index b7d15ba1f..e1d3ee846 100644
 +    if (!mpv) return JNI_FALSE;
 +    mpv_set_option_string(mpv, "vo", "null");
 +    mpv_set_option_string(mpv, "ao", ("pcm:file=" + outPath).c_str());
++    mpv_set_option_string(mpv, "mute", "yes"); // never audible, even if ao=pcm is missing and mpv falls back
 +    mpv_set_option_string(mpv, "audio-samplerate", "16000");
 +    mpv_set_option_string(mpv, "audio-channels", "mono");
 +    mpv_set_option_string(mpv, "audio-format", "s16");
@@ -1131,10 +1154,10 @@ index b7d15ba1f..e1d3ee846 100644
  #undef NP
  } // extern "C"
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index 4730c231f..62521d749 100644
+index 4730c231f..e2c6bb8d7 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-@@ -3915,3 +3915,85 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
+@@ -3915,3 +3915,86 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
                                          stripSdh:stripSdh == JNI_TRUE];
      });
  }
@@ -1168,6 +1191,7 @@ index 4730c231f..62521d749 100644
 +    }
 +    mpv_set_option_string(mpv, "vo", "null");
 +    mpv_set_option_string(mpv, "ao", ("pcm:file=" + std::string(outPath)).c_str());
++    mpv_set_option_string(mpv, "mute", "yes"); // never audible, even if ao=pcm is missing and mpv falls back
 +    mpv_set_option_string(mpv, "audio-samplerate", "16000");
 +    mpv_set_option_string(mpv, "audio-channels", "mono");
 +    mpv_set_option_string(mpv, "audio-format", "s16");
