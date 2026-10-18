@@ -210,7 +210,7 @@ index b1b97c1f..c20f8285 100644
          json.parseToJsonElement(this).jsonObject
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
-index 7d1d7399..00a4b4e1 100644
+index 7d1d7399..7f405524 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
 @@ -1,78 +1,502 @@
@@ -337,6 +337,7 @@ index 7d1d7399..00a4b4e1 100644
 +            )
 +        }
 +    }
++    }
 +}
 +
 +@Composable
@@ -447,7 +448,6 @@ index 7d1d7399..00a4b4e1 100644
 +            )
 +        }
 +        Spacer(modifier = Modifier.height(40.dp))
-+    }
 +    }
 +}
 +
@@ -2043,7 +2043,7 @@ index 76e8719b..5beeec94 100644
 -    }
 -}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-index 4d3b23b7..c3c9434d 100644
+index 4d3b23b7..c7048a6f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 @@ -73,6 +73,18 @@ object TmdbMetadataService {
@@ -2059,7 +2059,7 @@ index 4d3b23b7..c3c9434d 100644
 +            endpoint = "search/person",
 +            query = mapOf("query" to name, "language" to language, "include_adult" to "false"),
 +        )
-+        response.results.firstOrNull()?.id
++        response?.results?.firstOrNull()?.id
 +    }.getOrNull()
 +
      suspend fun fetchPersonDetail(
