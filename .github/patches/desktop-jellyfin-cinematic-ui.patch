@@ -2050,10 +2050,18 @@ index 76e8719b..08ed3fab 100644
 -    }
 -}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-index 4d3b23b7..ef1658ff 100644
+index 4d3b23b7..0f354438 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-@@ -73,6 +73,24 @@ object TmdbMetadataService {
+@@ -4,6 +4,7 @@ import com.nuvio.app.isDesktop
+ 
+ import co.touchlab.kermit.Logger
+ import com.nuvio.app.features.addons.httpGetText
++import io.ktor.http.encodeURLParameter
+ import com.nuvio.app.features.details.MetaCompany
+ import com.nuvio.app.features.details.MetaDetails
+ import com.nuvio.app.features.details.MetaPerson
+@@ -73,6 +74,24 @@ object TmdbMetadataService {
              }
          }
  
@@ -2067,7 +2075,7 @@ index 4d3b23b7..ef1658ff 100644
 +            endpoint = "search/person",
 +            // buildTmdbUrl does not encode query values; multi-word names break without this.
 +            query = mapOf(
-+                "query" to io.ktor.http.encodeURLParameter(name),
++                "query" to name.encodeURLParameter(),
 +                "language" to language,
 +                "include_adult" to "false",
 +            ),
@@ -2078,7 +2086,7 @@ index 4d3b23b7..ef1658ff 100644
      suspend fun fetchPersonDetail(
          personId: Int,
          preferCrewCredits: Boolean? = null,
-@@ -2236,3 +2254,15 @@ internal data class TmdbDiscoverResult(
+@@ -2236,3 +2255,15 @@ internal data class TmdbDiscoverResult(
      @SerialName("vote_average") val voteAverage: Double? = null,
      @SerialName("vote_count") val voteCount: Int? = null,
  )
