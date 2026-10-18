@@ -1211,7 +1211,7 @@ index 00000000..8d879a60
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.desktop.kt
 new file mode 100644
-index 00000000..00afa754
+index 00000000..dc788df6
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.desktop.kt
 @@ -0,0 +1,54 @@
@@ -1247,14 +1247,14 @@ index 00000000..00afa754
 +                isImporting = true
 +                scope.launch {
 +                    val ok = withContext(Dispatchers.IO) {
-+                        runCatching {
++                        val picked = runCatching {
 +                            val dialog = FileDialog(null as Frame?, "Choose a subtitle font", FileDialog.LOAD).apply {
 +                                setFilenameFilter { _, name -> name.endsWith(".ttf", true) || name.endsWith(".otf", true) }
 +                            }
 +                            dialog.isVisible = true
 +                            dialog.files.firstOrNull()
 +                        }.getOrNull()
-+                        if (ok != null) SubtitleFontStore.import(ok) else true
++                        if (picked != null) SubtitleFontStore.import(picked) else true
 +                    }
 +                    isImporting = false
 +                    if (!ok) {
