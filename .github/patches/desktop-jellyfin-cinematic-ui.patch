@@ -2170,7 +2170,7 @@ index 629c2f96..210f006f 100644
 +    }.getOrNull()
  }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
-index 157f16b5..8aab32d2 100644
+index 157f16b5..f2b90d31 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
 @@ -12,6 +12,10 @@ import java.net.URL
@@ -2184,22 +2184,29 @@ index 157f16b5..8aab32d2 100644
  internal object HlsAudioSpotSampler {
      private const val CONNECT_TIMEOUT_MS = 15_000
      private const val READ_TIMEOUT_MS = 30_000
-@@ -65,6 +69,7 @@ internal object HlsAudioSpotSampler {
+@@ -65,13 +69,15 @@ internal object HlsAudioSpotSampler {
                  }
                  if (failed || concat.length() == 0L) continue
                  val dumped = runCatching {
+-                    NativePlayerBridge.dumpAudioWav(
+-                        url = concat.absolutePath,
+-                        headerLines = arrayOf(),
+-                        outPath = wav.absolutePath,
+-                        startSec = 0.0,
+-                        endSec = spotMs / 1000.0,
+-                    )
 +                    synchronized(NativeDumpGate) {
-                     NativePlayerBridge.dumpAudioWav(
-                         url = concat.absolutePath,
-                         headerLines = arrayOf(),
-@@ -73,6 +78,7 @@ internal object HlsAudioSpotSampler {
-                         endSec = spotMs / 1000.0,
-                     )
-                 }.getOrDefault(false)
++                        NativePlayerBridge.dumpAudioWav(
++                            url = concat.absolutePath,
++                            headerLines = arrayOf(),
++                            outPath = wav.absolutePath,
++                            startSec = 0.0,
++                            endSec = spotMs / 1000.0,
++                        )
 +                    }
+                 }.getOrDefault(false)
                  if (!dumped || !wav.exists() || wav.length() < 800L) continue
                  val pcm = readWavPcm(wav) ?: continue
-                 val intervals = RmsVad.detect(pcm).map { (a, b) -> (a + startMs) to (b + startMs) }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 index 486ec5a7..b81b65d9 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
