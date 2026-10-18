@@ -442,15 +442,17 @@ index 7ce25ea2c..531aafaba 100644
      LaunchedEffect(controller, sourceAvailable, playWhenReady) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 new file mode 100644
-index 000000000..f15c01f65
+index 000000000..61e6168e5
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-@@ -0,0 +1,350 @@
+@@ -0,0 +1,352 @@
 +package com.nuvio.app.features.player
 +
 +import co.touchlab.kermit.Logger
 +import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
 +import com.nuvio.app.features.autosync.AutoSyncSyncedSubtitle
++import com.nuvio.app.features.player.autosync.AutoSyncPreferences
++import com.nuvio.app.features.player.autosync.AutoSyncPreferencesPlatform
 +import com.nuvio.app.features.player.autosync.AutoSyncSubtitleHttp
 +import com.nuvio.app.features.player.autosync.PlayerAutoSyncBridge
 +import com.nuvio.app.features.player.autosync.SubtitleLanguageMatching
