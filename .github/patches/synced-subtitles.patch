@@ -392,10 +392,10 @@ index 000000000..ee07d09c0
 +val LocalSyncedSubtitleVideoId = compositionLocalOf<String?> { null }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesRuntime.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesRuntime.kt
 new file mode 100644
-index 000000000..f22e7989e
+index 000000000..6c59c4a71
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesRuntime.kt
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,66 @@
 +package com.nuvio.app.features.player
 +
 +import androidx.compose.runtime.Composable
@@ -430,7 +430,9 @@ index 000000000..f22e7989e
 +    }
 +    val syncedSubtitle by SyncedSubtitles.saved.collectAsState()
 +    LaunchedEffect(playerController, syncedSubtitle, addonSubtitles) {
-+        selectSavedSyncedSubtitle(syncedSubtitle)
++        // An exception here would take the whole desktop app down (composition effects are
++        // fatal on the JVM); a failed auto-select only leaves the plain subtitle list.
++        runCatching { selectSavedSyncedSubtitle(syncedSubtitle) }
 +    }
 +}
 +

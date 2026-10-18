@@ -324,7 +324,7 @@ index c8d3188db..ea7b67407 100644
              title = stringResource(Res.string.settings_playback_section_subtitle_rendering),
              isTablet = isTablet,
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-index c6fa48498..002b44bcf 100644
+index c6fa48498..9e58aca31 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 @@ -26,6 +26,7 @@ import com.nuvio.app.features.discordrpc.DiscordPresenceManager
@@ -343,6 +343,49 @@ index c6fa48498..002b44bcf 100644
      configureDesktopQuickJsLibrary()
      configureDesktopChrome()
      configureLinuxSwingGlobalsBeforeAwt()
+@@ -69,6 +71,7 @@ fun main(args: Array<String>) {
+     ProfileRepository.loadCachedProfiles()
+     AppIconRepository.ensureLoaded()
+     DiscordPresenceManager.start()
++    com.nuvio.app.core.network.resetBackendToOfficialOnce() // Fork: installs stuck on a saved custom server never reach the self-hosted backend
+ 
+     application {
+         val appIconState by AppIconRepository.state.collectAsState()
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/network/BackendConfigurationReset.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/network/BackendConfigurationReset.desktop.kt
+new file mode 100644
+index 000000000..d1ba53c18
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/network/BackendConfigurationReset.desktop.kt
+@@ -0,0 +1,29 @@
++package com.nuvio.app.core.network
++
++import com.nuvio.app.core.storage.DesktopStorage
++
++/**
++ * Nuvio fork: a desktop install that once saved a custom server keeps talking to it forever -
++ * the choice outlives every update - so its synced-subtitle pulls and pushes never reach the
++ * self-hosted backend this fork is built around, and the "Auto synced" chips silently stay
++ * empty. Once per install: drop any saved custom server and use the baked-in one. The active
++ * backend is always logged so a launcher-console report can prove where the app talks.
++ */
++internal fun resetBackendToOfficialOnce() {
++    runCatching {
++        val store = DesktopStorage.store("backend_configuration")
++        if (store.getBoolean("official_reset_v1") != true) {
++            val active = ServerConfigurationRepository.active.value
++            if (active.isCustom) {
++                val official = officialConfiguration()
++                ServerConfigurationRepository.useOfficial()
++                println(
++                    "[nuvio] backend switched from the saved custom ${active.backendUrl} " +
++                        "to the built-in ${official.backendUrl} - log in again if asked",
++                )
++            }
++            store.putBoolean("official_reset_v1", true)
++        }
++        println("[nuvio] backend: ${ServerConfigurationRepository.active.value.backendUrl}")
++    }
++}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 index 7ce25ea2c..531aafaba 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
@@ -442,10 +485,10 @@ index 7ce25ea2c..531aafaba 100644
      LaunchedEffect(controller, sourceAvailable, playWhenReady) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 new file mode 100644
-index 000000000..861c9cdc1
+index 000000000..fc180a6aa
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-@@ -0,0 +1,385 @@
+@@ -0,0 +1,393 @@
 +package com.nuvio.app.features.player
 +
 +import co.touchlab.kermit.Logger
@@ -514,13 +557,17 @@ index 000000000..861c9cdc1
 +     * message ([plain]; null means the plain path stays quiet).
 +     */
 +    private fun notifyAutoSync(runId: Long, kind: String, bubble: String, plain: String?) {
-+        val bubbleTarget = bubbleListener
-+        if (bubbleTarget != null && AutoSyncPreferences.bubbleToastsEnabled.value) {
-+            openBubbleRun = if (kind == "working") runId else -1L
-+            bubbleTarget(kind, bubble)
-+        } else if (plain != null) {
-+            messageListener?.invoke(plain)
-+        }
++        // Listeners write Compose state on this background thread; a faulty listener must never
++        // take the sync run (or the app) down.
++        runCatching {
++            val bubbleTarget = bubbleListener
++            if (bubbleTarget != null && AutoSyncPreferences.bubbleToastsEnabled.value) {
++                openBubbleRun = if (kind == "working") runId else -1L
++                bubbleTarget(kind, bubble)
++            } else if (plain != null) {
++                messageListener?.invoke(plain)
++            }
++        }.onFailure { autoSyncLog.w { "notify failed: ${it.message}" } }
 +    }
 +
 +    init {
@@ -570,7 +617,8 @@ index 000000000..861c9cdc1
 +        base.setSubtitleUri(file.absolutePath)
 +        activeSyncedKey = url
 +        AutoSyncSyncedSubtitle.mark(url)
-+        appliedListener?.invoke(url, 0)
++        runCatching { appliedListener?.invoke(url, 0) }
++            .onFailure { autoSyncLog.w { "applied listener failed: ${it.message}" } }
 +        autoSyncLog.i { "showing saved synced subtitle ($url) - AutoSync run skipped" }
 +        SyncLog.i("restored saved synced subtitle ${shortUrl(url)} from the account")
 +        return true
@@ -784,7 +832,8 @@ index 000000000..861c9cdc1
 +                    // Track the swap so stillRelevant() and the startup claim stay correct.
 +                    activeSyncedKey = chosenUrl
 +                }
-+                appliedListener?.invoke(chosenUrl, 0)
++                runCatching { appliedListener?.invoke(chosenUrl, 0) }
++                    .onFailure { autoSyncLog.w { "applied listener failed: ${it.message}" } }
 +                AutoSyncSyncedSubtitle.mark(chosenUrl)
 +                // Nuvio fork: keep the retimed subtitle for the other devices on the account.
 +                PlayerAutoSyncBridge.lastRetimedSrt?.let { srt ->
@@ -813,9 +862,11 @@ index 000000000..861c9cdc1
 +            job.invokeOnCompletion {
 +                // A run that ended without a result (cancelled, or the stream changed) must not
 +                // leave its "working" bubble on screen. A newer run owns the bubble otherwise.
-+                if (openBubbleRun == bubbleRunId) {
-+                    openBubbleRun = -1L
-+                    bubbleListener?.invoke("dismiss", "")
++                runCatching {
++                    if (openBubbleRun == bubbleRunId) {
++                        openBubbleRun = -1L
++                        bubbleListener?.invoke("dismiss", "")
++                    }
 +                }
 +            }
 +        }
@@ -883,10 +934,10 @@ index 000000000..79cad8c3c
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferencesPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferencesPlatform.desktop.kt
 new file mode 100644
-index 000000000..f7b62540b
+index 000000000..487e3fd55
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferencesPlatform.desktop.kt
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,61 @@
 +package com.nuvio.app.features.player.autosync
 +
 +import com.nuvio.app.core.storage.DesktopStorage
@@ -931,11 +982,17 @@ index 000000000..f7b62540b
 +            // mobile-style auto-sync-at-start toggle when the new keys were never written.
 +            AutoSyncPreferencesRepository.ensureLoaded()
 +            val newUserValue = store.getBoolean(ProfileScopedKey.of(AUTO_SYNC_ON_START_KEY))
-+            if (newUserValue == null) {
-+                val legacyEnabled = DesktopStorage.store(LEGACY_STORE_NAME)
-+                    .getBoolean(LEGACY_ENABLED_KEY) ?: false
-+                if (legacyEnabled && !AutoSyncPreferencesRepository.preferredSubtitleAutoSyncOnStart.value) {
-+                    AutoSyncPreferencesRepository.setPreferredSubtitleAutoSyncOnStart(true)
++            if (newUserValue == null &&
++                !AutoSyncPreferencesRepository.preferredSubtitleAutoSyncOnStart.value
++            ) {
++                when (DesktopStorage.store(LEGACY_STORE_NAME).getBoolean(LEGACY_ENABLED_KEY)) {
++                    // The user had the old engine on: keep it on.
++                    true -> AutoSyncPreferencesRepository.setPreferredSubtitleAutoSyncOnStart(true)
++                    // The user explicitly turned the old engine off: respect that.
++                    false -> Unit
++                    // Never chose anywhere (fresh install): this fork exists to play with
++                    // AutoSync, so start with it on instead of a silent no-op engine.
++                    null -> AutoSyncPreferencesRepository.setPreferredSubtitleAutoSyncOnStart(true)
 +                }
 +            }
 +            installed = true

@@ -1468,7 +1468,7 @@ index 000000000..654b0f31a
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 new file mode 100644
-index 000000000..b81b65d92
+index 000000000..0fbdd101b
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -0,0 +1,250 @@
@@ -1608,16 +1608,16 @@ index 000000000..b81b65d92
 +            val wavFile = File(cacheDir, "$key-$window.wav")
 +            val ok = withContext(Dispatchers.IO) {
 +                runCatching {
-+                    // Share the native-dump gate with the audio-sync fallback: one headless
-+                    // mpv instance at a time.
++                    // Share the native-dump gate with the speech engine: one dump at a time. The
++                    // dump itself runs in a child process, so a native crash cannot kill the app.
 +                    synchronized(com.nuvio.app.features.player.audiosync.NativeDumpGate) {
-+                    NativePlayerBridge.dumpAudioWav(
-+                        streamUrl,
-+                        headers.map { (name, value) -> "$name: $value" }.toTypedArray(),
-+                        wavFile.absolutePath,
-+                        startSec,
-+                        startSec + WINDOW_SECONDS,
-+                    )
++                        com.nuvio.app.features.player.audiosync.AudioDumpProcess.dumpAudioWav(
++                            streamUrl,
++                            headers.map { (name, value) -> "$name: $value" }.toTypedArray(),
++                            wavFile.absolutePath,
++                            startSec,
++                            startSec + WINDOW_SECONDS,
++                        )
 +                    }
 +                }.getOrDefault(false)
 +            }
