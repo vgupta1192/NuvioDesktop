@@ -1,16 +1,15 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
 new file mode 100644
-index 000000000..591ca664c
+index 000000000..59cde4ae8
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,107 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.desktop.NativePlayerBridge
 +import java.io.File
++import java.util.concurrent.TimeUnit
 +import kotlin.system.exitProcess
-+import kotlinx.coroutines.currentCoroutineContext
-+import kotlinx.coroutines.ensureActive
 +
 +/**
 + * The native headless-mpv audio dump (generated subtitles + the speech engine) runs in a
@@ -26,8 +25,12 @@ index 000000000..591ca664c
 +internal object AudioDumpProcess {
 +    private const val TIMEOUT_MINUTES = 3L
 +
-+    /** Same contract as [NativePlayerBridge.dumpAudioWav]; call off the UI thread. */
-+    suspend fun dumpAudioWav(
++    /**
++     * Same contract as [NativePlayerBridge.dumpAudioWav]; blocking (call off the UI thread).
++     * Deliberately NOT a suspend function: callers hold the [NativeDumpGate] monitor across it,
++     * and Kotlin forbids suspension inside a critical section.
++     */
++    fun dumpAudioWav(
 +        url: String,
 +        headerLines: Array<String>,
 +        outPath: String,
@@ -61,14 +64,13 @@ index 000000000..591ca664c
 +            }
 +        }.apply { isDaemon = true; start() }
 +        try {
-+            val finished = process.waitFor(TIMEOUT_MINUTES, java.util.concurrent.TimeUnit.MINUTES)
++            val finished = process.waitFor(TIMEOUT_MINUTES, TimeUnit.MINUTES)
 +            if (!finished) {
 +                process.destroyForcibly()
 +                return false
 +            }
 +        } catch (_: InterruptedException) {
 +            process.destroyForcibly()
-+            currentCoroutineContext().ensureActive()
 +            return false
 +        } finally {
 +            drain.join(1_000)
