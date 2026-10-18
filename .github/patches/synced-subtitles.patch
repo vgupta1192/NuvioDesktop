@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
-index 190b38f0e..05bd9d1d5 100644
+index 190b38f0e..793227be0 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
 @@ -78,6 +78,7 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
@@ -23,6 +23,14 @@ index 190b38f0e..05bd9d1d5 100644
          runtime.isLoadingAddonSubtitles = isLoadingAddonSubtitles
          runtime.horizontalSafePadding = horizontalSafePadding
          runtime.metrics = metrics
+@@ -178,6 +183,6 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
+             ),
+         )
+         runtime.BindPlayerRuntimeEffects()
+-        runtime.RenderPlayerRuntimeUi()
++        runtime.WithSeekPreview { runtime.RenderPlayerRuntimeUi() } // Seek previews hook
+     }
+ }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenModalHosts.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenModalHosts.kt
 index b3665232a..90d5c0737 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenModalHosts.kt
@@ -43,32 +51,12 @@ index b3665232a..90d5c0737 100644
  
      if (isSeries) {
          PlayerEpisodesPanel(
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index ccba8eb71..71068ab16 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -479,6 +479,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
-     val enableSurfaceGestures = !isDesktop && !isInPip
- 
-     BindAutoSyncRuntimeEffects() // AutoSync hook
-+    BindSyncedSubtitleEffects() // Nuvio fork: synced subtitles
- 
-     Box(
-         modifier = Modifier
-@@ -1815,6 +1816,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
-             preferredSubtitleSelectionApplied = true
-             persistAddonSubtitlePreference(addon)
-             val autoSync = playerController as? AutoSyncPlayerController // desktop libmpv AutoSync
-+            SyncedSubtitles.userPicked = true // Nuvio fork: synced subtitles
-             if (autoSync != null) autoSync.setSubtitleUriWithSelectedAutoSync(addon.url) else attachSelectedAddonSubtitleWithAutoSync(addon.url) // AutoSync hook
-             if (hasBurnedInServerSubtitle) clearServerSubtitleTrack()
-         },
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
 new file mode 100644
-index 000000000..730196662
+index 000000000..ee07d09c0
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
-@@ -0,0 +1,285 @@
+@@ -0,0 +1,333 @@
 +package com.nuvio.app.features.player
 +
 +import androidx.compose.runtime.compositionLocalOf
@@ -120,6 +108,10 @@ index 000000000..730196662
 +
 +    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 +    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
++
++    /** Nuvio fork: set by the platform so the shareable audio-sync log shows the pull story. */
++    var logSink: ((String) -> Unit)? = null
++    internal fun log(message: String) { logSink?.invoke(message) }
 +
 +    private var localLoad: ((name: String) -> String?)? = null
 +    private var localSave: ((name: String, value: String) -> Unit)? = null
@@ -207,8 +199,10 @@ index 000000000..730196662
 +        userPicked = false
 +        next ?: return
 +        requestMarks(next.videoId)
++        log("synced subs: playback video=${next.videoId} key=${next.streamKey}")
 +        scope.launch {
 +            val local = localLoad?.invoke(fileName(next))?.let(::decodeList).orEmpty()
++            log("synced subs: local file rows=${local.size}")
 +            if (local.isNotEmpty() && _playback.value == next) merge(next, local, store = false)
 +            val remote = runCatching {
 +                val result = SupabaseProvider.client.postgrest.rpc(
@@ -220,7 +214,35 @@ index 000000000..730196662
 +                )
 +                decodeList(result.data)
 +            }.getOrNull().orEmpty()
++            log("synced subs: keyed pull rows=${remote.size}")
 +            if (remote.isNotEmpty() && _playback.value == next) merge(next, remote, store = true)
++        }
++        // Nuvio fork: nothing under THIS device's stream key - other devices (or earlier
++        // sessions with rotated stream URLs) saved under different keys for the same title.
++        // Pull every key known for the video and merge without persisting locally.
++        scope.launch {
++            if (_playback.value != next || !_saved.value?.second.isNullOrEmpty()) return@launch
++            val allKeys = runCatching {
++                val result = SupabaseProvider.client.postgrest.rpc(
++                    "synced_subtitles_list",
++                    buildJsonObject { put("p_video_id", next.videoId) },
++                )
++                json.decodeFromString<List<String>>(result.data)
++            }.getOrNull().orEmpty()
++            for (key in allKeys) {
++                if (_playback.value != next) break
++                val remote = runCatching {
++                    val result = SupabaseProvider.client.postgrest.rpc(
++                        "synced_subtitles_pull_all",
++                        buildJsonObject {
++                            put("p_video_id", next.videoId)
++                            put("p_stream_key", key)
++                        },
++                    )
++                    decodeList(result.data)
++                }.getOrNull().orEmpty()
++                if (remote.isNotEmpty() && _playback.value == next) merge(next, remote, store = false)
++            }
 +        }
 +    }
 +
@@ -285,13 +307,27 @@ index 000000000..730196662
 +    /** The saved synced subtitle for [url] in this playback, if any. */
 +    fun savedFor(url: String): Saved? {
 +        val (playback, saved) = _saved.value ?: return null
-+        return saved[url]?.takeIf { playback == _playback.value }
++        if (playback != _playback.value) return null
++        saved[url]?.let { return it }
++        return saved.values.firstOrNull { sameSubtitleFile(it.subtitleUrl, url) }
++    }
++
++    /**
++     * Nuvio fork: the add-on's subtitle URLs rotate between sessions (fresh redirect tokens in
++     * the path), so a saved timing is matched to the current list by the stable file name at
++     * the end of the URL when the exact URL is no longer present.
++     */
++    fun sameSubtitleFile(savedUrl: String, listUrl: String): Boolean {
++        if (savedUrl == listUrl) return true
++        val a = savedUrl.substringBefore('?').substringAfterLast('/')
++        val b = listUrl.substringBefore('?').substringAfterLast('/')
++        return a.isNotEmpty() && a == b
 +    }
 +
 +    /** AutoSync or the audio sync synced [url] to [srt] in this playback: keep it for next time. */
 +    fun save(url: String, srt: String, method: String, nowMs: Long) {
 +        val playback = _playback.value ?: return
-+        if (srt.isBlank() || url in restoredUrls) return
++        if (srt.isBlank() || url in restoredUrls || GeneratedSubtitles.isGenerated(url)) return
 +        val subtitle = describeSubtitle(url)
 +        val saved = Saved(
 +            subtitleUrl = url,
@@ -523,66 +559,6 @@ index 000000000..caf187e9c
 +        )
 +    }
 +}
-diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-index 4bac8910e..73f5adcab 100644
---- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-+++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-@@ -89,6 +89,7 @@ internal class AutoSyncNativePlayerController(
-     }
- 
-     init {
-+        SyncedSubtitlesDesktop.ensureStore() // Nuvio fork: synced subtitles
-         AutoSyncPreferences.ensureLoaded()
-         if (AutoSyncPreferences.isEnabled() && isHttpUrl(sourceUrl())) {
-             EmbeddedSubtitleTimelineLoader.prefetch(
-@@ -114,16 +115,36 @@ internal class AutoSyncNativePlayerController(
-     }
- 
-     override fun setSubtitleUriWithAutoSync(url: String) {
-+        if (restoreSynced(url)) return // Nuvio fork: synced subtitles
-         attachAndRunAutomaticSubtitleSync(url, AutoSyncCandidateScope.STARTUP_SEARCH)
-     }
- 
-     override fun setSubtitleUriWithSelectedAutoSync(url: String) {
-+        if (restoreSynced(url)) return // Nuvio fork: synced subtitles
-         attachAndRunAutomaticSubtitleSync(url, AutoSyncCandidateScope.SELECTED_ONLY)
-     }
- 
-+    /**
-+     * Nuvio fork: shows [url] with the timing saved when it was synced before for this title +
-+     * stream (on any device), so AutoSync does not run again.
-+     */
-+    private fun restoreSynced(url: String): Boolean {
-+        val file = SyncedSubtitlesDesktop.savedFileFor(url) ?: return false
-+        cancelAutoSync()
-+        SyncedSubtitles.restoredUrls += url
-+        base.setSubtitleDelayMs(0)
-+        base.setSubtitleUri(file.absolutePath)
-+        activeSyncedKey = url
-+        AutoSyncSyncedSubtitle.mark(url)
-+        appliedListener?.invoke(url, 0)
-+        autoSyncLog.i { "showing saved synced subtitle ($url)" }
-+        return true
-+    }
-+
-     // Plain attaches mean the user (or the runtime) chose un-synced timing; cancel any running
-     // analysis and forget the synced state so a later retime cannot land on the wrong track.
-     override fun setSubtitleUri(url: String) {
-+        if (restoreSynced(url)) return // Nuvio fork: synced subtitles
-         cancelAutoSync()
-         activeSyncedKey = url
-         AutoSyncSyncedSubtitle.clear()
-@@ -405,6 +426,10 @@ internal class AutoSyncNativePlayerController(
-                 }
-                 appliedListener?.invoke(chosenUrl, 0)
-                 AutoSyncSyncedSubtitle.mark(chosenUrl)
-+                // Nuvio fork: keep the retimed subtitle for the other devices on the account.
-+                PlayerAutoSyncBridge.lastRetimedSrt?.let { srt ->
-+                    if (withinToleranceMs == null) SyncedSubtitles.save(chosenUrl, srt, method = "autosync", nowMs = System.currentTimeMillis())
-+                }
-                 notifyAutoSync(
-                     bubbleRunId,
-                     "success",
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesDesktop.kt
 new file mode 100644
 index 000000000..65b9c6718
@@ -637,26 +613,3 @@ index 000000000..65b9c6718
 +        }.getOrNull()
 +    }
 +}
-diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/PlayerAutoSyncBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/PlayerAutoSyncBridge.kt
-index 46dd0ee25..55659328e 100644
---- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/PlayerAutoSyncBridge.kt
-+++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/PlayerAutoSyncBridge.kt
-@@ -29,6 +29,10 @@ internal object PlayerAutoSyncBridge {
-      * swaps the player's external subtitle to the retimed file. Returns false when nothing was
-      * written (the caller then attaches the original subtitle unchanged).
-      */
-+    /** Nuvio fork: the last retimed subtitle as SRT, saved as a synced subtitle on success. */
-+    @Volatile
-+    var lastRetimedSrt: String? = null
-+
-     fun attachRetimedSubtitle(
-         base: PlayerEngineController,
-         cues: List<SubtitleSyncCue>,
-@@ -169,6 +173,7 @@ internal object PlayerAutoSyncBridge {
-                 .append(formatSrtTime(cue.endTimeMs)).append('\n')
-             builder.append(cue.text.trim().ifEmpty { " " }).append("\n\n")
-         }
-+        lastRetimedSrt = builder.toString() // Nuvio fork: synced subtitles
-         val tmp = file.resolveSibling(file.fileName.toString() + ".part")
-         Files.writeString(tmp, builder.toString(), Charsets.UTF_8)
-         Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING)

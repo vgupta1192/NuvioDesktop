@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index f35772b8..3405f7c2 100644
+index f35772b84..3405f7c2e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 @@ -1784,11 +1784,26 @@ internal fun MainAppContent(
@@ -32,7 +32,7 @@ index f35772b8..3405f7c2 100644
                  entry<DownloadsRoute> { route ->
                      DownloadsDestination(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailCastSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailCastSection.kt
-index 4a8cc86a..5c1def66 100644
+index 4a8cc86a8..5c1def667 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailCastSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailCastSection.kt
 @@ -89,7 +89,9 @@ fun DetailCastSection(
@@ -47,7 +47,7 @@ index 4a8cc86a..5c1def66 100644
                          } else {
                              null
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
-index b1b97c1f..c20f8285 100644
+index b1b97c1f1..c20f82856 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
 @@ -24,6 +24,7 @@ import kotlinx.serialization.json.put
@@ -225,7 +225,7 @@ index b1b97c1f..c20f8285 100644
          json.parseToJsonElement(this).jsonObject
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
-index 7d1d7399..acd0e923 100644
+index 7d1d7399b..acd0e923a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
 @@ -1,78 +1,508 @@
@@ -763,7 +763,7 @@ index 7d1d7399..acd0e923 100644
 +    return if (hours > 0) "${hours}h ${minutes.toString().padStart(2, '0')}m" else "${minutes}m"
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
-index 05f1c523..d4ee562d 100644
+index 05f1c5237..d4ee562d4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
 @@ -1,7 +1,10 @@
@@ -894,7 +894,7 @@ index 05f1c523..d4ee562d 100644
 +    cast = cast,
 +)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt
-index 2800325d..33c560b4 100644
+index 2800325d6..33c560b47 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt
 @@ -10,4 +10,7 @@ internal expect object JellyfinPlatform {
@@ -906,7 +906,7 @@ index 2800325d..33c560b4 100644
 +    fun localEndTimeLabel(minutesFromNow: Long): String?
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
-index 2c0d407f..e800cc17 100644
+index 2c0d407f1..e800cc171 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
 @@ -43,6 +43,7 @@ object JellyfinRepository {
@@ -1098,7 +1098,7 @@ index 2c0d407f..e800cc17 100644
  
      /**
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
-index 76e8719b..08ed3fab 100644
+index 76e8719b0..08ed3fab9 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
 @@ -16,30 +16,23 @@ import androidx.compose.foundation.layout.height
@@ -2064,46 +2064,8 @@ index 76e8719b..08ed3fab 100644
 -        "${minutes}m"
 -    }
 -}
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
-index 73019666..36e8073d 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
-@@ -151,6 +151,33 @@ object SyncedSubtitles {
-             }.getOrNull().orEmpty()
-             if (remote.isNotEmpty() && _playback.value == next) merge(next, remote, store = true)
-         }
-+        // Nuvio fork: nothing under THIS device's stream key - other devices (or earlier
-+        // sessions with rotated stream URLs) saved under different keys for the same title.
-+        // Pull every key known for the video and merge without persisting locally.
-+        scope.launch {
-+            if (_playback.value != next || !_saved.value?.second.isNullOrEmpty()) return@launch
-+            val allKeys = runCatching {
-+                val result = SupabaseProvider.client.postgrest.rpc(
-+                    "synced_subtitles_list",
-+                    buildJsonObject { put("p_video_id", next.videoId) },
-+                )
-+                json.decodeFromString<List<String>>(result.data)
-+            }.getOrNull().orEmpty()
-+            for (key in allKeys) {
-+                if (_playback.value != next) break
-+                val remote = runCatching {
-+                    val result = SupabaseProvider.client.postgrest.rpc(
-+                        "synced_subtitles_pull_all",
-+                        buildJsonObject {
-+                            put("p_video_id", next.videoId)
-+                            put("p_stream_key", key)
-+                        },
-+                    )
-+                    decodeList(result.data)
-+                }.getOrNull().orEmpty()
-+                if (remote.isNotEmpty() && _playback.value == next) merge(next, remote, store = false)
-+            }
-+        }
-     }
- 
-     /** Adds [incoming] to the saved subtitles of [playback]; the newer copy of a subtitle wins. */
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-index 4d3b23b7..0f354438 100644
+index 4d3b23b78..0f354438c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 @@ -4,6 +4,7 @@ import com.nuvio.app.isDesktop
@@ -2156,7 +2118,7 @@ index 4d3b23b7..0f354438 100644
 +    val name: String = "",
 +)
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt
-index 629c2f96..210f006f 100644
+index 629c2f969..210f006fd 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt
 @@ -48,4 +48,9 @@ internal actual object JellyfinPlatform {
@@ -2170,67 +2132,213 @@ index 629c2f96..210f006f 100644
 +    }.getOrNull()
  }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
-index 157f16b5..f2b90d31 100644
---- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
+new file mode 100644
+index 000000000..406e34a06
+--- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
-@@ -12,6 +12,10 @@ import java.net.URL
-  * 16 kHz mono PCM by handing the concatenated segments to [NativePlayerBridge.dumpAudioWav]
-  * (headless mpv decodes any container the player can, so no platform demuxer is needed).
-  */
+@@ -0,0 +1,200 @@
++package com.nuvio.app.features.player.audiosync
++
++import com.nuvio.app.features.player.desktop.NativePlayerBridge
++import java.io.File
++import java.io.FileOutputStream
++import java.io.RandomAccessFile
++import java.net.HttpURLConnection
++import java.net.URL
++
++/**
++ * Downloads the audio of chosen media-time windows from an HLS VOD and decodes each window to
++ * 16 kHz mono PCM by handing the concatenated segments to [NativePlayerBridge.dumpAudioWav]
++ * (headless mpv decodes any container the player can, so no platform demuxer is needed).
++ */
 +/** Nuvio fork: the headless-mpv dump runs one native player at a time - generated subtitles
 + *  and the audio-sync fallback share this gate so two native instances never race. */
 +internal val NativeDumpGate = Any()
 +
- internal object HlsAudioSpotSampler {
-     private const val CONNECT_TIMEOUT_MS = 15_000
-     private const val READ_TIMEOUT_MS = 30_000
-@@ -65,13 +69,15 @@ internal object HlsAudioSpotSampler {
-                 }
-                 if (failed || concat.length() == 0L) continue
-                 val dumped = runCatching {
--                    NativePlayerBridge.dumpAudioWav(
--                        url = concat.absolutePath,
--                        headerLines = arrayOf(),
--                        outPath = wav.absolutePath,
--                        startSec = 0.0,
--                        endSec = spotMs / 1000.0,
--                    )
-+                    synchronized(NativeDumpGate) {
-+                        NativePlayerBridge.dumpAudioWav(
-+                            url = concat.absolutePath,
-+                            headerLines = arrayOf(),
-+                            outPath = wav.absolutePath,
-+                            startSec = 0.0,
-+                            endSec = spotMs / 1000.0,
-+                        )
++internal object HlsAudioSpotSampler {
++    private const val CONNECT_TIMEOUT_MS = 15_000
++    private const val READ_TIMEOUT_MS = 30_000
++    private const val MAX_SPOT_BYTES = 96L * 1024 * 1024
++
++    /** Speech intervals (media ms) found in one sampled window. */
++    data class Spot(val startMs: Long, val intervals: List<Pair<Long, Long>>, val speechMs: Long)
++
++    fun interface SegmentDownloader {
++        /** GET [url] with [headers], APPENDING to [out]; returns bytes written or -1 on failure. */
++        fun download(url: String, headers: Map<String, String>, out: File): Long
++    }
++
++    /**
++     * Samples one window (media ms [startMs], [spotMs] long) from [playlist]. Returns null when
++     * the download or the decode failed.
++     */
++    fun sampleOne(
++        playlist: HlsMediaPlaylist.Playlist,
++        startMs: Long,
++        spotMs: Long,
++        headers: Map<String, String>,
++        tmpDir: File,
++        downloader: SegmentDownloader = defaultDownloader(),
++    ): Spot? {
++        tmpDir.mkdirs()
++        val endMs = startMs + spotMs
++        val parts = playlist.segments.filter {
++            it.startMs < endMs && it.startMs + it.durationSec * 1000.0 > startMs
++        }
++        if (parts.isEmpty()) return null
++        // The first segment usually starts before [startMs]; the dump covers media time from the
++        // segment start, so the lead-in must be trimmed before the speech intervals map to
++        // [startMs]-relative time.
++        val leadInMs = (startMs - parts.first().startMs).coerceAtLeast(0L)
++        val concat = File(tmpDir, "nuvio-as-$startMs.bin")
++        val wav = File(tmpDir, "nuvio-as-$startMs.wav")
++        try {
++            concat.delete()
++            var total = 0L
++            for (part in parts) {
++                val written = runCatching { downloader.download(part.url, headers, concat) }.getOrDefault(-1L)
++                if (written <= 0L) return null
++                total += written
++                if (total > MAX_SPOT_BYTES) return null
++            }
++            if (concat.length() == 0L) return null
++            val dumped = runCatching {
++                synchronized(NativeDumpGate) {
++                    NativePlayerBridge.dumpAudioWav(
++                        url = concat.absolutePath,
++                        headerLines = arrayOf(),
++                        outPath = wav.absolutePath,
++                        startSec = 0.0,
++                        endSec = spotMs / 1000.0,
++                    )
++                }
++            }.getOrDefault(false)
++            if (!dumped || !wav.exists() || wav.length() < 800L) return null
++            val full = readWavPcm(wav) ?: return null
++            val trimSamples = (leadInMs * RmsVad.SAMPLE_RATE / 1000L).toInt()
++            val pcm = if (trimSamples in 1 until full.size) full.copyOfRange(trimSamples, full.size) else full
++            val intervals = RmsVad.detect(pcm).map { (a, b) -> (a + startMs) to (b + startMs) }
++            val speechMs = intervals.sumOf { (a, b) -> b - a }
++            if (speechMs <= 0) return null
++            return Spot(startMs, intervals, speechMs)
++        } finally {
++            concat.delete()
++            wav.delete()
++        }
++    }
++
++    fun defaultDownloader(): SegmentDownloader = SegmentDownloader { url, headers, out ->
++        val connection = URL(url).openConnection() as HttpURLConnection
++        try {
++            connection.connectTimeout = CONNECT_TIMEOUT_MS
++            connection.readTimeout = READ_TIMEOUT_MS
++            connection.instanceFollowRedirects = true
++            for ((k, v) in headers) connection.setRequestProperty(k, v)
++            if (connection.responseCode !in 200..299) return@SegmentDownloader -1L
++            var written = 0L
++            connection.inputStream.use { input ->
++                FileOutputStream(out, true).use { output ->
++                    val buf = ByteArray(64 * 1024)
++                    while (true) {
++                        val n = input.read(buf)
++                        if (n < 0) break
++                        output.write(buf, 0, n)
++                        written += n
 +                    }
-                 }.getOrDefault(false)
-                 if (!dumped || !wav.exists() || wav.length() < 800L) continue
-                 val pcm = readWavPcm(wav) ?: continue
-diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-index 486ec5a7..b81b65d9 100644
---- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-+++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-@@ -134,6 +134,9 @@ internal object GeneratedSubtitlesDesktop {
-             val wavFile = File(cacheDir, "$key-$window.wav")
-             val ok = withContext(Dispatchers.IO) {
-                 runCatching {
-+                    // Share the native-dump gate with the audio-sync fallback: one headless
-+                    // mpv instance at a time.
-+                    synchronized(com.nuvio.app.features.player.audiosync.NativeDumpGate) {
-                     NativePlayerBridge.dumpAudioWav(
-                         streamUrl,
-                         headers.map { (name, value) -> "$name: $value" }.toTypedArray(),
-@@ -141,6 +144,7 @@ internal object GeneratedSubtitlesDesktop {
-                         startSec,
-                         startSec + WINDOW_SECONDS,
-                     )
++                }
++            }
++            written
++        } finally {
++            connection.disconnect()
++        }
++    }
++
++    /** Reads a RIFF WAV as mono float samples in [-1, 1]; s16 and float32 formats supported. */
++    fun readWavPcm(file: File): FloatArray? {
++        return try {
++            RandomAccessFile(file, "r").use { raf ->
++                val length = raf.length()
++                if (length < 44) return null
++                var channels = 1
++                var bits = 16
++                var format = 1
++                var dataPos = -1L
++                var dataLen = 0L
++                raf.seek(12)
++                while (raf.filePointer + 8 <= length && dataPos < 0) {
++                    val id = ByteArray(4).also { raf.readFully(it) }.decodeToString()
++                    val size = readLeInt(raf).toLong() and 0xFFFFFFFFL
++                    when (id) {
++                        "fmt " -> {
++                            val fmt = ByteArray(16.coerceAtMost(size.toInt())).also { raf.readFully(it) }
++                            format = le16(fmt, 0)
++                            channels = le16(fmt, 2)
++                            bits = le16(fmt, 14)
++                            raf.seek(raf.filePointer + (size - 16).coerceAtLeast(0) + (size % 2))
++                        }
++                        "data" -> {
++                            dataPos = raf.filePointer
++                            dataLen = size
++                        }
++                        else -> raf.seek(raf.filePointer + size + (size % 2))
 +                    }
-                 }.getOrDefault(false)
-             }
-             if (!ok || !wavFile.exists() || wavFile.length() <= 44L) {
++                }
++                if (dataPos < 0 || dataLen <= 0) return null
++                val bytes = ByteArray(dataLen.coerceAtMost(length - dataPos).toInt())
++                raf.seek(dataPos)
++                raf.readFully(bytes)
++                when {
++                    format == 1 && bits == 16 -> {
++                        val frames = bytes.size / 2 / channels
++                        val out = FloatArray(frames)
++                        var i = 0
++                        for (f in 0 until frames) {
++                            var acc = 0
++                            for (c in 0 until channels) {
++                                acc += le16(bytes, i)
++                                i += 2
++                            }
++                            out[f] = (acc / channels - 32768) / 32768f
++                        }
++                        out
++                    }
++                    format == 3 && bits == 32 -> {
++                        val frames = bytes.size / 4 / channels
++                        val out = FloatArray(frames)
++                        var i = 0
++                        for (f in 0 until frames) {
++                            var acc = 0f
++                            for (c in 0 until channels) {
++                                acc += java.lang.Float.intBitsToFloat(readLeIntAt(bytes, i))
++                                i += 4
++                            }
++                            out[f] = acc / channels
++                        }
++                        out
++                    }
++                    else -> null
++                }
++            }
++        } catch (_: Exception) {
++            null
++        }
++    }
++
++    private fun readLeInt(raf: RandomAccessFile): Int {
++        val b = ByteArray(4).also { raf.readFully(it) }
++        return readLeIntAt(b, 0)
++    }
++
++    private fun readLeIntAt(b: ByteArray, i: Int): Int =
++        (b[i].toInt() and 0xFF) or
++            ((b[i + 1].toInt() and 0xFF) shl 8) or
++            ((b[i + 2].toInt() and 0xFF) shl 16) or
++            ((b[i + 3].toInt() and 0xFF) shl 24)
++
++    private fun le16(b: ByteArray, i: Int): Int = (b[i].toInt() and 0xFF) or ((b[i + 1].toInt() and 0xFF) shl 8)
++}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
-index 1a271926..c5e9a863 100644
+index 1a2719263..c5e9a8630 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
 @@ -148,7 +148,31 @@ actual object AppUpdaterPlatform {

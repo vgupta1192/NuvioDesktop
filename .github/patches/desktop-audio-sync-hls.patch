@@ -1,407 +1,226 @@
-diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-index 73f5adca..d5c66cb1 100644
---- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-+++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-@@ -12,7 +12,9 @@ import com.nuvio.app.features.player.autosync.AutomaticSubtitleSync
- import com.nuvio.app.features.player.autosync.EmbeddedSubtitleTimelineLoader
- import com.nuvio.app.features.player.autosync.PlayerAutoSyncBridge
- import com.nuvio.app.features.player.autosync.maxAlignmentShiftMs
-+import com.nuvio.app.features.player.audiosync.HlsAudioSyncFallback
- import com.nuvio.app.features.streams.StreamSubtitle
-+import kotlinx.coroutines.withTimeout
- import kotlinx.coroutines.CancellationException
- import kotlinx.coroutines.CompletableDeferred
- import kotlinx.coroutines.CoroutineScope
-@@ -342,7 +344,48 @@ internal class AutoSyncNativePlayerController(
- 
-                 if (resolved == null) {
-                     if (AutoSyncDebugLog.ENABLED) {
--                        AutoSyncDebugLog.finishAndCopy(decision = "REJECT V2 - original timing kept")
-+                        AutoSyncDebugLog.finishAndCopy(decision = "REJECT V2 - trying audio fallback")
-+                    }
-+                    if (!stillRelevant()) return@launch
-+                    // Nuvio fork: HLS audio fallback — sample the stream's own dialogue windows
-+                    // (headless-mpv dump) and correlate against the subtitle's cue activity.
-+                    // Best effort: any failure falls through to the plain failure bubble.
-+                    val audio = runCatching {
-+                        withTimeout(150_000L) {
-+                            HlsAudioSyncFallback.run(
-+                                streamUrl = sourceUrlAtStart,
-+                                headers = sourceHeadersAtStart,
-+                                subtitleBody = selectedBodyDeferred.await(),
-+                                subtitleUrl = selectedUrl,
-+                            )
-+                        }
-+                    }.onFailure { autoSyncLog.w { "AUTO_SYNC audio fallback failed: ${it.message}" } }.getOrNull()
-+                    if (audio != null && stillRelevant()) {
-+                        val body = selectedBodyDeferred.await()
-+                        if (body != null) {
-+                            val cues = AutoSyncSubtitleCueParser.parse(body, selectedUrl)
-+                            val timeline = HlsAudioSyncFallback.constantShiftTimeline(cues, audio.shiftMs, audio.score)
-+                            if (PlayerAutoSyncBridge.attachRetimedSubtitle(base, cues, timeline)) {
-+                                if (activeSyncedKey == null) activeSyncedKey = selectedUrl
-+                                appliedListener?.invoke(selectedUrl, 0)
-+                                AutoSyncSyncedSubtitle.mark(selectedUrl)
-+                                PlayerAutoSyncBridge.lastRetimedSrt?.let { srt ->
-+                                    SyncedSubtitles.save(selectedUrl, srt, method = "autosync", nowMs = System.currentTimeMillis())
-+                                }
-+                                notifyAutoSync(
-+                                    bubbleRunId,
-+                                    "success",
-+                                    "Auto Sync • Subtitles synced (audio)",
-+                                    null,
-+                                )
-+                                if (AutoSyncDebugLog.ENABLED) {
-+                                    AutoSyncDebugLog.finishAndCopy(
-+                                        decision = "ACCEPT AUDIO - shift ${audio.shiftMs}ms score %.2f".format(audio.score),
-+                                    )
-+                                }
-+                                return@launch
-+                            }
-+                        }
-                     }
-                     if (!stillRelevant()) return@launch
-                     if (activeSyncedKey == null) {
-diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/DialogueSpotPlanner.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/DialogueSpotPlanner.kt
 new file mode 100644
-index 00000000..157f16b5
+index 000000000..c6fe1beb0
 --- /dev/null
-+++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
-@@ -0,0 +1,198 @@
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/DialogueSpotPlanner.kt
+@@ -0,0 +1,135 @@
 +package com.nuvio.app.features.player.audiosync
 +
-+import com.nuvio.app.features.player.desktop.NativePlayerBridge
-+import java.io.File
-+import java.io.FileOutputStream
-+import java.io.RandomAccessFile
-+import java.net.HttpURLConnection
-+import java.net.URL
++import kotlin.math.abs
++import kotlin.math.sqrt
 +
 +/**
-+ * Downloads the audio of chosen media-time windows from an HLS VOD and decodes each window to
-+ * 16 kHz mono PCM by handing the concatenated segments to [NativePlayerBridge.dumpAudioWav]
-+ * (headless mpv decodes any container the player can, so no platform demuxer is needed).
++ * Chooses where to sample a film's audio ahead of playback. Subtitle files show where people talk
++ * even when their timing is off, so each spot goes where the available subtitles agree on dense,
++ * irregular dialogue (varied line lengths and pauses make the most distinctive timing pattern);
++ * spots are spread over the film so frame-rate drift and edited cuts show up at once. On a
++ * high-bitrate stream only a spot's opening seconds may be read, so spots also start inside long
++ * stretches of dialogue, where the opening finds speech even if the subtitle's timing is off.
 + */
-+internal object HlsAudioSpotSampler {
-+    private const val CONNECT_TIMEOUT_MS = 15_000
-+    private const val READ_TIMEOUT_MS = 30_000
-+    private const val MAX_SPOT_BYTES = 96L * 1024 * 1024
++internal object DialogueSpotPlanner {
++    /** Slack around a spot for subtitles that are off by this much. */
++    private const val TIMING_SLACK_MS = 10_000L
++    private const val STEP_MS = 5_000L
 +
-+    /** Speech intervals (media ms) found in one sampled window. */
-+    data class Spot(val startMs: Long, val intervals: List<Pair<Long, Long>>, val speechMs: Long)
++    /** A spot's opening that is read on any stream, and the timing error it should survive. */
++    private const val OPENING_MS = 8_000L
++    private const val OPENING_SLACK_MS = 20_000L
 +
-+    fun interface SegmentDownloader {
-+        /** GET [url] with [headers], APPENDING to [out]; returns bytes written or -1 on failure. */
-+        fun download(url: String, headers: Map<String, String>, out: File): Long
-+    }
-+
-+    /**
-+     * Samples [windows] (media ms start times, each [spotMs] long) from [playlist]. Returns
-+     * results in window order; a window whose download or decode failed is absent.
-+     */
-+    fun sample(
-+        playlist: HlsMediaPlaylist.Playlist,
-+        windows: List<Long>,
-+        spotMs: Long,
-+        headers: Map<String, String>,
-+        tmpDir: File,
-+        downloader: SegmentDownloader = defaultDownloader(),
-+    ): List<Spot> {
-+        val out = ArrayList<Spot>()
-+        tmpDir.mkdirs()
-+        for (startMs in windows) {
-+            val endMs = startMs + spotMs
-+            val parts = playlist.segments.filter {
-+                it.startMs < endMs && it.startMs + it.durationSec * 1000.0 > startMs
-+            }
-+            if (parts.isEmpty()) continue
-+            val concat = File(tmpDir, "nuvio-as-${startMs}.bin")
-+            val wav = File(tmpDir, "nuvio-as-${startMs}.wav")
-+            try {
-+                concat.delete()
-+                var total = 0L
-+                var failed = false
-+                for (part in parts) {
-+                    val written = runCatching { downloader.download(part.url, headers, concat) }.getOrDefault(-1L)
-+                    if (written <= 0L) {
-+                        failed = true
-+                        break
-+                    }
-+                    total += written
-+                    if (total > MAX_SPOT_BYTES) {
-+                        failed = true
-+                        break
-+                    }
-+                }
-+                if (failed || concat.length() == 0L) continue
-+                val dumped = runCatching {
-+                    NativePlayerBridge.dumpAudioWav(
-+                        url = concat.absolutePath,
-+                        headerLines = arrayOf(),
-+                        outPath = wav.absolutePath,
-+                        startSec = 0.0,
-+                        endSec = spotMs / 1000.0,
-+                    )
-+                }.getOrDefault(false)
-+                if (!dumped || !wav.exists() || wav.length() < 800L) continue
-+                val pcm = readWavPcm(wav) ?: continue
-+                val intervals = RmsVad.detect(pcm).map { (a, b) -> (a + startMs) to (b + startMs) }
-+                val speechMs = intervals.sumOf { (a, b) -> b - a }
-+                if (speechMs > 0) out += Spot(startMs, intervals, speechMs)
-+            } finally {
-+                concat.delete()
-+                wav.delete()
-+            }
-+        }
-+        return out
-+    }
-+
-+    fun defaultDownloader(): SegmentDownloader = SegmentDownloader { url, headers, out ->
-+        val connection = URL(url).openConnection() as HttpURLConnection
-+        try {
-+            connection.connectTimeout = CONNECT_TIMEOUT_MS
-+            connection.readTimeout = READ_TIMEOUT_MS
-+            connection.instanceFollowRedirects = true
-+            for ((k, v) in headers) connection.setRequestProperty(k, v)
-+            if (connection.responseCode !in 200..299) return@SegmentDownloader -1L
-+            var written = 0L
-+            connection.inputStream.use { input ->
-+                FileOutputStream(out, true).use { output ->
-+                    val buf = ByteArray(64 * 1024)
-+                    while (true) {
-+                        val n = input.read(buf)
-+                        if (n < 0) break
-+                        output.write(buf, 0, n)
-+                        written += n
-+                    }
-+                }
-+            }
-+            written
-+        } finally {
-+            connection.disconnect()
-+        }
-+    }
-+
-+    /** Reads a RIFF WAV as mono float samples in [-1, 1]; s16 and float32 formats supported. */
-+    fun readWavPcm(file: File): FloatArray? {
-+        return try {
-+            RandomAccessFile(file, "r").use { raf ->
-+                val length = raf.length()
-+                if (length < 44) return null
-+                var channels = 1
-+                var bits = 16
-+                var format = 1
-+                var dataPos = -1L
-+                var dataLen = 0L
-+                raf.seek(12)
-+                while (raf.filePointer + 8 <= length && dataPos < 0) {
-+                    val id = ByteArray(4).also { raf.readFully(it) }.decodeToString()
-+                    val size = readLeInt(raf).toLong() and 0xFFFFFFFFL
-+                    when (id) {
-+                        "fmt " -> {
-+                            val fmt = ByteArray(16.coerceAtMost(size.toInt())).also { raf.readFully(it) }
-+                            format = le16(fmt, 0)
-+                            channels = le16(fmt, 2)
-+                            bits = le16(fmt, 14)
-+                            raf.seek(raf.filePointer + (size - 16).coerceAtLeast(0) + (size % 2))
-+                        }
-+                        "data" -> {
-+                            dataPos = raf.filePointer
-+                            dataLen = size
-+                        }
-+                        else -> raf.seek(raf.filePointer + size + (size % 2))
-+                    }
-+                }
-+                if (dataPos < 0 || dataLen <= 0) return null
-+                val bytes = ByteArray(dataLen.coerceAtMost(length - dataPos).toInt())
-+                raf.seek(dataPos)
-+                raf.readFully(bytes)
-+                when {
-+                    format == 1 && bits == 16 -> {
-+                        val frames = bytes.size / 2 / channels
-+                        val out = FloatArray(frames)
-+                        var i = 0
-+                        for (f in 0 until frames) {
-+                            var acc = 0
-+                            for (c in 0 until channels) {
-+                                acc += le16(bytes, i)
-+                                i += 2
-+                            }
-+                            out[f] = (acc / channels - 32768) / 32768f
-+                        }
-+                        out
-+                    }
-+                    format == 3 && bits == 32 -> {
-+                        val frames = bytes.size / 4 / channels
-+                        val out = FloatArray(frames)
-+                        var i = 0
-+                        for (f in 0 until frames) {
-+                            var acc = 0f
-+                            for (c in 0 until channels) {
-+                                acc += java.lang.Float.intBitsToFloat(readLeIntAt(bytes, i))
-+                                i += 4
-+                            }
-+                            out[f] = acc / channels
-+                        }
-+                        out
-+                    }
-+                    else -> null
-+                }
-+            }
-+        } catch (_: Exception) {
-+            null
-+        }
-+    }
-+
-+    private fun readLeInt(raf: RandomAccessFile): Int {
-+        val b = ByteArray(4).also { raf.readFully(it) }
-+        return readLeIntAt(b, 0)
-+    }
-+
-+    private fun readLeIntAt(b: ByteArray, i: Int): Int =
-+        (b[i].toInt() and 0xFF) or
-+            ((b[i + 1].toInt() and 0xFF) shl 8) or
-+            ((b[i + 2].toInt() and 0xFF) shl 16) or
-+            ((b[i + 3].toInt() and 0xFF) shl 24)
-+
-+    private fun le16(b: ByteArray, i: Int): Int = (b[i].toInt() and 0xFF) or ((b[i + 1].toInt() and 0xFF) shl 8)
-+}
-diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSyncFallback.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSyncFallback.kt
-new file mode 100644
-index 00000000..b7af0c64
---- /dev/null
-+++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSyncFallback.kt
-@@ -0,0 +1,127 @@
-+package com.nuvio.app.features.player.audiosync
-+
-+import com.nuvio.app.features.player.SubtitleSyncCue
-+import com.nuvio.app.features.player.autosync.AutoSyncRetimedCue
-+import com.nuvio.app.features.player.autosync.AutoSyncSubtitleCueParser
-+import com.nuvio.app.features.player.autosync.AutoSyncTimelineRetimeResult
-+import java.io.File
-+
-+/**
-+ * Desktop AutoSync audio fallback for HLS: when the cue-reference analysis (V2) finds no
-+ * reference, sample the stream's own audio at dialogue-heavy windows (decoded via headless-mpv
-+ * [dumpAudioWav]), detect speech, and correlate it with the subtitle's cue activity. Produces
-+ * the constant-shift retime result the same attach path V2 uses, or null when the evidence is
-+ * too thin to trust.
-+ */
-+internal object HlsAudioSyncFallback {
-+    private const val SPOT_MS = 90_000L
-+    private const val SPOT_COUNT = 4
++    /** Opening and closing credits rarely have dialogue. */
 +    private const val SKIP_START_MS = 3 * 60_000L
 +    private const val SKIP_END_MS = 6 * 60_000L
-+    private const val WINDOW_STEP_MS = 30_000L
-+    private const val MIN_SPOT_SEPARATION_MS = 150_000L
 +
-+    data class Result(val shiftMs: Long, val score: Double, val margin: Double)
-+
-+    suspend fun run(
-+        streamUrl: String,
-+        headers: Map<String, String>,
-+        subtitleBody: String?,
-+        subtitleUrl: String,
-+        fetcher: HlsMediaPlaylist.Fetcher = HlsMediaPlaylist.Fetcher { url, hdrs ->
-+            fetchText(url, hdrs)
-+        },
-+        tmpDir: File = File(System.getProperty("java.io.tmpdir"), "nuvio-audiosync"),
-+    ): Result? {
-+        if (subtitleBody.isNullOrBlank()) return null
-+        val cues = AutoSyncSubtitleCueParser.parse(subtitleBody, subtitleUrl)
-+        if (cues.size < 6) return null
-+        val playlist = HlsMediaPlaylist.resolve(streamUrl, headers, fetcher) ?: return null
-+
-+        val windows = chooseWindows(cues, playlist.durationMs)
-+        if (windows.isEmpty()) return null
-+        val spots = HlsAudioSpotSampler.sample(playlist, windows, SPOT_MS, headers, tmpDir)
-+        if (spots.isEmpty()) return null
-+        val intervals = spots.flatMap { it.intervals }
-+        val estimate = HlsSubtitleAudioAligner.estimate(
-+            speechIntervals = intervals,
-+            cueStartsMs = cues.map { it.startTimeMs }.toLongArray(),
-+            cueEndsMs = cues.map { it.endTimeMs }.toLongArray(),
-+        ) ?: return null
-+        if (!estimate.confident) return null
-+        return Result(estimate.shiftMs, estimate.score, estimate.margin)
-+    }
-+
-+    /** Dialogue-dense, well-spread windows; mirrors the mobile spot planner's intent simply. */
-+    internal fun chooseWindows(cues: List<SubtitleSyncCue>, durationMs: Long): List<Long> {
-+        val from = SKIP_START_MS
-+        val to = durationMs - SKIP_END_MS - SPOT_MS
-+        if (to <= from) return emptyList()
-+        var cursor = from
-+        val scored = ArrayList<Pair<Long, Int>>()
-+        while (cursor <= to) {
-+            val end = cursor + SPOT_MS
-+            val count = cues.count { it.startTimeMs >= cursor - 10_000L && it.startTimeMs < end + 10_000L }
-+            scored += cursor to count
-+            cursor += WINDOW_STEP_MS
-+        }
-+        val picked = ArrayList<Long>()
-+        for ((start, _) in scored.sortedByDescending { it.second }) {
-+            if (picked.size >= SPOT_COUNT) break
-+            if (picked.all { existing -> kotlin.math.abs(existing - start) >= MIN_SPOT_SEPARATION_MS }) {
-+                picked += start
++    /**
++     * Returns up to [count] spot start times (media ms) of [spotMs] each within [durationMs], after
++     * [notBeforeMs] (audio already covered), in the order they should be fetched: the most widely
++     * spread first, so an early stop still leaves spread-out evidence.
++     */
++    fun plan(
++        tracks: List<SubtitleSpeechTrack>,
++        durationMs: Long,
++        count: Int,
++        spotMs: Long,
++        notBeforeMs: Long = 0L,
++    ): List<Long> {
++        val from = maxOf(SKIP_START_MS, notBeforeMs)
++        val to = durationMs - SKIP_END_MS - spotMs
++        if (count <= 0 || to <= from) return emptyList()
++        val sections = minOf(count, ((to - from) / (2 * spotMs)).toInt()).coerceAtLeast(1)
++        val sectionMs = (to - from) / sections
++        val usable = tracks.filter { it.size > 0 }
++        val spots = List(sections) { index ->
++            val sectionStart = from + index * sectionMs
++            val sectionEnd = sectionStart + sectionMs
++            if (usable.isEmpty()) {
++                sectionStart + sectionMs / 2
++            } else {
++                var best = sectionStart + sectionMs / 2
++                var bestScore = 0.0
++                var start = sectionStart
++                while (start <= sectionEnd) {
++                    val score = usable.sumOf { score(it, start, start + spotMs) * (0.5 + openingShare(it, start)) } / usable.size
++                    if (score > bestScore) {
++                        bestScore = score
++                        best = start
++                    }
++                    start += STEP_MS
++                }
++                best
 +            }
 +        }
-+        return picked.sorted()
++        return spreadOrder(spots)
 +    }
 +
 +    /**
-+     * Constant-shift timeline in the shape [PlayerAutoSyncBridge.attachRetimedSubtitle] consumes:
-+     * every cue maps original -> original + [shiftMs].
++     * Dialogue covering [fromMs, toMs), plus half of what covers [TIMING_SLACK_MS] on either side
++     * (for subtitles whose timing is off), weighted up by how irregular the lines' rhythm is.
 +     */
-+    fun constantShiftTimeline(cues: List<SubtitleSyncCue>, shiftMs: Long, score: Double): AutoSyncTimelineRetimeResult {
-+        val retimed = cues.map { cue ->
-+            AutoSyncRetimedCue(
-+                originalStartTimeMs = cue.startTimeMs,
-+                originalEndTimeMs = cue.endTimeMs,
-+                startTimeMs = cue.startTimeMs + shiftMs,
-+                endTimeMs = cue.endTimeMs + shiftMs,
-+            )
++    private fun score(track: SubtitleSpeechTrack, fromMs: Long, toMs: Long): Double {
++        val starts = track.startsMs
++        val ends = track.endsMs
++        val outerFrom = fromMs - TIMING_SLACK_MS
++        val outerTo = toMs + TIMING_SLACK_MS
++        var index = starts.binarySearch(outerFrom).let { if (it < 0) -it - 1 else it }
++        while (index > 0 && ends[index - 1] > outerFrom) index--
++        var covered = 0.0
++        var lines = 0
++        var sum = 0.0
++        var squares = 0.0
++        var previousStart = -1L
++        while (index < starts.size && starts[index] < outerTo) {
++            val a = starts[index]
++            val b = ends[index]
++            val inner = overlap(a, b, fromMs, toMs)
++            covered += inner + 0.5 * (overlap(a, b, outerFrom, outerTo) - inner)
++            if (previousStart >= 0) {
++                val gap = (a - previousStart).toDouble()
++                sum += gap
++                squares += gap * gap
++            }
++            previousStart = a
++            lines++
++            index++
 +        }
-+        return AutoSyncTimelineRetimeResult(
-+            cues = retimed,
-+            groups = emptyList(),
-+            targetCoverage = 1.0,
-+            referenceCoverage = 1.0,
-+            skippedTargetCues = 0,
-+            skippedReferenceCues = 0,
-+            longestTargetSkipRun = 0,
-+            averageGroupCost = 0.0,
-+            oneToOneGroups = retimed.size,
-+            oneToTwoGroups = 0,
-+            twoToOneGroups = 0,
-+            oneToThreeGroups = 0,
-+            threeToOneGroups = 0,
-+            twoToTwoGroups = 0,
-+            confident = true,
-+            alignmentSource = "audio-hls",
-+            alignmentScale = 1.0,
-+            alignmentInterceptMs = shiftMs.toDouble(),
-+            activityScore = score,
-+        )
++        if (lines < 3) return covered
++        val mean = sum / (lines - 1)
++        val variation = if (mean > 0) sqrt((squares / (lines - 1) - mean * mean).coerceAtLeast(0.0)) / mean else 0.0
++        return covered * (1.0 + variation.coerceAtMost(1.0))
 +    }
 +
-+    private fun fetchText(url: String, headers: Map<String, String>): String {
-+        val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-+        return try {
-+            connection.connectTimeout = 15_000
-+            connection.readTimeout = 20_000
-+            connection.instanceFollowRedirects = true
-+            for ((k, v) in headers) connection.setRequestProperty(k, v)
-+            if (connection.responseCode !in 200..299) throw java.io.IOException("HTTP ${connection.responseCode}")
-+            connection.inputStream.bufferedReader().use { it.readText() }
-+        } finally {
-+            connection.disconnect()
++    /** Share of the stretch around a spot's opening (with [OPENING_SLACK_MS] either side) that is dialogue. */
++    private fun openingShare(track: SubtitleSpeechTrack, startMs: Long): Double {
++        val fromMs = startMs - OPENING_SLACK_MS
++        val toMs = startMs + OPENING_MS + OPENING_SLACK_MS
++        val starts = track.startsMs
++        val ends = track.endsMs
++        var index = starts.binarySearch(fromMs).let { if (it < 0) -it - 1 else it }
++        while (index > 0 && ends[index - 1] > fromMs) index--
++        var covered = 0.0
++        while (index < starts.size && starts[index] < toMs) {
++            covered += overlap(starts[index], ends[index], fromMs, toMs)
++            index++
++        }
++        return (covered / (toMs - fromMs)).coerceAtMost(1.0)
++    }
++
++    private fun overlap(a: Long, b: Long, from: Long, to: Long): Double =
++        (minOf(b, to) - maxOf(a, from)).coerceAtLeast(0L).toDouble()
++
++    /** Middle first, then always the spot farthest from those already taken. */
++    private fun spreadOrder(spots: List<Long>): List<Long> {
++        val remaining = spots.toMutableList()
++        val ordered = ArrayList<Long>(spots.size)
++        ordered += remaining.removeAt(remaining.size / 2)
++        while (remaining.isNotEmpty()) {
++            val next = remaining.maxBy { spot -> ordered.minOf { abs(it - spot) } }
++            remaining.remove(next)
++            ordered += next
++        }
++        return ordered
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/Fft.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/Fft.kt
+new file mode 100644
+index 000000000..a1e535f08
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/Fft.kt
+@@ -0,0 +1,73 @@
++package com.nuvio.app.features.player.audiosync
++
++import kotlin.math.PI
++import kotlin.math.cos
++import kotlin.math.sin
++
++/** Iterative in-place radix-2 complex FFT with precomputed twiddles and bit-reversal table. */
++internal class Fft(val size: Int) {
++    private val cosTable: DoubleArray
++    private val sinTable: DoubleArray
++    private val bitReversed: IntArray
++
++    init {
++        require(size >= 2 && size and (size - 1) == 0) { "FFT size must be a power of two: $size" }
++        cosTable = DoubleArray(size / 2) { cos(2.0 * PI * it / size) }
++        sinTable = DoubleArray(size / 2) { sin(2.0 * PI * it / size) }
++        val bits = Integer.numberOfTrailingZeros(size)
++        bitReversed = IntArray(size) { Integer.reverse(it) ushr (32 - bits) }
++    }
++
++    /** Forward transform (e^{-i...}) when [inverse] is false. The inverse is unnormalized. */
++    fun transform(re: DoubleArray, im: DoubleArray, inverse: Boolean = false) {
++        for (i in 0 until size) {
++            val j = bitReversed[i]
++            if (j > i) {
++                val tr = re[i]; re[i] = re[j]; re[j] = tr
++                val ti = im[i]; im[i] = im[j]; im[j] = ti
++            }
++        }
++        val sign = if (inverse) 1.0 else -1.0
++        var half = 1
++        while (half < size) {
++            val step = size / (half * 2)
++            var start = 0
++            while (start < size) {
++                var k = 0
++                for (j in start until start + half) {
++                    val wr = cosTable[k]
++                    val wi = sign * sinTable[k]
++                    val l = j + half
++                    val xr = re[l] * wr - im[l] * wi
++                    val xi = re[l] * wi + im[l] * wr
++                    re[l] = re[j] - xr
++                    im[l] = im[j] - xi
++                    re[j] += xr
++                    im[j] += xi
++                    k += step
++                }
++                start += half * 2
++            }
++            half *= 2
++        }
++    }
++
++    companion object {
++        private const val CACHED_SIZES = 4
++
++        // The tables never change, so transforms of one size share them instead of rebuilding
++        // 1.5 MB of them on every alignment pass (every few seconds while searching).
++        private val cache = object : LinkedHashMap<Int, Fft>(8, 0.75f, true) {
++            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Fft>?) = size > CACHED_SIZES
++        }
++
++        /** A shared instance for [size]; [transform] only reads the tables, so it is thread-safe. */
++        fun of(size: Int): Fft = synchronized(cache) { cache.getOrPut(size) { Fft(size) } }
++
++        fun sizeFor(minimum: Int): Int {
++            var n = 2
++            while (n < minimum) n = n shl 1
++            return n
 +        }
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsMediaPlaylist.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsMediaPlaylist.kt
 new file mode 100644
-index 00000000..1cae9595
+index 000000000..1cae95957
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsMediaPlaylist.kt
 @@ -0,0 +1,116 @@
@@ -521,144 +340,9 @@ index 00000000..1cae9595
 +        }
 +    }
 +}
-diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsSubtitleAudioAligner.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsSubtitleAudioAligner.kt
-new file mode 100644
-index 00000000..ff8740d7
---- /dev/null
-+++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsSubtitleAudioAligner.kt
-@@ -0,0 +1,129 @@
-+package com.nuvio.app.features.player.audiosync
-+
-+import kotlin.math.abs
-+
-+/**
-+ * Aligns a subtitle's cue timeline against speech intervals sampled from the stream: finds the
-+ * constant shift S so that (cue time + S) best overlaps the dialogue heard in the samples.
-+ * Binned activity correlation, coarse over the whole window then refined; confidence needs a
-+ * clear winner and enough speech to judge.
-+ */
-+internal object HlsSubtitleAudioAligner {
-+    private const val BIN_MS = 100L
-+    private const val MAX_SHIFT_MS = 60_000L
-+    private const val COARSE_STEP_MS = 200L
-+    private const val FINE_RADIUS_MS = 300L
-+    private const val FINE_STEP_MS = 25L
-+
-+    /** Minimum fraction of sampled speech that must sit inside cues at the winning shift. */
-+    private const val MIN_SCORE = 0.30
-+    /** The winner must beat the runner-up by this much (grid noise otherwise). */
-+    private const val MIN_MARGIN = 0.08
-+    /** Not enough evidence under this much sampled speech. */
-+    private const val MIN_TOTAL_SPEECH_MS = 8_000L
-+
-+    data class Estimate(val shiftMs: Long, val score: Double, val margin: Double, val confident: Boolean)
-+
-+    /**
-+     * [speechIntervals] are media-time [start, end) pairs from the sampled windows;
-+     * [cueStartsMs]/[cueEndsMs] the subtitle's cue intervals (subtitle time).
-+     */
-+    fun estimate(
-+        speechIntervals: List<Pair<Long, Long>>,
-+        cueStartsMs: LongArray,
-+        cueEndsMs: LongArray,
-+    ): Estimate? {
-+        val totalSpeech = speechIntervals.sumOf { (a, b) -> b - a }
-+        if (totalSpeech < MIN_TOTAL_SPEECH_MS || cueStartsMs.isEmpty()) return null
-+        val speechBins = toBins(speechIntervals)
-+
-+        var best = -1.0
-+        var bestShift = 0L
-+        var runnerUp = -1.0
-+        var shift = -MAX_SHIFT_MS
-+        while (shift <= MAX_SHIFT_MS) {
-+            val score = scoreAt(speechBins, cueStartsMs, cueEndsMs, shift)
-+            if (score > best) {
-+                runnerUp = best
-+                best = score
-+                bestShift = shift
-+            } else if (score > runnerUp) {
-+                runnerUp = score
-+            }
-+            shift += COARSE_STEP_MS
-+        }
-+        // Refine around the coarse winner; keep the coarse runner-up for the margin unless the
-+        // refinement produced a neighbour of the winner (then it is the same peak, not a rival).
-+        var fineBest = best
-+        var fineShift = bestShift
-+        var fine = bestShift - FINE_RADIUS_MS
-+        while (fine <= bestShift + FINE_RADIUS_MS) {
-+            if (abs(fine - bestShift) > COARSE_STEP_MS) {
-+                val score = scoreAt(speechBins, cueStartsMs, cueEndsMs, fine)
-+                if (score > fineBest) {
-+                    fineBest = score
-+                    fineShift = fine
-+                }
-+            }
-+            fine += FINE_STEP_MS
-+        }
-+        val finalScore = maxOf(best, fineBest)
-+        val finalShift = if (fineBest > best) fineShift else bestShift
-+        // Margin over the best rival peak: the coarse winner when the refinement moved the peak,
-+        // otherwise the coarse runner-up (the refinement only touched the winning neighbourhood).
-+        val finalMargin = maxOf(0.0, if (fineBest > best) best else runnerUp)
-+
-+        val confident = finalScore >= MIN_SCORE && finalMargin >= MIN_MARGIN
-+        return Estimate(finalShift, finalScore, finalMargin, confident)
-+    }
-+
-+    /** Fraction of sampled speech covered by cues shifted by [shiftMs]. */
-+    private fun scoreAt(
-+        speechBins: List<Pair<Long, Long>>,
-+        cueStartsMs: LongArray,
-+        cueEndsMs: LongArray,
-+        shiftMs: Long,
-+    ): Double {
-+        var covered = 0L
-+        var total = 0L
-+        for ((a, b) in speechBins) {
-+            total += b - a
-+            var cursor = a
-+            // Cue intervals are sorted; binary search the first cue that can cover `cursor`.
-+            var index = cueStartsMs.binarySearch(cursor - shiftMs).let { if (it < 0) -it - 2 else it }
-+            if (index < 0) index = 0
-+            while (index < cueStartsMs.size) {
-+                val cueStart = cueStartsMs[index] + shiftMs
-+                val cueEnd = cueEndsMs[index] + shiftMs
-+                if (cueEnd <= cursor) {
-+                    index++
-+                    continue
-+                }
-+                if (cueStart >= b) break
-+                val overlapStart = maxOf(cursor, cueStart)
-+                val overlapEnd = minOf(b, cueEnd)
-+                if (overlapEnd > overlapStart) covered += overlapEnd - overlapStart
-+                cursor = overlapEnd
-+                if (cursor >= b) break
-+                index++
-+            }
-+        }
-+        if (total == 0L) return 0.0
-+        return covered.toDouble() / total
-+    }
-+
-+    /** Merges overlapping intervals and sorts them, so the scorer can sweep linearly. */
-+    private fun toBins(intervals: List<Pair<Long, Long>>): List<Pair<Long, Long>> {
-+        val sorted = intervals.sortedBy { it.first }
-+        val merged = ArrayList<Pair<Long, Long>>()
-+        for ((a, b) in sorted) {
-+            val last = merged.lastOrNull()
-+            if (last != null && a <= last.second) {
-+                merged[merged.size - 1] = last.first to maxOf(last.second, b)
-+            } else {
-+                merged += a to b
-+            }
-+        }
-+        return merged
-+    }
-+}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/RmsVad.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/RmsVad.kt
 new file mode 100644
-index 00000000..6b15ded7
+index 000000000..6b15ded72
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/RmsVad.kt
 @@ -0,0 +1,81 @@
@@ -741,5 +425,1001 @@ index 00000000..6b15ded7
 +        return merged.map { (a, b) ->
 +            (a * FRAME_MS) to (b * FRAME_MS)
 +        }
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
+new file mode 100644
+index 000000000..729218f51
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
+@@ -0,0 +1,254 @@
++package com.nuvio.app.features.player.audiosync
++
++import com.nuvio.app.features.player.SubtitleSyncCue
++import com.nuvio.app.features.player.autosync.AutoSyncSubtitleCueParser
++import com.nuvio.app.features.player.desktop.NativePlayerBridge
++import java.io.File
++import kotlin.math.abs
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.ensureActive
++import kotlinx.coroutines.withContext
++
++/**
++ * Desktop AutoSync engine, ported from NuvioMobile's speech-based flow: the selected subtitle's
++ * cue timeline says where people talk, so audio is sampled at dialogue-dense spots
++ * ([DialogueSpotPlanner]), decoded with the headless-mpv dump ([HlsAudioSpotSampler] for HLS,
++ * [NativePlayerBridge.dumpAudioWav] for direct files), turned into a speech grid by [RmsVad],
++ * and correlated against the cues ([SubtitleAudioAligner], FFT over 32 ms frames with the
++ * common frame-rate scales). When the chosen subtitle never fits, the other subtitles in its
++ * language are scored on the same evidence and a better-fitting file wins
++ * ([SubtitleSpeechCandidates]) — the mobile "SWITCHING subtitle X -> Y via speech detection"
++ * behaviour.
++ *
++ * One instance runs per AutoSync request; the caller owns cancellation and the player attach.
++ */
++internal object SpeechAutoSyncEngine {
++    private const val SPOT_COUNT = 6
++    internal const val SPOT_MS = 45_000L
++    private const val MAX_ALTERNATIVES = 6
++    private const val MAX_SUBTITLE_BODY_BYTES = 8 * 1024 * 1024
++
++    /** An alternative add-on subtitle the engine may switch to. */
++    data class Alternative(
++        val url: String,
++        val language: String,
++        val name: String,
++        val headers: Map<String, String>,
++    )
++
++    data class Request(
++        val streamUrl: String,
++        val streamHeaders: Map<String, String>,
++        val selectedUrl: String,
++        val selectedHeaders: Map<String, String>,
++        /** Body of the selected subtitle, already downloaded by the caller. */
++        val selectedBody: String,
++        /** Alternatives in the selected subtitle's language (selected itself excluded). */
++        val alternatives: List<Alternative>,
++    )
++
++    /** A confirmed speech alignment for [subtitleUrl] (the selected one, or a switched-to file). */
++    data class Locked(
++        val subtitleUrl: String,
++        val label: String,
++        val scale: Double,
++        val shiftMs: Double,
++        val peak: Double,
++        val switched: Boolean,
++        val cues: List<SubtitleSyncCue>,
++    )
++
++    /**
++     * Runs the alignment. Returns null when the evidence is too thin to trust for any subtitle;
++     * [onProgress] receives short working texts for the bubble.
++     */
++    suspend fun run(
++        request: Request,
++        onProgress: (String) -> Unit = {},
++    ): Locked? {
++        val selectedCues = AutoSyncSubtitleCueParser.parse(request.selectedBody, request.selectedUrl)
++        val selectedTrack = SubtitleSpeechTrack.fromCues(
++            selectedCues.map { Triple(it.startTimeMs, it.endTimeMs, it.text) },
++        )
++        if (selectedTrack.size == 0) return null
++
++        val tmpDir = File(System.getProperty("java.io.tmpdir"), "nuvio-audiosync")
++        val playlist = withContext(Dispatchers.IO) {
++            HlsMediaPlaylist.resolve(request.streamUrl, request.streamHeaders) { url, hdrs ->
++                fetchText(url, hdrs)
++            }
++        }
++        // Subtitle end ~ film end (credits have no dialogue); only the spot planner uses this.
++        val fallbackDurationMs = (selectedTrack.endsMs.maxOrNull() ?: 0L).let { it + it / 10 } + SPOT_MS
++        val durationMs = playlist?.durationMs?.takeIf { it > 0 } ?: fallbackDurationMs
++        val windows = DialogueSpotPlanner.plan(listOf(selectedTrack), durationMs, SPOT_COUNT, SPOT_MS)
++        SyncLog.i("speech sync: ${selectedTrack.size} dialogue cues, $durationMs ms media, sampling ${windows.size} spots")
++        onProgress("Listening for dialogue…")
++
++        val spots = ArrayList<HlsAudioSpotSampler.Spot>()
++        for (window in windows) {
++            currentCoroutineContext().ensureActive()
++            val spot = withContext(Dispatchers.IO) {
++                if (playlist != null) {
++                    HlsAudioSpotSampler.sampleOne(playlist, window, SPOT_MS, request.streamHeaders, tmpDir)
++                } else {
++                    sampleDirectWindow(request.streamUrl, request.streamHeaders, window, tmpDir)
++                }
++            }
++            if (spot != null) spots += spot
++            if (spots.size >= 2) {
++                lockedFor(request, selectedCues, selectedTrack, spots, onProgress)?.let { return it }
++            }
++        }
++        if (spots.isEmpty()) {
++            SyncLog.w("speech sync: no audio could be sampled")
++            return null
++        }
++
++        // The chosen subtitle never fit: download the alternatives and score them on the
++        // same evidence.
++        val alternatives = request.alternatives.take(MAX_ALTERNATIVES)
++        if (alternatives.isNotEmpty()) {
++            onProgress("Testing ${alternatives.size} other subtitles…")
++            SyncLog.i("speech sync: selected subtitle never locked; testing ${alternatives.size} alternatives")
++            val segments = buildSegments(spots)
++            val prepared = SubtitleAudioAligner.prepare(
++                segments = segments,
++                minShiftMs = -SubtitleSpeechCandidates.MAX_SHIFT_MS,
++                maxShiftMs = SubtitleSpeechCandidates.MAX_SHIFT_MS,
++            )
++            val candidates = if (prepared == null) {
++                emptyList()
++            } else {
++                alternatives.mapNotNull { alternative ->
++                    currentCoroutineContext().ensureActive()
++                    val body = withContext(Dispatchers.IO) {
++                        runCatching {
++                            AutoSyncSubtitleHttp.get(alternative.url, alternative.headers, MAX_SUBTITLE_BODY_BYTES).body
++                        }.getOrNull()
++                    } ?: return@mapNotNull null
++                    val cues = AutoSyncSubtitleCueParser.parse(body, alternative.url)
++                    SubtitleSpeechCandidates.CandidateFile(alternative.url, alternative.name, alternative.headers, cues)
++                }
++            }
++            if (prepared != null && candidates.isNotEmpty()) {
++                val winner = SubtitleSpeechCandidates.pickBest(prepared, segments, candidates, durationMs)
++                if (winner != null) {
++                    SyncLog.i(
++                        "SWITCHING subtitle ${request.selectedUrl} -> ${winner.url} via speech detection: " +
++                            "scale=${winner.estimate.scale} shift=${winner.estimate.shiftMs.roundToLong()}ms",
++                    )
++                    return Locked(
++                        subtitleUrl = winner.url,
++                        label = winner.name.ifBlank { "another subtitle" },
++                        scale = winner.estimate.scale,
++                        shiftMs = winner.estimate.shiftMs,
++                        peak = winner.estimate.peak,
++                        switched = true,
++                        cues = candidates.first { it.url == winner.url }.cues,
++                    )
++                }
++            }
++        }
++        SyncLog.w("speech sync: no subtitle matched the audio (spots=${spots.size})")
++        return null
++    }
++
++    /** Lock attempt on the evidence sampled so far; null keeps sampling. */
++    private fun lockedFor(
++        request: Request,
++        selectedCues: List<SubtitleSyncCue>,
++        selectedTrack: SubtitleSpeechTrack,
++        spots: List<HlsAudioSpotSampler.Spot>,
++        onProgress: (String) -> Unit,
++    ): Locked? {
++        val segments = buildSegments(spots)
++        val prepared = SubtitleAudioAligner.prepare(
++            segments = segments,
++            minShiftMs = -SubtitleSpeechCandidates.MAX_SHIFT_MS,
++            maxShiftMs = SubtitleSpeechCandidates.MAX_SHIFT_MS,
++        ) ?: return null
++        val estimate = prepared.estimate(selectedTrack) ?: return null
++        val knownFrames = segments.sumOf { it.knownFrames }
++        if (!SubtitleSpeechCandidates.isLockable(estimate, segments, knownFrames, selectedTrack)) return null
++        SyncLog.i(
++            "subtitle ${request.selectedUrl} locked by speech detection: scale=${estimate.scale} " +
++                "shift=${estimate.shiftMs.roundToLong()}ms peak=%.2f".format(estimate.peak),
++        )
++        onProgress("Found the sync point")
++        return Locked(
++            subtitleUrl = request.selectedUrl,
++            label = "",
++            scale = estimate.scale,
++            shiftMs = estimate.shiftMs,
++            peak = estimate.peak,
++            switched = false,
++            cues = selectedCues,
++        )
++    }
++
++    /** One sampled window as a run of the 32 ms speech grid; unknown frames stay NaN. */
++    private fun buildSegments(spots: List<HlsAudioSpotSampler.Spot>): List<SpeechSegment> {
++        val frameMs = SpeechTimeline.FRAME_DURATION_MS
++        return spots.mapNotNull { spot ->
++            val from = (spot.startMs / frameMs).toInt()
++            val count = (SPOT_MS / frameMs).toInt()
++            val grid = FloatArray(count) // 0.0 = known silence, NaN only outside the dump
++            for ((a, b) in spot.intervals) {
++                val startFrame = ((a - spot.startMs) / frameMs).toInt().coerceIn(0, count)
++                val endFrame = ((b - spot.startMs) / frameMs).toInt().coerceIn(startFrame, count)
++                for (frame in startFrame until endFrame) grid[frame] = 1.0f
++            }
++            SpeechSegment(from, grid)
++        }
++    }
++
++    /** Samples one window of a direct (non-HLS) URL by seeking the headless-mpv dump. */
++    private fun sampleDirectWindow(
++        streamUrl: String,
++        headers: Map<String, String>,
++        startMs: Long,
++        tmpDir: File,
++    ): HlsAudioSpotSampler.Spot? {
++        tmpDir.mkdirs()
++        val wav = File(tmpDir, "nuvio-as-${startMs}.wav")
++        try {
++            wav.delete()
++            val headerLines = headers.map { (k, v) -> "$k: $v" }.toTypedArray()
++            val dumped = runCatching {
++                synchronized(NativeDumpGate) {
++                    NativePlayerBridge.dumpAudioWav(
++                        url = streamUrl,
++                        headerLines = headerLines,
++                        outPath = wav.absolutePath,
++                        startSec = startMs / 1000.0,
++                        endSec = (startMs + HlsAudioSpotSampler.SPOT_MS) / 1000.0,
++                    )
++                }
++            }.getOrDefault(false)
++            if (!dumped || !wav.exists() || wav.length() < 800L) return null
++            val pcm = HlsAudioSpotSampler.readWavPcm(wav) ?: return null
++            val intervals = RmsVad.detect(pcm).map { (a, b) -> (a + startMs) to (b + startMs) }
++            val speechMs = intervals.sumOf { (a, b) -> b - a }
++            if (speechMs <= 0) return null
++            return HlsAudioSpotSampler.Spot(startMs, intervals, speechMs)
++        } finally {
++            wav.delete()
++        }
++    }
++
++    private fun fetchText(url: String, headers: Map<String, String>): String {
++        val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
++        return try {
++            connection.connectTimeout = 15_000
++            connection.readTimeout = 20_000
++            connection.instanceFollowRedirects = true
++            for ((k, v) in headers) connection.setRequestProperty(k, v)
++            if (connection.responseCode !in 200..299) throw java.io.IOException("HTTP ${connection.responseCode}")
++            connection.inputStream.bufferedReader().use { it.readText() }
++        } finally {
++            connection.disconnect()
++        }
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechTimeline.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechTimeline.kt
+new file mode 100644
+index 000000000..8f8fb1376
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechTimeline.kt
+@@ -0,0 +1,19 @@
++package com.nuvio.app.features.player.audiosync
++
++/**
++ * Desktop port note: mobile keeps detected speech as a growing [androidMain SpeechTimeline];
++ * here the audio arrives in one-shot sampled windows (see [SpeechAutoSyncEngine]), so only the
++ * speech grid constant and the segment container are needed.
++ */
++
++/** Speech probability grid step: one frame covers [FRAME_DURATION_MS] of media time. */
++internal object SpeechTimeline {
++    const val FRAME_DURATION_MS = 32.0
++}
++
++/** A stretch of the speech timeline: probabilities from [fromFrame] on, NaN where unknown. */
++internal class SpeechSegment(val fromFrame: Int, val probabilities: FloatArray) {
++    val toFrame: Int get() = fromFrame + probabilities.size
++
++    val knownFrames: Int get() = probabilities.count { !it.isNaN() }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleAudioAligner.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleAudioAligner.kt
+new file mode 100644
+index 000000000..526566406
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleAudioAligner.kt
+@@ -0,0 +1,432 @@
++package com.nuvio.app.features.player.audiosync
++
++import kotlin.math.abs
++import kotlin.math.roundToInt
++import kotlin.math.sqrt
++
++/**
++ * Finds where a subtitle file lines up with detected speech.
++ *
++ * For each candidate playback-rate ratio the subtitle track is rendered to the 32 ms speech grid
++ * and the masked Pearson correlation against speech probability is computed for every lag with
++ * FFTs. The mapping is media time = subtitle time * scale + shift.
++ */
++internal object SubtitleAudioAligner {
++    /** Common frame-rate mismatches between subtitle and video releases. 1.0 must stay first. */
++    val CANDIDATE_SCALES = doubleArrayOf(
++        1.0,
++        24_000.0 / 23_976.0,
++        23_976.0 / 24_000.0,
++        25.0 / 23.976,
++        23.976 / 25.0,
++        25.0 / 24.0,
++        24.0 / 25.0,
++    )
++
++    /**
++     * Silero reacts ~45 ms after speech starts and subtitles usually lead speech slightly, so the raw
++     * correlation peak sits this much after the subtitle author's intended timing.
++     */
++    const val DETECTOR_BIAS_MS = 100.0
++
++    /** Excluded neighbourhood around the peak when measuring how much it stands out. */
++    private const val PROMINENCE_EXCLUSION_MS = 2_500.0
++
++    /** Peaks this close to either end of the searched shift range are flagged as unreliable. */
++    private const val EDGE_MARGIN_MS = 1_500.0
++
++    /** Keeps a mistaken ~0.1% ratio from winning on noise over the plain 1.0 hypothesis. */
++    private const val SCALE_PREFERENCE_MARGIN = 0.01
++
++    data class Estimate(
++        val scale: Double,
++        val shiftMs: Double,
++        /** Pearson correlation at the peak. */
++        val peak: Double,
++        /** Peak minus the best correlation more than 2.5 s away from it. */
++        val prominence: Double,
++        val analysedSeconds: Double,
++        val speechSeconds: Double,
++        val cueCount: Int,
++        /** True when the peak sits at the edge of the searched range, so it may not be a real maximum. */
++        val atSearchEdge: Boolean = false,
++    )
++
++    /**
++     * @param probabilities speech probability per frame starting at [fromFrame], NaN when unknown.
++     * @param minShiftMs lowest shift considered; together with [maxShiftMs] bounds the lag search.
++     */
++    fun estimate(
++        probabilities: FloatArray,
++        fromFrame: Int,
++        track: SubtitleSpeechTrack,
++        scales: DoubleArray = CANDIDATE_SCALES,
++        minShiftMs: Double,
++        maxShiftMs: Double,
++        /** Latency of the speech detector; 0 when [probabilities] is not detector output. */
++        detectorBiasMs: Double = DETECTOR_BIAS_MS,
++    ): Estimate? = estimate(listOf(SpeechSegment(fromFrame, probabilities)), track, scales, minShiftMs, maxShiftMs, detectorBiasMs)
++
++    /** Like the single-array form, over separate stretches of known speech (see [SpeechTimeline.segments]). */
++    fun estimate(
++        segments: List<SpeechSegment>,
++        track: SubtitleSpeechTrack,
++        scales: DoubleArray = CANDIDATE_SCALES,
++        minShiftMs: Double,
++        maxShiftMs: Double,
++        detectorBiasMs: Double = DETECTOR_BIAS_MS,
++    ): Estimate? = prepare(segments, minShiftMs, maxShiftMs, detectorBiasMs)?.estimate(track, scales)
++
++    fun prepare(
++        probabilities: FloatArray,
++        fromFrame: Int,
++        minShiftMs: Double,
++        maxShiftMs: Double,
++        detectorBiasMs: Double = DETECTOR_BIAS_MS,
++    ): PreparedSpeech? = prepare(listOf(SpeechSegment(fromFrame, probabilities)), minShiftMs, maxShiftMs, detectorBiasMs)
++
++    /**
++     * Transforms the speech side once so several subtitle files can be scored against the same
++     * audio for the cost of one extra FFT pair each. The correlation terms are sums over frames, so
++     * separate stretches are transformed on their own and their terms added: exactly the result of
++     * one array covering all of them, at the cost of only the known audio. Null when there is too
++     * little known speech.
++     */
++    fun prepare(
++        segments: List<SpeechSegment>,
++        minShiftMs: Double,
++        maxShiftMs: Double,
++        detectorBiasMs: Double = DETECTOR_BIAS_MS,
++    ): PreparedSpeech? {
++        val frameMs = SpeechTimeline.FRAME_DURATION_MS
++        val minLag = Math.floorDiv((minShiftMs + detectorBiasMs).roundToInt(), frameMs.toInt())
++        val maxLag = Math.floorDiv((maxShiftMs + detectorBiasMs).roundToInt(), frameMs.toInt()) + 1
++        val lagCount = maxLag - minLag + 1
++
++        // One mean and norm over every known frame, as if the stretches were a single array.
++        var count = 0
++        var sum = 0.0
++        for (segment in segments) for (p in segment.probabilities) if (!p.isNaN()) {
++            count++
++            sum += p
++        }
++        if (count < 2) return null
++        val mean = sum / count
++        var energy = 0.0
++        var speechSeconds = 0.0
++        val parts = ArrayList<Part>(segments.size)
++        for (segment in segments) {
++            val n = segment.probabilities.size
++            if (n == 0) continue
++            // g covers frames [fromFrame - maxLag, fromFrame + n - minLag).
++            val gLength = n + lagCount - 1
++            val size = Fft.sizeFor(n + gLength)
++            // Audio side, packed as (centered + i * mask), shared by every scale and subtitle.
++            val audioRe = DoubleArray(size)
++            val audioIm = DoubleArray(size)
++            var known = 0
++            for (i in 0 until n) {
++                val p = segment.probabilities[i]
++                if (p.isNaN()) continue
++                val c = p - mean
++                audioRe[i] = c
++                audioIm[i] = 1.0
++                energy += c * c
++                speechSeconds += p * frameMs / 1_000.0
++                known++
++            }
++            if (known == 0) continue
++            val fft = Fft.of(size)
++            fft.transform(audioRe, audioIm)
++            parts += Part(fft, audioRe, audioIm, n, segment.fromFrame, gLength, fullyKnown = known == n)
++        }
++        if (energy <= 1e-9 || parts.isEmpty()) return null
++        return PreparedSpeech(parts, count, sqrt(energy), speechSeconds, minLag, maxLag, detectorBiasMs)
++    }
++
++    /** One transformed stretch of speech. */
++    internal class Part(
++        val fft: Fft,
++        val audioRe: DoubleArray,
++        val audioIm: DoubleArray,
++        val n: Int,
++        val fromFrame: Int,
++        val gLength: Int,
++        /** No unknown frames: the mask terms are plain window sums (see [accumulateWindowSums]). */
++        val fullyKnown: Boolean,
++    )
++
++    /**
++     * The speech side of a correlation, transformed once; see [prepare]. Correlations already
++     * computed for a subtitle and ratio are kept, so asking again (another ratio subset, or a
++     * narrower shift range) costs nothing. Not thread-safe.
++     */
++    class PreparedSpeech internal constructor(
++        private val parts: List<Part>,
++        private val count: Int,
++        private val norm: Double,
++        private val speechSeconds: Double,
++        private val minLag: Int,
++        private val maxLag: Int,
++        private val detectorBiasMs: Double,
++    ) {
++        private val correlations = HashMap<Pair<SubtitleSpeechTrack, Double>, DoubleArray>()
++
++        /**
++         * Best mapping of [track] onto the prepared speech among [scales], with the shift searched
++         * in [minShiftMs, maxShiftMs] (clipped to the prepared range; null keeps the full range).
++         */
++        fun estimate(
++            track: SubtitleSpeechTrack,
++            scales: DoubleArray = CANDIDATE_SCALES,
++            minShiftMs: Double? = null,
++            maxShiftMs: Double? = null,
++        ): Estimate? {
++            if (track.size == 0) return null
++            val frameMs = SpeechTimeline.FRAME_DURATION_MS
++            // Index k = maxLag - lag; a narrower shift range is a slice of the same lags.
++            val rangeMaxLag = maxShiftMs?.let { Math.floorDiv((it + detectorBiasMs).roundToInt(), frameMs.toInt()) + 1 }
++                ?.coerceAtMost(maxLag) ?: maxLag
++            val rangeMinLag = minShiftMs?.let { Math.floorDiv((it + detectorBiasMs).roundToInt(), frameMs.toInt()) }
++                ?.coerceAtLeast(minLag) ?: minLag
++            if (rangeMinLag > rangeMaxLag) return null
++            val fromIndex = maxLag - rangeMaxLag
++            val toIndex = maxLag - rangeMinLag + 1
++            var best: Estimate? = null
++            var bestPeak = Double.NEGATIVE_INFINITY
++            var unitScale: Estimate? = null
++            computeCorrelations(track, scales.filter { (track to it) !in correlations })
++            for (scale in scales) {
++                val correlation = correlations.getValue(track to scale).copyOfRange(fromIndex, toIndex)
++                val estimate = correlationPeak(correlation, rangeMaxLag, scale, frameMs, detectorBiasMs) ?: continue
++                val cues = parts.sumOf { part ->
++                    track.countCuesIn(
++                        fromMs = part.fromFrame * frameMs,
++                        toMs = (part.fromFrame + part.n) * frameMs,
++                        scale = scale,
++                        shiftMs = estimate.shiftMs,
++                    )
++                }
++                val complete = estimate.copy(
++                    analysedSeconds = count * frameMs / 1_000.0,
++                    speechSeconds = speechSeconds,
++                    cueCount = cues,
++                )
++                if (scale == 1.0) unitScale = complete
++                if (complete.peak > bestPeak) {
++                    bestPeak = complete.peak
++                    best = complete
++                }
++            }
++            val unit = unitScale
++            if (unit != null && best != null && best !== unit && unit.peak >= best.peak - SCALE_PREFERENCE_MARGIN &&
++                isNearUnit(best.scale)
++            ) {
++                return unit
++            }
++            return best
++        }
++
++        /**
++         * Masked Pearson correlation of [track] at each of [scales] for every prepared lag (NaN
++         * where undefined), added to the cache. On stretches without gaps two ratios share each
++         * transform and the mask terms come from window sums: the same numbers for a third of the work.
++         */
++        private fun computeCorrelations(track: SubtitleSpeechTrack, scales: List<Double>) {
++            if (scales.isEmpty()) return
++            val lagCount = maxLag - minLag + 1
++            val c1 = List(scales.size) { DoubleArray(lagCount) }
++            val cm = List(scales.size) { DoubleArray(lagCount) }
++            val cm2 = List(scales.size) { DoubleArray(lagCount) }
++            for (part in parts) {
++                val g = scales.map { track.render(part.fromFrame - maxLag, part.fromFrame - maxLag + part.gLength, it) }
++                if (part.fullyKnown) {
++                    for (first in scales.indices step 2) {
++                        val second = (first + 1).takeIf { it < scales.size }
++                        accumulateCrossTerms(part, g[first], second?.let(g::get), lagCount, c1[first], second?.let(c1::get))
++                    }
++                    for (j in scales.indices) accumulateWindowSums(g[j], part.n, lagCount, cm[j], cm2[j])
++                } else {
++                    for (j in scales.indices) accumulateTerms(part, g[j], lagCount, c1[j], cm[j], cm2[j])
++                }
++            }
++            for (j in scales.indices) {
++                correlations[track to scales[j]] = DoubleArray(lagCount) { k ->
++                    val variance = cm2[j][k] - cm[j][k] * cm[j][k] / count
++                    if (variance > 1e-6 * count && cm[j][k] > 0.5) c1[j][k] / (norm * sqrt(variance)) else Double.NaN
++                }
++            }
++        }
++    }
++
++    private fun isNearUnit(scale: Double): Boolean = abs(scale - 1.0) < 0.002
++
++    /**
++     * Adds this stretch's correlation terms per lag: c1 = sum(centered * g), cm = sum(mask * g) and
++     * cm2 = sum(mask * g^2), where index k = maxLag - lag.
++     */
++    private fun accumulateTerms(
++        part: Part,
++        g: DoubleArray,
++        lagCount: Int,
++        c1: DoubleArray,
++        cm: DoubleArray,
++        cm2: DoubleArray,
++    ) {
++        val fft = part.fft
++        val size = fft.size
++        val audioRe = part.audioRe
++        val audioIm = part.audioIm
++        // Subtitle side, packed as (g + i * g^2).
++        val subRe = DoubleArray(size)
++        val subIm = DoubleArray(size)
++        for (i in g.indices) {
++            subRe[i] = g[i]
++            subIm[i] = g[i] * g[i]
++        }
++        fft.transform(subRe, subIm)
++
++        // Unpack X = FFT(centered), M = FFT(mask), G = FFT(g), G2 = FFT(g^2) from the packed spectra
++        // and form conj(X) * G + i * conj(M) * G (-> c1 + i * cm) and conj(M) * G2 (-> cm2).
++        val c1cmRe = DoubleArray(size)
++        val c1cmIm = DoubleArray(size)
++        val cm2Re = DoubleArray(size)
++        val cm2Im = DoubleArray(size)
++        for (k in 0 until size) {
++            val j = if (k == 0) 0 else size - k
++            val aRe = audioRe[k]; val aIm = audioIm[k]
++            val aRej = audioRe[j]; val aImj = -audioIm[j]
++            val xRe = 0.5 * (aRe + aRej); val xIm = 0.5 * (aIm + aImj)
++            val mRe = 0.5 * (aIm - aImj); val mIm = -0.5 * (aRe - aRej)
++            val sRe = subRe[k]; val sIm = subIm[k]
++            val sRej = subRe[j]; val sImj = -subIm[j]
++            val gRe = 0.5 * (sRe + sRej); val gIm = 0.5 * (sIm + sImj)
++            val g2Re = 0.5 * (sIm - sImj); val g2Im = -0.5 * (sRe - sRej)
++            // conj(X) * G
++            val p1Re = xRe * gRe + xIm * gIm
++            val p1Im = xRe * gIm - xIm * gRe
++            // conj(M) * G
++            val p2Re = mRe * gRe + mIm * gIm
++            val p2Im = mRe * gIm - mIm * gRe
++            c1cmRe[k] = p1Re - p2Im
++            c1cmIm[k] = p1Im + p2Re
++            cm2Re[k] = mRe * g2Re + mIm * g2Im
++            cm2Im[k] = mRe * g2Im - mIm * g2Re
++        }
++        fft.transform(c1cmRe, c1cmIm, inverse = true)
++        fft.transform(cm2Re, cm2Im, inverse = true)
++        val inv = 1.0 / size
++        for (k in 0 until lagCount) {
++            c1[k] += c1cmRe[k] * inv
++            cm[k] += c1cmIm[k] * inv
++            cm2[k] += cm2Re[k] * inv
++        }
++    }
++
++    /**
++     * Adds sum(centered * g) per lag for one or two subtitle renderings [gA] and [gB] of a stretch
++     * without gaps: both real, so they share one forward and one inverse transform.
++     */
++    private fun accumulateCrossTerms(
++        part: Part,
++        gA: DoubleArray,
++        gB: DoubleArray?,
++        lagCount: Int,
++        c1A: DoubleArray,
++        c1B: DoubleArray?,
++    ) {
++        val fft = part.fft
++        val size = fft.size
++        val audioRe = part.audioRe
++        val audioIm = part.audioIm
++        // Subtitle side, packed as (gA + i * gB).
++        val subRe = DoubleArray(size)
++        val subIm = DoubleArray(size)
++        gA.copyInto(subRe)
++        gB?.copyInto(subIm)
++        fft.transform(subRe, subIm)
++        // Unpack X = FFT(centered), GA and GB, and form conj(X) * GA + i * conj(X) * GB.
++        val outRe = DoubleArray(size)
++        val outIm = DoubleArray(size)
++        for (k in 0 until size) {
++            val j = if (k == 0) 0 else size - k
++            val xRe = 0.5 * (audioRe[k] + audioRe[j]); val xIm = 0.5 * (audioIm[k] - audioIm[j])
++            val aRe = 0.5 * (subRe[k] + subRe[j]); val aIm = 0.5 * (subIm[k] - subIm[j])
++            val bRe = 0.5 * (subIm[k] + subIm[j]); val bIm = -0.5 * (subRe[k] - subRe[j])
++            val pRe = xRe * aRe + xIm * aIm
++            val pIm = xRe * aIm - xIm * aRe
++            val qRe = xRe * bRe + xIm * bIm
++            val qIm = xRe * bIm - xIm * bRe
++            outRe[k] = pRe - qIm
++            outIm[k] = pIm + qRe
++        }
++        fft.transform(outRe, outIm, inverse = true)
++        val inv = 1.0 / size
++        for (k in 0 until lagCount) {
++            c1A[k] += outRe[k] * inv
++            c1B?.let { it[k] += outIm[k] * inv }
++        }
++    }
++
++    /**
++     * Adds sum(mask * g) and sum(mask * g^2) per lag for a stretch without gaps, where the mask is
++     * all ones and both are sliding sums over [n] frames: g[k] + ... + g[k + n - 1].
++     */
++    private fun accumulateWindowSums(g: DoubleArray, n: Int, lagCount: Int, cm: DoubleArray, cm2: DoubleArray) {
++        val prefix = DoubleArray(g.size + 1)
++        val prefixSquares = DoubleArray(g.size + 1)
++        for (i in g.indices) {
++            prefix[i + 1] = prefix[i] + g[i]
++            prefixSquares[i + 1] = prefixSquares[i] + g[i] * g[i]
++        }
++        for (k in 0 until lagCount) {
++            cm[k] += prefix[k + n] - prefix[k]
++            cm2[k] += prefixSquares[k + n] - prefixSquares[k]
++        }
++    }
++
++    /** Peak of [correlation] (index k = [maxLag] - lag), its prominence and refined shift. */
++    private fun correlationPeak(
++        correlation: DoubleArray,
++        maxLag: Int,
++        scale: Double,
++        frameMs: Double,
++        detectorBiasMs: Double,
++    ): Estimate? {
++        val lagCount = correlation.size
++        var peakIndex = -1
++        for (k in 0 until lagCount) {
++            val value = correlation[k]
++            if (!value.isNaN() && (peakIndex < 0 || value > correlation[peakIndex])) peakIndex = k
++        }
++        if (peakIndex < 0) return null
++        val peak = correlation[peakIndex]
++        val exclusion = (PROMINENCE_EXCLUSION_MS / frameMs).toInt()
++        var runnerUp = Double.NEGATIVE_INFINITY
++        for (k in 0 until lagCount) {
++            val value = correlation[k]
++            if (!value.isNaN() && abs(k - peakIndex) > exclusion && value > runnerUp) runnerUp = value
++        }
++        var refinedIndex = peakIndex.toDouble()
++        if (peakIndex in 1 until lagCount - 1) {
++            val left = correlation[peakIndex - 1]
++            val right = correlation[peakIndex + 1]
++            val curvature = left - 2 * peak + right
++            if (!left.isNaN() && !right.isNaN() && curvature < 0) {
++                refinedIndex += (0.5 * (left - right) / curvature).coerceIn(-0.5, 0.5)
++            }
++        }
++        val lagFrames = maxLag - refinedIndex
++        val edgeFrames = (EDGE_MARGIN_MS / frameMs).toInt()
++        return Estimate(
++            scale = scale,
++            shiftMs = lagFrames * frameMs - detectorBiasMs,
++            peak = peak,
++            prominence = if (runnerUp.isFinite()) peak - runnerUp else peak,
++            analysedSeconds = 0.0,
++            speechSeconds = 0.0,
++            cueCount = 0,
++            atSearchEdge = peakIndex < edgeFrames || peakIndex >= lagCount - edgeFrames,
++        )
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleSpeechCandidates.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleSpeechCandidates.kt
+new file mode 100644
+index 000000000..cce061f86
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleSpeechCandidates.kt
+@@ -0,0 +1,183 @@
++package com.nuvio.app.features.player.audiosync
++
++import kotlin.math.abs
++
++/**
++ * The other subtitles in the chosen subtitle's language, scored against one prepared transform of
++ * the sampled speech so a file that fits the audio can replace one that never will (another cut,
++ * another frame rate, a badly timed rip). Desktop port of NuvioMobile's SubtitleCandidatePool
++ * speech path: the pool scores candidates incrementally while playback listens; here the audio
++ * evidence is complete before scoring starts, so one pass over the files is enough.
++ *
++ * Checks mirror the mobile pool: copies of each other (same timing fingerprint) are dropped, files
++ * whose length cannot span the video at any common frame rate are dropped, and a file wins only
++ * when it meets the same confirmation rules as a normal lock ([isLockable], including the
++ * both-halves check that a chance alignment rarely survives).
++ */
++internal object SubtitleSpeechCandidates {
++    const val MAX_SHIFT_MS = 60_000.0
++
++    private const val MIN_CUES = 20
++    private val FRAMES_PER_SECOND = 1_000.0 / SpeechTimeline.FRAME_DURATION_MS
++    private const val ACCEPT_PROMINENCE = 0.12
++    private const val NON_STANDARD_RATE_PENALTY = 0.04
++    private const val MIN_SPEECH_SECONDS = 12.0
++    private const val MIN_HALF_CUES = 8
++    private const val HALF_AGREEMENT_MS = 400.0
++
++    /** A file for this video covers at least this share of it (end credits have no dialogue). */
++    private const val MIN_LENGTH_COVERAGE = 0.5
++
++    /** A lock needs at least this much known audio (60 s of frames). */
++    private val MIN_KNOWN_FRAMES = (60 * FRAMES_PER_SECOND).toInt()
++
++    data class Winner(
++        val url: String,
++        val name: String,
++        val headers: Map<String, String>,
++        val estimate: SubtitleAudioAligner.Estimate,
++    )
++
++    /** An alternative subtitle downloaded and parsed, ready to be scored. */
++    data class CandidateFile(
++        val url: String,
++        val name: String,
++        val headers: Map<String, String>,
++        val cues: List<com.nuvio.app.features.player.SubtitleSyncCue>,
++    )
++
++    /**
++     * Scores every alternative against [prepared]; returns the one confirmed to fit the audio with
++     * the strongest peak, or null. Candidates are filtered before scoring: identical timing to
++     * another file, or a length no common frame rate can stretch to [durationMs].
++     */
++    fun pickBest(
++        prepared: SubtitleAudioAligner.PreparedSpeech,
++        segments: List<SpeechSegment>,
++        candidates: List<CandidateFile>,
++        durationMs: Long,
++    ): Winner? {
++        val knownFrames = segments.sumOf { it.knownFrames }
++        if (knownFrames < MIN_KNOWN_FRAMES) return null
++        val seenFingerprints = HashSet<Long>()
++        var best: Pair<CandidateFile, SubtitleAudioAligner.Estimate>? = null
++        var ruledOut = 0
++        for (candidate in candidates) {
++            val track = SubtitleSpeechTrack.fromCues(
++                candidate.cues.map { Triple(it.startTimeMs, it.endTimeMs, it.text) },
++            )
++            if (track.size < MIN_CUES || !seenFingerprints.add(fingerprint(track))) {
++                ruledOut++
++                continue
++            }
++            val scales = fittingScales(track, durationMs)
++            if (scales.isEmpty()) {
++                SyncLog.i("candidate ${candidate.url} ruled out: ends at ${track.endsMs.max() / 1_000}s, video ${durationMs / 1_000}s")
++                ruledOut++
++                continue
++            }
++            val estimate = prepared.estimate(track, scales) ?: continue
++            if (isLockable(estimate, segments, knownFrames, track) &&
++                (best == null || estimate.peak > best.second.peak)
++            ) {
++                best = candidate to estimate
++            }
++        }
++        if (ruledOut > 0) SyncLog.i("ruled out $ruledOut candidates before scoring")
++        val (candidate, estimate) = best ?: return null
++        SyncLog.i("candidate ${candidate.url} locked by speech detection: $estimate")
++        return Winner(candidate.url, candidate.name, candidate.headers, estimate)
++    }
++
++    /** Frame-rate ratios whose stretch of the file's last cue still covers the video's length. */
++    private fun fittingScales(track: SubtitleSpeechTrack, durationMs: Long): DoubleArray {
++        if (durationMs <= 0) return SubtitleAudioAligner.CANDIDATE_SCALES
++        val lastEndMs = track.endsMs.max()
++        return SubtitleAudioAligner.CANDIDATE_SCALES.filter { scale ->
++            val mappedEndMs = lastEndMs * scale
++            mappedEndMs <= durationMs + MAX_SHIFT_MS && mappedEndMs >= durationMs * MIN_LENGTH_COVERAGE
++        }.toDoubleArray()
++    }
++
++    /**
++     * The confirmation rules a lock must pass: enough known audio and enough dialogue lines at the
++     * peak, a prominence that beats unrelated peaks, and the same shift on both halves of the
++     * evidence (a chance alignment of unrelated subtitles rarely shows up in both).
++     */
++    fun isLockable(
++        estimate: SubtitleAudioAligner.Estimate,
++        segments: List<SpeechSegment>,
++        knownFrames: Int,
++        track: SubtitleSpeechTrack,
++    ): Boolean {
++        val requiredProminence = if (abs(estimate.scale - 1.0) < 0.002) {
++            ACCEPT_PROMINENCE
++        } else {
++            ACCEPT_PROMINENCE + NON_STANDARD_RATE_PENALTY
++        }
++        return knownFrames >= MIN_KNOWN_FRAMES &&
++            estimate.cueCount >= MIN_CUES &&
++            estimate.speechSeconds >= MIN_SPEECH_SECONDS &&
++            !estimate.atSearchEdge &&
++            estimate.prominence >= requiredProminence &&
++            confirmedByBothHalves(segments, estimate, track)
++    }
++
++    private fun confirmedByBothHalves(
++        segments: List<SpeechSegment>,
++        estimate: SubtitleAudioAligner.Estimate,
++        track: SubtitleSpeechTrack,
++    ): Boolean {
++        val halves = splitByKnownFrames(segments)
++        if (halves.size < 2) return false
++        return halves.all { half ->
++            val result = SubtitleAudioAligner.estimate(
++                segments = half,
++                track = track,
++                scales = doubleArrayOf(estimate.scale),
++                minShiftMs = -MAX_SHIFT_MS,
++                maxShiftMs = MAX_SHIFT_MS,
++            )
++            result != null &&
++                !result.atSearchEdge &&
++                result.cueCount >= MIN_HALF_CUES &&
++                abs(result.shiftMs - estimate.shiftMs) <= HALF_AGREEMENT_MS
++        }
++    }
++
++    /** Splits [segments] in time into two parts holding half of the known frames each. */
++    private fun splitByKnownFrames(segments: List<SpeechSegment>): List<List<SpeechSegment>> {
++        val half = segments.sumOf { it.knownFrames } / 2
++        val first = ArrayList<SpeechSegment>()
++        val second = ArrayList<SpeechSegment>()
++        var seen = 0
++        for (segment in segments) {
++            val known = segment.knownFrames
++            when {
++                seen >= half -> second += segment
++                seen + known <= half -> {
++                    first += segment
++                    seen += known
++                }
++                else -> {
++                    // The segment straddling the half point goes to both halves.
++                    val split = known / 2
++                    first += SpeechSegment(segment.fromFrame, segment.probabilities.copyOfRange(0, split))
++                    second += SpeechSegment(
++                        segment.fromFrame + split,
++                        segment.probabilities.copyOfRange(split, known),
++                    )
++                    seen = half
++                }
++            }
++        }
++        return listOf(first, second)
++    }
++
++    /** Identical timing, whatever the text or encoding, means the same file. */
++    private fun fingerprint(track: SubtitleSpeechTrack): Long {
++        var hash = track.size.toLong()
++        for (i in 0 until track.size) hash = hash * 31 + track.startsMs[i] / 100
++        return hash
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleSpeechTrack.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleSpeechTrack.kt
+new file mode 100644
+index 000000000..5cee090b0
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleSpeechTrack.kt
+@@ -0,0 +1,78 @@
++package com.nuvio.app.features.player.audiosync
++
++import com.nuvio.app.features.player.SubtitleSdhFilter
++
++/** Dialogue intervals of a subtitle file, in subtitle time (milliseconds). */
++internal class SubtitleSpeechTrack private constructor(
++    val startsMs: LongArray,
++    val endsMs: LongArray,
++) {
++    val size: Int get() = startsMs.size
++
++    /**
++     * Fractional on-screen coverage per 32 ms frame for frames [fromFrame, toFrame) after mapping
++     * subtitle time t to media time t * [scale].
++     */
++    fun render(fromFrame: Int, toFrame: Int, scale: Double): DoubleArray {
++        val out = DoubleArray((toFrame - fromFrame).coerceAtLeast(0))
++        if (out.isEmpty()) return out
++        val frameMs = SpeechTimeline.FRAME_DURATION_MS
++        for (i in startsMs.indices) {
++            val a = startsMs[i] * scale / frameMs - fromFrame
++            val b = endsMs[i] * scale / frameMs - fromFrame
++            if (b <= 0.0 || a >= out.size) continue
++            val start = a.coerceAtLeast(0.0)
++            val end = b.coerceAtMost(out.size.toDouble())
++            val first = start.toInt()
++            val last = end.toInt()
++            if (first == last) {
++                out[first] += end - start
++            } else {
++                out[first] += first + 1 - start
++                for (f in first + 1 until last) out[f] += 1.0
++                if (last < out.size) out[last] += end - last
++            }
++        }
++        for (i in out.indices) if (out[i] > 1.0) out[i] = 1.0
++        return out
++    }
++
++    /** Number of cues whose mapped interval overlaps media time [fromMs, toMs). */
++    fun countCuesIn(fromMs: Double, toMs: Double, scale: Double, shiftMs: Double): Int {
++        var count = 0
++        for (i in startsMs.indices) {
++            val a = startsMs[i] * scale + shiftMs
++            val b = endsMs[i] * scale + shiftMs
++            if (b > fromMs && a < toMs) count++
++        }
++        return count
++    }
++
++    companion object {
++        private val musicOnly = Regex("^[\\s♪♫#*~-]*$")
++        private val musicWrapped = Regex("^\\s*[♪♫#].*[♪♫#]?\\s*$")
++
++        /** Builds the track from (startMs, endMs, text) cues, dropping sound-effect and lyric-only cues. */
++        fun fromCues(cues: List<Triple<Long, Long, String>>): SubtitleSpeechTrack {
++            val kept = cues
++                .asSequence()
++                .filter { (start, end, _) -> start >= 0L && end > start && end - start < MAX_CUE_DURATION_MS }
++                .filter { (_, _, text) -> isDialogue(text) }
++                .sortedBy { it.first }
++                .toList()
++            return SubtitleSpeechTrack(
++                startsMs = LongArray(kept.size) { kept[it].first },
++                endsMs = LongArray(kept.size) { kept[it].second },
++            )
++        }
++
++        internal fun isDialogue(text: String): Boolean {
++            if (text.isBlank()) return true // Bitmap or styled cues without text still mark dialogue.
++            val filtered = SubtitleSdhFilter.filter(text) ?: return false
++            val lines = filtered.lines().filterNot { musicOnly.matches(it) || musicWrapped.matches(it) }
++            return lines.any { line -> line.any(Char::isLetterOrDigit) }
++        }
++
++        private const val MAX_CUE_DURATION_MS = 20_000L
 +    }
 +}
