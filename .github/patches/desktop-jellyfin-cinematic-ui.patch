@@ -210,10 +210,10 @@ index b1b97c1f..c20f8285 100644
          json.parseToJsonElement(this).jsonObject
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
-index 7d1d7399..702a06b6 100644
+index 7d1d7399..9099ffcf 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
-@@ -1,78 +1,505 @@
+@@ -1,78 +1,508 @@
  package com.nuvio.app.features.jellyfin
  
  import androidx.compose.foundation.background
@@ -385,8 +385,11 @@ index 7d1d7399..702a06b6 100644
 +            DetailFloatingHeader(
 +                meta = meta,
 +                isSaved = false,
-+                progressProvider = { 0f },
++                // Nuvio fork: the whole header layer renders at alpha=progressProvider(); a
++                // constant 1f keeps back button + title visible at the top of the page.
++                progressProvider = { 1f },
 +                interactive = true,
++                backgroundColor = androidx.compose.ui.graphics.Color.Transparent,
 +                onBack = onBack,
 +                onToggleSaved = {},
 +            )
@@ -2047,17 +2050,18 @@ index 76e8719b..08ed3fab 100644
 -    }
 -}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-index 4d3b23b7..c7048a6f 100644
+index 4d3b23b7..9b0e77ef 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-@@ -73,6 +73,18 @@ object TmdbMetadataService {
+@@ -73,6 +73,19 @@ object TmdbMetadataService {
              }
          }
  
 +    /** Nuvio fork: person search by name, used when a source provides no TMDB person id. */
 +    suspend fun searchPersonId(name: String): Int? = runCatching {
++        // Nuvio fork: explicit cast clicks must work even when background TMDB enrichment
++        // is disabled in settings; the CI build bakes a working API key.
 +        val settings = TmdbSettingsRepository.snapshot()
-+        if (!settings.enabled) return@runCatching null
 +        val language = normalizeTmdbLanguage(settings.language)
 +        val response = fetch<TmdbPersonSearchResponse>(
 +            endpoint = "search/person",
@@ -2069,7 +2073,7 @@ index 4d3b23b7..c7048a6f 100644
      suspend fun fetchPersonDetail(
          personId: Int,
          preferCrewCredits: Boolean? = null,
-@@ -2236,3 +2248,15 @@ internal data class TmdbDiscoverResult(
+@@ -2236,3 +2249,15 @@ internal data class TmdbDiscoverResult(
      @SerialName("vote_average") val voteAverage: Double? = null,
      @SerialName("vote_count") val voteCount: Int? = null,
  )
