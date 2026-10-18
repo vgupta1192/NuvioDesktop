@@ -1,8 +1,8 @@
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index c9ed1082b..5c39b03a6 100644
+index c9ed1082..5c39b03a 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
-@@ -1175,6 +1175,7 @@
+@@ -1175,6 +1175,7 @@ kotlin {
              resources.srcDir(desktopSentryResourceDir)
              dependencies {
                  implementation(compose.desktop.currentOs)
@@ -12,7 +12,7 @@ index c9ed1082b..5c39b03a6 100644
                  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitleSync.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitleSync.kt
 new file mode 100644
-index 000000000..0f71bce1a
+index 00000000..0f71bce1
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitleSync.kt
 @@ -0,0 +1,36 @@
@@ -54,7 +54,7 @@ index 000000000..0f71bce1a
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt
 new file mode 100644
-index 000000000..6426f118a
+index 00000000..6426f118
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt
 @@ -0,0 +1,210 @@
@@ -269,10 +269,10 @@ index 000000000..6426f118a
 +    fun deleteModels()
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
-index a1f0b278a..044276a52 100644
+index a1f0b278..044276a5 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
-@@ -54,6 +54,9 @@
+@@ -54,6 +54,9 @@ internal fun PlayerScreenRuntime.BindAutoSyncRuntimeEffects() {
          activeController?.let { configureAutoSyncController(it) }
          onDispose { activeController?.setAutoSyncAppliedListener(null) }
      }
@@ -283,10 +283,10 @@ index a1f0b278a..044276a52 100644
          // Add-ons can finish after Nuvio has completed its first track scan with no subtitle.
          // Retry that automatic pick only for AutoSync, while the user still has no selection.
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
-index b9c288cb6..b586b6768 100644
+index b9c288cb..b586b676 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
-@@ -22,10 +22,28 @@
+@@ -22,10 +22,28 @@ internal val PlayerScreenRuntime.visibleAddonSubtitles: List<AddonSubtitle>
              subtitles = addonSubtitles,
              settings = playerSettingsUiState,
          )
@@ -319,7 +319,7 @@ index b9c288cb6..b586b6768 100644
      }
  
  internal val PlayerScreenRuntime.selectedAddonSubtitle: AddonSubtitle?
-@@ -247,7 +265,7 @@
+@@ -247,7 +265,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
          val isPrimarySatisfied = primaryTarget != null && currentSelectedLang != null &&
              SubtitleLanguageMatching.matchesLanguageCode(currentSelectedLang, primaryTarget)
          val hasBetterAddonMatch = !isPrimarySatisfied && primaryTarget != null &&
@@ -328,7 +328,7 @@ index b9c288cb6..b586b6768 100644
          if (!hasBetterAddonMatch) return
      }
  
-@@ -291,7 +309,7 @@
+@@ -291,7 +309,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
              return
          }
          if (matchedTargetPosition > 0 && !isLoadingAddonSubtitles) {
@@ -337,7 +337,7 @@ index b9c288cb6..b586b6768 100644
                  SubtitleLanguageMatching.matchesLanguageCode(subtitle.language, selectionPlan.targets.first())
              }
              if (primaryAddonMatch != null) {
-@@ -333,7 +351,7 @@
+@@ -333,7 +351,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
              return
          }
          val forcedAddonMatch = if (selectedAudioTrack != null) {
@@ -346,7 +346,7 @@ index b9c288cb6..b586b6768 100644
                  addonSubtitleIsForced(subtitle) &&
                      addonSubtitleMatchesLanguage(subtitle, requiredForcedTarget) &&
                      addonSubtitleMatchesSelectedAudioLanguage(subtitle, selectedAudioTrack)
-@@ -376,7 +394,7 @@
+@@ -376,7 +394,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
      if (playbackSnapshot.isLoading) return
  
      val addonMatch = selectionPlan.targets.firstNotNullOfOrNull { target ->
@@ -357,7 +357,7 @@ index b9c288cb6..b586b6768 100644
          }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.kt
 new file mode 100644
-index 000000000..ba2e02e52
+index 00000000..ba2e02e5
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.kt
 @@ -0,0 +1,17 @@
@@ -380,7 +380,7 @@ index 000000000..ba2e02e52
 +expect fun rememberSubtitleFontPicker(): SubtitleFontPickerState?
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
 new file mode 100644
-index 000000000..d3f4225c5
+index 00000000..d3f4225c
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
 @@ -0,0 +1,199 @@
@@ -584,10 +584,10 @@ index 000000000..d3f4225c5
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index 855bc3004..769b3b9dd 100644
+index e09fff39..f23e3533 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -583,6 +583,12 @@
+@@ -583,6 +583,12 @@ private fun PlaybackSettingsSection(
                      )
                  }
                  SettingsGroupDivider(isTablet = isTablet)
@@ -602,7 +602,7 @@ index 855bc3004..769b3b9dd 100644
                      description = stringResource(Res.string.settings_playback_subtitle_strip_sdh_description),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SubtitleFontSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SubtitleFontSettings.kt
 new file mode 100644
-index 000000000..e190153e8
+index 00000000..e190153e
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SubtitleFontSettings.kt
 @@ -0,0 +1,42 @@
@@ -650,7 +650,7 @@ index 000000000..e190153e8
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionFitSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionFitSettings.kt
 new file mode 100644
-index 000000000..78774b20b
+index 00000000..78774b20
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionFitSettings.kt
 @@ -0,0 +1,38 @@
@@ -694,7 +694,7 @@ index 000000000..78774b20b
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.kt
 new file mode 100644
-index 000000000..116a13f21
+index 00000000..116a13f2
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.kt
 @@ -0,0 +1,261 @@
@@ -961,7 +961,7 @@ index 000000000..116a13f21
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamConnectionFit.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamConnectionFit.kt
 new file mode 100644
-index 000000000..9d5df544d
+index 00000000..9d5df544
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamConnectionFit.kt
 @@ -0,0 +1,114 @@
@@ -1080,10 +1080,10 @@ index 000000000..9d5df544d
 +    return if (video != null || belongsToTitle) parseRuntimeMinutes(runtime) else null
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
-index f40580752..ab38fb4ad 100644
+index f4058075..ab38fb4a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
-@@ -99,6 +99,13 @@
+@@ -99,6 +99,13 @@ object StreamsRepository {
              return
          }
  
@@ -1097,7 +1097,7 @@ index f40580752..ab38fb4ad 100644
          activeRequestKey = requestKey
          activeJob?.cancel()
          _uiState.value = StreamsUiState(requestToken = requestToken)
-@@ -321,10 +328,11 @@
+@@ -321,10 +328,11 @@ object StreamsRepository {
                      groups = listOf(group),
                      rules = streamBadgeRules,
                  ).firstOrNull() ?: group
@@ -1111,10 +1111,10 @@ index f40580752..ab38fb4ad 100644
  
              fun publishAddonGroup(group: AddonStreamGroup) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-index d61c6d1bf..3299dbe87 100644
+index d61c6d1b..3299dbe8 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-@@ -62,6 +62,7 @@
+@@ -62,6 +62,7 @@ fun main(args: Array<String>) {
      configureDesktopQuickJsLibrary()
      installSeekrDesktopPreferences()
      configureDesktopChrome()
@@ -1124,7 +1124,7 @@ index d61c6d1bf..3299dbe87 100644
      handleDesktopLaunchArgs(args)
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/ConnectionFitDesktopFeed.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/ConnectionFitDesktopFeed.kt
 new file mode 100644
-index 000000000..4ba7c29c1
+index 00000000..4ba7c29c
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/ConnectionFitDesktopFeed.kt
 @@ -0,0 +1,47 @@
@@ -1177,7 +1177,7 @@ index 000000000..4ba7c29c1
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/NativePlayerBridgeSubtitleFont.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/NativePlayerBridgeSubtitleFont.kt
 new file mode 100644
-index 000000000..8d879a600
+index 00000000..8d879a60
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/NativePlayerBridgeSubtitleFont.kt
 @@ -0,0 +1,28 @@
@@ -1211,7 +1211,7 @@ index 000000000..8d879a600
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.desktop.kt
 new file mode 100644
-index 000000000..00afa7545
+index 00000000..00afa754
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontPicker.desktop.kt
 @@ -0,0 +1,54 @@
@@ -1271,7 +1271,7 @@ index 000000000..00afa7545
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontStore.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontStore.kt
 new file mode 100644
-index 000000000..6436bef50
+index 00000000..6436bef5
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SubtitleFontStore.kt
 @@ -0,0 +1,154 @@
@@ -1431,7 +1431,7 @@ index 000000000..6436bef50
 +}.getOrNull()
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt
 new file mode 100644
-index 000000000..e1981af33
+index 00000000..e1981af3
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt
 @@ -0,0 +1,11 @@
@@ -1447,10 +1447,10 @@ index 000000000..e1981af33
 +    fun d(message: String) = println("[nuvio sync] $message")
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
-index 66a2513f5..3b1a26e0b 100644
+index 66a2513f..3b1a26e0 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
-@@ -144,6 +144,17 @@
+@@ -144,6 +144,17 @@ internal object NativePlayerBridge {
      external fun propSetString(handle: Long, name: String, value: String): Boolean
      external fun command(handle: Long, args: Array<String>): Boolean
  
@@ -1469,161 +1469,25 @@ index 66a2513f5..3b1a26e0b 100644
          ensureLoaded()
          controlsPageAssets.url
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 2c8dd3439..e4d50f289 100644
+index 2c8dd343..3a18fe6b 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -2,10 +2,11 @@
- 
- import androidx.compose.ui.graphics.Color
- import co.touchlab.kermit.Logger
-+import com.nuvio.app.features.player.GeneratedSubtitles
-+import com.nuvio.app.features.player.generated.GeneratedSubtitlesDesktop
- import com.nuvio.app.features.player.PlayerControlAddonSubtitleItem
- import com.nuvio.app.features.player.PlayerControlEpisodeItem
- import com.nuvio.app.features.player.PlayerControlFilterItem
--import com.nuvio.app.features.player.PlayerControlPartyState
- import com.nuvio.app.features.player.PlayerControlSeasonItem
- import com.nuvio.app.features.player.PlayerControlSourceItem
- import com.nuvio.app.features.player.PlayerControlSubtitleCueItem
-@@ -55,10 +56,7 @@
- 
- internal class NativePlayerController(
-     private val host: NativePlayerHost,
--    private val nativeCreate: NativePlayerCreate = { hostViewPtr, source, headers, playWhenReady, positionMs, controlsUrl, decoder, rtx, sink ->
--        NativePlayerBridge.ensureLoaded()
--        NativePlayerBridge.create(hostViewPtr, source, headers, playWhenReady, positionMs, controlsUrl, decoder, rtx, sink)
--    },
-+    private val nativeCreate: NativePlayerCreate = NativePlayerBridge::create,
-     private val nativeDispose: (Long) -> Unit = NativePlayerBridge::dispose,
-     private val nativeSeekTo: (Long, Long) -> Unit = NativePlayerBridge::seekTo,
-     private val isHostDisplayable: () -> Boolean = { host.isDisplayable },
-@@ -102,8 +100,6 @@
-     private var pendingSource: PendingSource? = null
-     @Volatile
-     private var releaseRequested: Boolean = false
--    val isReleasing: Boolean
--        get() = releaseRequested
-     private val createsInFlight = mutableSetOf<Thread>()
-     private var createWaitInFlight: Thread? = null
-     private val releaseCallbacks = mutableListOf<ReleaseCallback>()
-@@ -333,6 +329,12 @@
+@@ -333,6 +333,12 @@ internal class NativePlayerController(
                              .onFailure { error -> recordTerminalDisposeFailure(error, "superseded create", created) }
                          return@onSuccess
                      }
 +                    // Custom subtitle font (Nuvio fork): sub-fonts-dir must be set before the
-+                    // first subtitle renders, and sub-font picks the imported family.
++                    // first subtitle renders, and sub-font picks the imported family. The
++                    // connection-fit feed learns throughput from this handle's reads.
 +                    com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.activeHandle = created
 +                    com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.applyToPlayer()
 +                    com.nuvio.app.features.player.ConnectionFitDesktopFeed.start(created)
-+                    }
                      SwingUtilities.invokeLater {
                          val shouldConfigure = synchronized(lifecycleLock) {
                              when {
-@@ -458,15 +460,7 @@
-                 "speed=${stateWithVolume.playbackSpeedLabel} audioLabel=${stateWithVolume.audioLabel} " +
-                 "subsLabel=${stateWithVolume.subtitlesLabel} fullscreen=$isFullscreen"
-         }
--        NativePlayerBridge.updateControls(current, stateWithVolume.toControlsJson(isFullscreen, ::refreshControlsForImage))
--    }
--
--    private fun refreshControlsForImage() {
--        SwingUtilities.invokeLater {
--            if (releaseRequested) return@invokeLater
--            lastSentControlsStructureKey = null
--            updateControls(controlsState)
--        }
-+        NativePlayerBridge.updateControls(current, stateWithVolume.toControlsJson(isFullscreen))
-     }
- 
-     fun onDesktopFullscreenChanged() {
-@@ -615,8 +609,8 @@
-             "volumeChange" -> setFallbackVolume(value.toFloat())
-             "volumeChangeTemporary" -> setTemporaryVolume(value.toFloat())
-             "setPlaybackSpeed" -> {
--                if (onEvent(type, value)) return
--                setPlaybackSpeed(value.toFloat())
-+                val speed = value.toFloat()
-+                setPlaybackSpeed(speed)
-             }
-             else -> {
-                 val eventHandled = onEvent(type, value)
-@@ -1099,6 +1093,22 @@
- 
-     override fun setSubtitleUri(url: String) {
-         log.d { "setSubtitleUri ${url.toPlaybackLogKey()} handle=$handle" }
-+        // Generated subtitles: the pseudo URL starts the dump -> Groq -> SRT pipeline instead of
-+        // being handed to mpv; the produced SRT file is attached window by window.
-+        val pending = pendingSource
-+        if (GeneratedSubtitles.isGenerated(url) &&
-+            GeneratedSubtitlesDesktop.maybeGenerate(
-+                handle = handle,
-+                streamUrl = pending?.sourceUrl,
-+                headers = pending?.headerLines.orEmpty().mapNotNull { line ->
-+                    line.split(':', limit = 2).takeIf { it.size == 2 }?.let { it[0].trim() to it[1].trim() }
-+                }.toMap(),
-+                url = url,
-+            )
-+        ) {
-+            return
-+        }
-+        com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.applyToPlayer()
-         handle.takeIf { it != 0L }?.let { current ->
-             NativePlayerBridge.clearExternalSubtitles(current)
-             NativePlayerBridge.addSubtitleUrl(current, url)
-@@ -1301,7 +1311,7 @@
-     val isInPip: Boolean,
- )
- 
--private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageReady: () -> Unit): String =
-+private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
-     buildString {
-         append('{')
-         appendJsonField("title", title)
-@@ -1514,8 +1524,6 @@
-         append(',')
-         appendJsonField("themeBorderDefaultColor", themeBorderDefaultColor)
-         append(',')
--        appendJsonField("themeDangerColor", themeDangerColor)
--        append(',')
-         appendJsonField("isPlaying", isPlaying)
-         append(',')
-         appendJsonField("isLoading", isLoading)
-@@ -1595,8 +1603,6 @@
-         append(',')
-         appendJsonField("positionMs", positionMs)
-         append(',')
--        appendJsonField("bufferedPositionMs", bufferedPositionMs)
--        append(',')
-         appendJsonField("sourceIsLoading", sourceIsLoading)
-         append(',')
-         appendJsonArrayField("sourceFilters", sourceFilters) { appendFilterItemJson(it) }
-@@ -1684,23 +1690,15 @@
-         appendJsonField("autoSyncBubbleMessage", autoSyncBubbleMessage)
-         append(',')
-         appendJsonField("autoSyncBubbleToken", autoSyncBubbleToken)
--        append(",\"party\":")
--        append(partyJson.encodeToString(PlayerControlPartyState.serializer(), party.withWebviewImages(onImageReady)))
-         append('}')
-     }
- 
--private val partyJson = Json { encodeDefaults = true }
--
--private fun PlayerControlPartyState.withWebviewImages(onImageReady: () -> Unit): PlayerControlPartyState =
--    copy(profile = profile.copy(imageUrl = if (active) "" else WebviewImages.resolve(profile.imageUrl, onImageReady)))
--
- private fun PlayerControlsState.nativeControlsStructureKey(): PlayerControlsState =
-     copy(
-         isPlaying = false,
-         isLoading = false,
-         durationMs = 0L,
-         positionMs = 0L,
--        bufferedPositionMs = 0L,
-     )
- 
- private fun StringBuilder.appendJsonField(name: String, value: String) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt
 new file mode 100644
-index 000000000..654b0f31a
+index 00000000..654b0f31
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt
 @@ -0,0 +1,94 @@
@@ -1723,7 +1587,7 @@ index 000000000..654b0f31a
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 new file mode 100644
-index 000000000..486ec5a75
+index 00000000..486ec5a7
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -0,0 +1,246 @@
@@ -1975,7 +1839,7 @@ index 000000000..486ec5a75
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt
 new file mode 100644
-index 000000000..c74c81c30
+index 00000000..c74c81c3
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt
 @@ -0,0 +1,116 @@
@@ -2097,20 +1961,14 @@ index 000000000..c74c81c30
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.desktop.kt
 new file mode 100644
-index 000000000..1cb25b85b
+index 00000000..e0667672
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.desktop.kt
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,28 @@
 +package com.nuvio.app.features.streams
 +
 +import com.nuvio.app.core.storage.DesktopStorage
 +import java.net.NetworkInterface
-+
-+internal enum class NetworkKind {
-+    WIFI,
-+    CELLULAR,
-+    OTHER,
-+}
 +
 +/** The current default network, or null when offline or unknown. Best-effort on desktop. */
 +internal actual fun currentNetworkKind(): NetworkKind? = runCatching {
@@ -2136,10 +1994,10 @@ index 000000000..1cb25b85b
 +    actual fun saveEnabled(enabled: Boolean) = store.putBoolean("enabled", enabled)
 +}
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-index b7d15ba1f..311758d31 100644
+index b7d15ba1..311758d3 100644
 --- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-@@ -2191,5 +2191,66 @@
+@@ -2191,5 +2191,66 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
  JNIEXPORT void JNICALL NP(layoutNativeSubviews)(JNIEnv *, jobject, jlong) {}
  JNIEXPORT void JNICALL NP(reparentSurfaceNative)(JNIEnv *, jobject, jlong, jlong) {}
  
@@ -2207,10 +2065,10 @@ index b7d15ba1f..311758d31 100644
  #undef NP
  } // extern "C"
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index 4730c231f..e2c6bb8d7 100644
+index 4730c231..e2c6bb8d 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-@@ -3915,3 +3915,86 @@
+@@ -3915,3 +3915,86 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
                                          stripSdh:stripSdh == JNI_TRUE];
      });
  }

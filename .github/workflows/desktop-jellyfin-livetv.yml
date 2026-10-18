@@ -159,7 +159,7 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           # optional-ports
-          for P in fix-desktop-isgifurl ttml-framerate desktop-autosync-bubbles custom-stretch jellyfin-subtitles synced-subtitles library-calendar desktop-seek-previews desktop-native-props desktop-generated-subtitles; do
+          for P in fix-desktop-isgifurl ttml-framerate desktop-autosync-bubbles custom-stretch jellyfin-subtitles synced-subtitles library-calendar desktop-seek-previews desktop-native-props desktop-generated-subtitles desktop-audio-sync-hls; do
             if git apply "fork-src/.github/patches/$P.patch"; then
               echo "applied $P.patch"
             else
@@ -417,7 +417,7 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           # optional-ports
-          for P in fix-desktop-isgifurl ttml-framerate desktop-autosync-bubbles custom-stretch jellyfin-subtitles synced-subtitles library-calendar desktop-seek-previews desktop-native-props desktop-generated-subtitles; do
+          for P in fix-desktop-isgifurl ttml-framerate desktop-autosync-bubbles custom-stretch jellyfin-subtitles synced-subtitles library-calendar desktop-seek-previews desktop-native-props desktop-generated-subtitles desktop-audio-sync-hls; do
             if git apply "fork-src/.github/patches/$P.patch"; then
               echo "applied $P.patch"
             else
