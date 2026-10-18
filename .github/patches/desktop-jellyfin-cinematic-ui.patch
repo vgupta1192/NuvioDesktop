@@ -210,10 +210,10 @@ index b1b97c1f..c20f8285 100644
          json.parseToJsonElement(this).jsonObject
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
-index 7d1d7399..7f405524 100644
+index 7d1d7399..702a06b6 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
-@@ -1,78 +1,502 @@
+@@ -1,78 +1,505 @@
  package com.nuvio.app.features.jellyfin
  
  import androidx.compose.foundation.background
@@ -334,6 +334,7 @@ index 7d1d7399..7f405524 100644
 +                item = item,
 +                onBack = onBack,
 +                onPlay = onPlay,
++                onOpenCast = onOpenCast,
 +            )
 +        }
 +    }
@@ -346,8 +347,10 @@ index 7d1d7399..7f405524 100644
 +    item: JellyfinItem,
 +    onBack: () -> Unit,
 +    onPlay: (JellyfinItem) -> Unit,
++    onOpenCast: (Int, String) -> Unit,
 +) {
 +    val tokens = MaterialTheme.nuvio
++    val castScope = rememberCoroutineScope()
 +    val posterUrl = remember(item.id, item.imageTag) { JellyfinRepository.posterUrlFor(item) }
 +    val backdropUrl = remember(item.id, item.backdropTag) { JellyfinRepository.backdropUrlFor(item) }
 +    val logoUrl = remember(item.id, item.logoTag) { JellyfinRepository.logoUrlFor(item) }
@@ -1077,10 +1080,10 @@ index 2c0d407f..e800cc17 100644
  
      /**
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
-index 76e8719b..5beeec94 100644
+index 76e8719b..08ed3fab 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
-@@ -16,30 +16,22 @@ import androidx.compose.foundation.layout.height
+@@ -16,30 +16,23 @@ import androidx.compose.foundation.layout.height
  import androidx.compose.foundation.layout.padding
  import androidx.compose.foundation.layout.size
  import androidx.compose.foundation.layout.width
@@ -1090,6 +1093,7 @@ index 76e8719b..5beeec94 100644
  import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
  import androidx.compose.foundation.lazy.grid.items
 -import androidx.compose.foundation.lazy.items as listItems
++import androidx.compose.foundation.lazy.items
  import androidx.compose.foundation.rememberScrollState
  import androidx.compose.foundation.shape.RoundedCornerShape
  import androidx.compose.foundation.verticalScroll
@@ -1111,7 +1115,7 @@ index 76e8719b..5beeec94 100644
  import androidx.compose.material3.Text
  import androidx.compose.runtime.Composable
  import androidx.compose.runtime.LaunchedEffect
-@@ -54,21 +46,33 @@ import androidx.compose.ui.draw.clip
+@@ -54,21 +47,33 @@ import androidx.compose.ui.draw.clip
  import androidx.compose.ui.graphics.Color
  import androidx.compose.ui.layout.ContentScale
  import androidx.compose.ui.text.font.FontWeight
@@ -1148,7 +1152,7 @@ index 76e8719b..5beeec94 100644
  ) {
      LaunchedEffect(Unit) { JellyfinRepository.initialize() }
      val state by JellyfinRepository.uiState.collectAsStateWithLifecycle()
-@@ -106,195 +110,375 @@ fun JellyfinScreen(
+@@ -106,195 +111,375 @@ fun JellyfinScreen(
                  }
              },
          )
@@ -1463,7 +1467,7 @@ index 76e8719b..5beeec94 100644
 -                    value = state.searchQuery,
 -                    onValueChange = JellyfinRepository::setSearchQuery,
 -                    placeholder = "Search your Jellyfin server…",
-+                androidx.compose.foundation.lazy.items(items, key = { it.id }) { item ->
++                items(items, key = { it.id }) { item ->
 +                    Box(modifier = Modifier.width(124.dp)) {
 +                        JellyfinPosterCell(
 +                            item = item,
@@ -1683,7 +1687,7 @@ index 76e8719b..5beeec94 100644
          }
      }
  }
-@@ -309,16 +493,17 @@ private fun JellyfinSignInContent(
+@@ -309,16 +494,17 @@ private fun JellyfinSignInContent(
      var username by remember { mutableStateOf("") }
      var password by remember { mutableStateOf("") }
  
@@ -1706,7 +1710,7 @@ index 76e8719b..5beeec94 100644
                  .clip(RoundedCornerShape(16.dp))
                  .background(tokens.colors.surfaceCard)
                  .padding(24.dp),
-@@ -344,7 +529,7 @@ private fun JellyfinSignInContent(
+@@ -344,7 +530,7 @@ private fun JellyfinSignInContent(
                      onValueChange = { username = it },
                      placeholder = "Username",
                  )
@@ -1715,7 +1719,7 @@ index 76e8719b..5beeec94 100644
                      value = password,
                      onValueChange = { password = it },
                      modifier = Modifier.fillMaxWidth(),
-@@ -357,9 +542,9 @@ private fun JellyfinSignInContent(
+@@ -357,9 +543,9 @@ private fun JellyfinSignInContent(
                              style = MaterialTheme.typography.bodyLarge,
                          )
                      },
@@ -1727,7 +1731,7 @@ index 76e8719b..5beeec94 100644
                          focusedBorderColor = tokens.colors.borderFocus,
                          unfocusedBorderColor = tokens.colors.borderDefault,
                          focusedContainerColor = tokens.colors.surfaceElevated,
-@@ -371,7 +556,7 @@ private fun JellyfinSignInContent(
+@@ -371,7 +557,7 @@ private fun JellyfinSignInContent(
                      enabled = !state.isLoadingSession && serverUrl.isNotBlank() && username.isNotBlank(),
                      onClick = { JellyfinRepository.signIn(serverUrl, username, password) },
                      modifier = Modifier.fillMaxWidth(),
@@ -1736,7 +1740,7 @@ index 76e8719b..5beeec94 100644
                  ) {
                      if (state.isLoadingSession) {
                          CircularProgressIndicator(
-@@ -429,11 +614,10 @@ private fun JellyfinLibraryRow(
+@@ -429,11 +615,10 @@ private fun JellyfinLibraryRow(
                  onClick = onToggleVisibility,
                  modifier = Modifier.size(30.dp),
              ) {
@@ -1752,7 +1756,7 @@ index 76e8719b..5beeec94 100644
                  )
              }
          }
-@@ -485,7 +669,7 @@ private fun JellyfinPosterCell(
+@@ -485,7 +670,7 @@ private fun JellyfinPosterCell(
                  .background(tokens.colors.surfaceElevated),
          ) {
              if (posterUrl != null) {
@@ -1761,7 +1765,7 @@ index 76e8719b..5beeec94 100644
                      model = posterUrl,
                      contentDescription = item.name,
                      contentScale = ContentScale.Crop,
-@@ -526,7 +710,6 @@ private fun JellyfinPosterCell(
+@@ -526,7 +711,6 @@ private fun JellyfinPosterCell(
              color = tokens.colors.textPrimary,
              maxLines = 2,
              overflow = TextOverflow.Ellipsis,
@@ -1769,7 +1773,7 @@ index 76e8719b..5beeec94 100644
          )
          if (item.productionYear != null) {
              Text(
-@@ -537,272 +720,3 @@ private fun JellyfinPosterCell(
+@@ -537,272 +721,3 @@ private fun JellyfinPosterCell(
          }
      }
  }

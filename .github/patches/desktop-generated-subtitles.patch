@@ -378,50 +378,6 @@ index 000000000..ba2e02e52
 +
 +@Composable
 +expect fun rememberSubtitleFontPicker(): SubtitleFontPickerState?
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ConnectionFitSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ConnectionFitSettings.kt
-new file mode 100644
-index 000000000..78774b20b
---- /dev/null
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ConnectionFitSettings.kt
-@@ -0,0 +1,38 @@
-+package com.nuvio.app.features.settings
-+
-+import androidx.compose.runtime.Composable
-+import androidx.compose.runtime.getValue
-+import androidx.compose.runtime.remember
-+import androidx.lifecycle.compose.collectAsStateWithLifecycle
-+import com.nuvio.app.features.streams.ConnectionSpeedEstimator
-+import kotlin.math.roundToInt
-+
-+/**
-+ * Nuvio fork (ported from NuvioMobile-Reshaped): "Match streams to connection". Speed is learned
-+ * from the user's own playback, per network type; heavy streams go to the end of the list.
-+ */
-+@Composable
-+internal fun ConnectionFitSettingsSection(isTablet: Boolean) {
-+    val enabled by ConnectionSpeedEstimator.enabled.collectAsStateWithLifecycle()
-+    val revision by ConnectionSpeedEstimator.revision.collectAsStateWithLifecycle()
-+    val estimate = remember(revision) { ConnectionSpeedEstimator.estimateMbps() }
-+    val status = if (estimate == null) {
-+        "Learning your speed on this network from playback. Stream order is unchanged until then."
-+    } else {
-+        "About ${estimate.roundToInt()} Mbps on this network. Your stream order is kept; streams likely too heavy for it go last."
-+    }
-+    SettingsSection(
-+        title = "Stream list",
-+        isTablet = isTablet,
-+    ) {
-+        SettingsGroup(isTablet = isTablet) {
-+            SettingsSwitchRow(
-+                title = "Match streams to connection",
-+                description = "Keep your addon's stream order, but move streams likely too heavy for your connection to the end. $status",
-+                checked = enabled,
-+                isTablet = isTablet,
-+                onCheckedChange = ConnectionSpeedEstimator::setEnabled,
-+            )
-+        }
-+    }
-+}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
 new file mode 100644
 index 000000000..d3f4225c5
