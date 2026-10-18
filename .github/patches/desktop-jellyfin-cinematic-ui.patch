@@ -2169,3 +2169,92 @@ index 629c2f96..210f006f 100644
 +        java.time.format.DateTimeFormatter.ofPattern("h:mm a").format(endTime).lowercase()
 +    }.getOrNull()
  }
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
+index 157f16b5..8aab32d2 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
+@@ -12,6 +12,10 @@ import java.net.URL
+  * 16 kHz mono PCM by handing the concatenated segments to [NativePlayerBridge.dumpAudioWav]
+  * (headless mpv decodes any container the player can, so no platform demuxer is needed).
+  */
++/** Nuvio fork: the headless-mpv dump runs one native player at a time - generated subtitles
++ *  and the audio-sync fallback share this gate so two native instances never race. */
++internal val NativeDumpGate = Any()
++
+ internal object HlsAudioSpotSampler {
+     private const val CONNECT_TIMEOUT_MS = 15_000
+     private const val READ_TIMEOUT_MS = 30_000
+@@ -65,6 +69,7 @@ internal object HlsAudioSpotSampler {
+                 }
+                 if (failed || concat.length() == 0L) continue
+                 val dumped = runCatching {
++                    synchronized(NativeDumpGate) {
+                     NativePlayerBridge.dumpAudioWav(
+                         url = concat.absolutePath,
+                         headerLines = arrayOf(),
+@@ -73,6 +78,7 @@ internal object HlsAudioSpotSampler {
+                         endSec = spotMs / 1000.0,
+                     )
+                 }.getOrDefault(false)
++                    }
+                 if (!dumped || !wav.exists() || wav.length() < 800L) continue
+                 val pcm = readWavPcm(wav) ?: continue
+                 val intervals = RmsVad.detect(pcm).map { (a, b) -> (a + startMs) to (b + startMs) }
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
+index 486ec5a7..b81b65d9 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
+@@ -134,6 +134,9 @@ internal object GeneratedSubtitlesDesktop {
+             val wavFile = File(cacheDir, "$key-$window.wav")
+             val ok = withContext(Dispatchers.IO) {
+                 runCatching {
++                    // Share the native-dump gate with the audio-sync fallback: one headless
++                    // mpv instance at a time.
++                    synchronized(com.nuvio.app.features.player.audiosync.NativeDumpGate) {
+                     NativePlayerBridge.dumpAudioWav(
+                         streamUrl,
+                         headers.map { (name, value) -> "$name: $value" }.toTypedArray(),
+@@ -141,6 +144,7 @@ internal object GeneratedSubtitlesDesktop {
+                         startSec,
+                         startSec + WINDOW_SECONDS,
+                     )
++                    }
+                 }.getOrDefault(false)
+             }
+             if (!ok || !wavFile.exists() || wavFile.length() <= 44L) {
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
+index 1a271926..dae995a5 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
+@@ -147,8 +147,29 @@ actual object AppUpdaterPlatform {
+         val updateFile = File(path)
+         check(updateFile.exists()) { runBlocking { getString(Res.string.updates_downloaded_file_missing) } }
+ 
+-        launchInstaller(updateFile)
+-        scheduleAppExit()
++        if (currentOs == DesktopUpdaterOs.MACOS) {
++            // Nuvio fork: the dmg must actually mount before the app quits, otherwise a failed
++            // `open` leaves the user with a closed app and no installer. Fall back to telling
++            // the user where the file is when the volume never shows up.
++            val volumesBefore = File("/Volumes").list()?.toSet().orEmpty()
++            launchInstaller(updateFile)
++            var mounted = false
++            repeat(40) {
++                Thread.sleep(250)
++                val now = File("/Volumes").list()?.toSet().orEmpty()
++                if (now.any { it !in volumesBefore && it != "macOS Base System" }) {
++                    mounted = true
++                    return@repeat
++                }
++            }
++            check(mounted) {
++                "The downloaded installer did not open. Open it manually: ${updateFile.absolutePath}"
++            }
++            scheduleAppExit()
++        } else {
++            launchInstaller(updateFile)
++            scheduleAppExit()
++        }
+     }
+ 
+     private fun updatesDir(): File =
