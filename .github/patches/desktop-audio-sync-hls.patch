@@ -429,7 +429,7 @@ index 000000000..6b15ded72
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 new file mode 100644
-index 000000000..c1f76aa62
+index 000000000..5fed3e64d
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 @@ -0,0 +1,256 @@
@@ -660,7 +660,7 @@ index 000000000..c1f76aa62
 +                        headerLines = headerLines,
 +                        outPath = wav.absolutePath,
 +                        startSec = startMs / 1000.0,
-+                        endSec = (startMs + HlsAudioSpotSampler.SPOT_MS) / 1000.0,
++                        endSec = (startMs + SPOT_MS) / 1000.0,
 +                    )
 +                }
 +            }.getOrDefault(false)
