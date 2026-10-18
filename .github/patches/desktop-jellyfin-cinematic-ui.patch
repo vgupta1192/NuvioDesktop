@@ -2050,10 +2050,10 @@ index 76e8719b..08ed3fab 100644
 -    }
 -}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-index 4d3b23b7..9b0e77ef 100644
+index 4d3b23b7..ef1658ff 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-@@ -73,6 +73,19 @@ object TmdbMetadataService {
+@@ -73,6 +73,24 @@ object TmdbMetadataService {
              }
          }
  
@@ -2065,7 +2065,12 @@ index 4d3b23b7..9b0e77ef 100644
 +        val language = normalizeTmdbLanguage(settings.language)
 +        val response = fetch<TmdbPersonSearchResponse>(
 +            endpoint = "search/person",
-+            query = mapOf("query" to name, "language" to language, "include_adult" to "false"),
++            // buildTmdbUrl does not encode query values; multi-word names break without this.
++            query = mapOf(
++                "query" to io.ktor.http.encodeURLParameter(name),
++                "language" to language,
++                "include_adult" to "false",
++            ),
 +        )
 +        response?.results?.firstOrNull()?.id
 +    }.getOrNull()
@@ -2073,7 +2078,7 @@ index 4d3b23b7..9b0e77ef 100644
      suspend fun fetchPersonDetail(
          personId: Int,
          preferCrewCredits: Boolean? = null,
-@@ -2236,3 +2249,15 @@ internal data class TmdbDiscoverResult(
+@@ -2236,3 +2254,15 @@ internal data class TmdbDiscoverResult(
      @SerialName("vote_average") val voteAverage: Double? = null,
      @SerialName("vote_count") val voteCount: Int? = null,
  )
