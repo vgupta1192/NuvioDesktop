@@ -2230,36 +2230,37 @@ index 486ec5a7..b81b65d9 100644
              }
              if (!ok || !wavFile.exists() || wavFile.length() <= 44L) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
-index 1a271926..dae995a5 100644
+index 1a271926..c5e9a863 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
-@@ -147,8 +147,29 @@ actual object AppUpdaterPlatform {
-         val updateFile = File(path)
+@@ -148,7 +148,31 @@ actual object AppUpdaterPlatform {
          check(updateFile.exists()) { runBlocking { getString(Res.string.updates_downloaded_file_missing) } }
  
--        launchInstaller(updateFile)
+         launchInstaller(updateFile)
 -        scheduleAppExit()
 +        if (currentOs == DesktopUpdaterOs.MACOS) {
-+            // Nuvio fork: the dmg must actually mount before the app quits, otherwise a failed
-+            // `open` leaves the user with a closed app and no installer. Fall back to telling
-+            // the user where the file is when the volume never shows up.
++            // Nuvio fork: never block the caller and never quit on a dmg that failed to
++            // mount. `open` returns immediately; a daemon thread watches /Volumes and the
++            // app only exits once the volume is actually there. If it never mounts the app
++            // stays alive and the user can open the dmg by hand.
 +            val volumesBefore = File("/Volumes").list()?.toSet().orEmpty()
-+            launchInstaller(updateFile)
-+            var mounted = false
-+            repeat(40) {
-+                Thread.sleep(250)
-+                val now = File("/Volumes").list()?.toSet().orEmpty()
-+                if (now.any { it !in volumesBefore && it != "macOS Base System" }) {
-+                    mounted = true
-+                    return@repeat
++            thread(name = "nuvio-updater-mount-watch", isDaemon = true) {
++                var mounted = false
++                repeat(40) {
++                    Thread.sleep(250)
++                    val now = File("/Volumes").list()?.toSet().orEmpty()
++                    if (now.any { it !in volumesBefore && it != "macOS Base System" }) {
++                        mounted = true
++                        return@repeat
++                    }
++                }
++                if (mounted) {
++                    scheduleAppExit()
++                } else {
++                    println("[nuvio-updater] the downloaded dmg did not mount; open it manually: ${updateFile.absolutePath}")
 +                }
 +            }
-+            check(mounted) {
-+                "The downloaded installer did not open. Open it manually: ${updateFile.absolutePath}"
-+            }
-+            scheduleAppExit()
 +        } else {
-+            launchInstaller(updateFile)
 +            scheduleAppExit()
 +        }
      }
