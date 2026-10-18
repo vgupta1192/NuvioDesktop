@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index f35772b84..73374973f 100644
+index f35772b8..3405f7c2 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -1784,7 +1784,13 @@ internal fun MainAppContent(
+@@ -1784,11 +1784,26 @@ internal fun MainAppContent(
                  }
                  entry<JellyfinRoute> { route ->
                      val onBack = rememberGuardedPopBackStack(navController, route)
@@ -17,8 +17,22 @@ index f35772b84..73374973f 100644
                  }
                  entry<JellyfinDetailRoute> { route ->
                      val onBack = rememberGuardedPopBackStack(navController, route)
+-                    JellyfinDetailScreen(route = route, onBack = onBack, onPlay = ::openJellyfinItem)
++                    JellyfinDetailScreen(
++                        route = route,
++                        onBack = onBack,
++                        onPlay = ::openJellyfinItem,
++                        onOpenCast = { personId, personName ->
++                            navController.navigate(
++                                PersonDetailRoute(personId = personId, personName = personName),
++                            )
++                        },
++                    )
+                 }
+                 entry<DownloadsRoute> { route ->
+                     DownloadsDestination(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
-index b1b97c1f1..c20f82856 100644
+index b1b97c1f..c20f8285 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
 @@ -24,6 +24,7 @@ import kotlinx.serialization.json.put
@@ -196,10 +210,10 @@ index b1b97c1f1..c20f82856 100644
          json.parseToJsonElement(this).jsonObject
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
-index 7d1d7399b..2fc702914 100644
+index 7d1d7399..00a4b4e1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
-@@ -1,26 +1,67 @@
+@@ -1,78 +1,502 @@
  package com.nuvio.app.features.jellyfin
  
  import androidx.compose.foundation.background
@@ -248,6 +262,9 @@ index 7d1d7399b..2fc702914 100644
  import androidx.compose.ui.unit.dp
  import androidx.lifecycle.compose.collectAsStateWithLifecycle
 -import com.nuvio.app.core.ui.NuvioScreenHeader
++import androidx.compose.runtime.rememberCoroutineScope
++import com.nuvio.app.features.tmdb.TmdbMetadataService
++import kotlinx.coroutines.launch
 +import coil3.compose.AsyncImage
  import com.nuvio.app.core.ui.nuvio
 +import com.nuvio.app.features.details.MetaPerson
@@ -269,11 +286,23 @@ index 7d1d7399b..2fc702914 100644
  @Composable
  fun JellyfinDetailScreen(
      route: JellyfinDetailRoute,
-@@ -35,44 +76,419 @@ fun JellyfinDetailScreen(
+     onBack: () -> Unit,
+     onPlay: (JellyfinItem) -> Unit,
++    onOpenCast: (Int, String) -> Unit = { _, _ -> },
+ ) {
+     val state by JellyfinRepository.uiState.collectAsStateWithLifecycle()
+     val tokens = MaterialTheme.nuvio
++    val castScope = rememberCoroutineScope()
+ 
+     LaunchedEffect(route.itemId) {
+         JellyfinRepository.initialize()
          JellyfinRepository.selectItemById(route.itemId)
      }
  
 -    Column(
++    androidx.compose.runtime.CompositionLocalProvider(
++        com.nuvio.app.navigation.LocalUseNativeNavigation provides false,
++    ) {
 +    Box(
          modifier = Modifier
              .fillMaxSize()
@@ -333,7 +362,7 @@ index 7d1d7399b..2fc702914 100644
 +                    photo = JellyfinRepository.personImageUrl(person),
 +                )
 +            },
-+        )
+         )
 +    }
 +    val playable: JellyfinItem? = when {
 +        item.isSeries || item.isFolder ->
@@ -393,18 +422,17 @@ index 7d1d7399b..2fc702914 100644
 +            meta = meta,
 +            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
 +        )
-+        if (!item.overview.isNullOrBlank()) {
-+            ExpandableDescription(
-+                text = item.overview.orEmpty(),
-+                collapsedMaxLines = 4,
-+                modifier = Modifier.padding(horizontal = 24.dp),
-+                color = tokens.colors.textPrimary,
-+            )
-+        }
 +        DetailCastSection(
 +            cast = meta.cast,
 +            modifier = Modifier.padding(top = 12.dp),
-         )
++            onCastClick = { person, _ ->
++                castScope.launch {
++                    TmdbMetadataService.searchPersonId(person.name)?.let { id ->
++                        onOpenCast(id, person.name)
++                    }
++                }
++            },
++        )
 +        if (item.isSeries && state.seasons.isNotEmpty()) {
 +            JellyfinSeasonsChips(
 +                state = state,
@@ -419,6 +447,7 @@ index 7d1d7399b..2fc702914 100644
 +            )
 +        }
 +        Spacer(modifier = Modifier.height(40.dp))
++    }
 +    }
 +}
 +
@@ -577,17 +606,17 @@ index 7d1d7399b..2fc702914 100644
          ) {
 -            when {
 -                state.selectedDetail == null && state.isLoadingDetail -> Box(
+-                    modifier = Modifier.fillMaxSize(),
+-                    contentAlignment = Alignment.Center,
+-                ) { CircularProgressIndicator() }
+-
+-                state.selectedDetail == null && state.detailError != null -> Column(
 +            if (thumbnailUrl != null) {
 +                AsyncImage(
 +                    model = thumbnailUrl,
 +                    contentDescription = episode.name,
 +                    contentScale = ContentScale.Crop,
                      modifier = Modifier.fillMaxSize(),
--                    contentAlignment = Alignment.Center,
--                ) { CircularProgressIndicator() }
--
--                state.selectedDetail == null && state.detailError != null -> Column(
--                    modifier = Modifier.fillMaxSize(),
 -                    horizontalAlignment = Alignment.CenterHorizontally,
 -                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
 -                ) {
@@ -632,22 +661,22 @@ index 7d1d7399b..2fc702914 100644
 +            )
 +            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
 +                episode.runTimeMinutes?.let { minutes ->
-+                    Text(
-+                        text = "${minutes}m",
-+                        style = MaterialTheme.typography.labelSmall,
-+                        color = tokens.colors.textSecondary,
-+                    )
-+                }
-+                if (episode.resumePositionMs > 0) {
                      Text(
 -                        text = state.detailError.orEmpty(),
 -                        style = MaterialTheme.typography.bodyMedium,
 -                        color = MaterialTheme.colorScheme.error,
++                        text = "${minutes}m",
++                        style = MaterialTheme.typography.labelSmall,
++                        color = tokens.colors.textSecondary,
+                     )
+                 }
++                if (episode.resumePositionMs > 0) {
++                    Text(
 +                        text = "Resume at ${formatPosition(episode.resumePositionMs)}",
 +                        style = MaterialTheme.typography.labelSmall,
 +                        color = MaterialTheme.colorScheme.primary,
-                     )
-                 }
++                    )
++                }
 +            }
 +        }
 +    }
@@ -713,7 +742,7 @@ index 7d1d7399b..2fc702914 100644
 +    return if (hours > 0) "${hours}h ${minutes.toString().padStart(2, '0')}m" else "${minutes}m"
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
-index 05f1c5237..d4ee562d4 100644
+index 05f1c523..d4ee562d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
 @@ -1,7 +1,10 @@
@@ -844,7 +873,7 @@ index 05f1c5237..d4ee562d4 100644
 +    cast = cast,
 +)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt
-index 2800325d6..33c560b47 100644
+index 2800325d..33c560b4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt
 @@ -10,4 +10,7 @@ internal expect object JellyfinPlatform {
@@ -856,7 +885,7 @@ index 2800325d6..33c560b47 100644
 +    fun localEndTimeLabel(minutesFromNow: Long): String?
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
-index 2c0d407f1..751dff590 100644
+index 2c0d407f..e800cc17 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
 @@ -43,6 +43,7 @@ object JellyfinRepository {
@@ -893,7 +922,7 @@ index 2c0d407f1..751dff590 100644
          val loadsChildren = item.isSeries || item.isFolder
          _uiState.update {
              it.copy(
-@@ -331,6 +333,116 @@ object JellyfinRepository {
+@@ -331,6 +333,131 @@ object JellyfinRepository {
          }
      }
  
@@ -964,7 +993,7 @@ index 2c0d407f1..751dff590 100644
 +                        launch {
 +                            val page = try {
 +                                val browseTypes = browseItemTypes(library.collectionType)
-+                                JellyfinClient.getItems(
++                                val typed = JellyfinClient.getItems(
 +                                    session = session,
 +                                    parentId = library.id,
 +                                    startIndex = 0,
@@ -974,9 +1003,24 @@ index 2c0d407f1..751dff590 100644
 +                                    includeItemTypes = browseTypes,
 +                                    recursive = browseTypes != null,
 +                                )
++                                // Some servers keep titles in plain folders: fall back to the
++                                // direct children when the typed browse comes back empty.
++                                if (typed.items.isEmpty() && browseTypes != null) {
++                                    JellyfinClient.getItems(
++                                        session = session,
++                                        parentId = library.id,
++                                        startIndex = 0,
++                                        limit = JellyfinClient.HOME_ROW_LIMIT,
++                                        sortBy = "DateCreated",
++                                        sortAscending = false,
++                                    )
++                                } else {
++                                    typed
++                                }
 +                            } catch (error: CancellationException) {
 +                                throw error
-+                            } catch (_: Throwable) {
++                            } catch (error: Throwable) {
++                                println("[jellyfin] home row ${library.name} failed: ${error.message}")
 +                                null
 +                            }
 +                            _uiState.update { current ->
@@ -1010,7 +1054,7 @@ index 2c0d407f1..751dff590 100644
      private fun loadSeriesDetail(seriesId: String) {
          val session = _uiState.value.session ?: return
          detailJob = scope.launch {
-@@ -404,6 +516,12 @@ object JellyfinRepository {
+@@ -404,6 +531,12 @@ object JellyfinRepository {
      fun backdropUrlFor(item: JellyfinItem): String? =
          _uiState.value.session?.let { session -> JellyfinClient.backdropImageUrl(session, item) }
  
@@ -1023,7 +1067,7 @@ index 2c0d407f1..751dff590 100644
      /** Lists the playable files inside a nested folder (movies/adult "saga" folders, like episodes for shows). */
      private fun loadFolderChildren(folderId: String) {
          val session = _uiState.value.session ?: return
-@@ -468,6 +586,8 @@ object JellyfinRepository {
+@@ -468,6 +601,8 @@ object JellyfinRepository {
              }
              loadItems(reset = true)
          }
@@ -1033,7 +1077,7 @@ index 2c0d407f1..751dff590 100644
  
      /**
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
-index 76e8719b0..731ff9542 100644
+index 76e8719b..5beeec94 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
 @@ -16,30 +16,22 @@ import androidx.compose.foundation.layout.height
@@ -1104,7 +1148,7 @@ index 76e8719b0..731ff9542 100644
  ) {
      LaunchedEffect(Unit) { JellyfinRepository.initialize() }
      val state by JellyfinRepository.uiState.collectAsStateWithLifecycle()
-@@ -106,195 +110,317 @@ fun JellyfinScreen(
+@@ -106,195 +110,375 @@ fun JellyfinScreen(
                  }
              },
          )
@@ -1335,25 +1379,24 @@ index 76e8719b0..731ff9542 100644
 +            )
 +        }
 +        if (state.resumeItems.isNotEmpty()) {
-+            HomeCatalogRowSection(
-+                section = JellyfinLibraryRow(
-+                    libraryId = "resume",
-+                    libraryName = "Continue Watching",
-+                    collectionType = null,
-+                    items = state.resumeItems,
-+                ).toHomeCatalogSection(session),
-+                onPosterClick = { preview -> onOpenDetails(preview.id.stripJellyfinPrefix()) },
++            JellyfinRowSection(
++                title = "Continue Watching",
++                items = state.resumeItems,
++                onOpenDetails = onOpenDetails,
++                onViewAll = null,
 +            )
 +        }
 +        state.homeRows.forEach { row ->
-+            HomeCatalogRowSection(
-+                section = row.toHomeCatalogSection(session),
-+                onPosterClick = { preview -> onOpenDetails(preview.id.stripJellyfinPrefix()) },
-+                onViewAllClick = if (row.items.isNotEmpty()) {
++            JellyfinRowSection(
++                title = row.libraryName,
++                items = row.items,
++                onOpenDetails = onOpenDetails,
++                onViewAll = if (row.items.isNotEmpty()) {
 +                    { JellyfinRepository.showGridBrowse(row.libraryId) }
 +                } else {
 +                    null
 +                },
++                loading = row.isLoading,
 +            )
 +        }
 +        if (state.homeRows.all { it.items.isEmpty() && !it.isLoading } && state.resumeItems.isEmpty()) {
@@ -1366,6 +1409,72 @@ index 76e8719b0..731ff9542 100644
 +            }
 +        }
 +        Spacer(modifier = Modifier.height(24.dp))
++    }
++}
+ 
+-            // Middle: search + sort + poster grid
+-            Column(
++/** Self-contained catalog row: title + horizontal poster strip; no addon resolution involved. */
++@Composable
++private fun JellyfinRowSection(
++    title: String,
++    items: List<JellyfinItem>,
++    onOpenDetails: (String) -> Unit,
++    onViewAll: (() -> Unit)?,
++    loading: Boolean = false,
++) {
++    val tokens = MaterialTheme.nuvio
++    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
++        Row(
++            modifier = Modifier
++                .fillMaxWidth()
++                .padding(horizontal = 24.dp, vertical = 4.dp),
++            verticalAlignment = Alignment.CenterVertically,
++        ) {
++            Text(
++                text = title,
++                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
++                color = tokens.colors.textPrimary,
+                 modifier = Modifier.weight(1f),
+-                verticalArrangement = Arrangement.spacedBy(10.dp),
++            )
++            if (onViewAll != null) {
++                Text(
++                    text = "Browse all",
++                    style = MaterialTheme.typography.labelMedium,
++                    color = tokens.colors.accent,
++                    modifier = Modifier
++                        .clip(RoundedCornerShape(999.dp))
++                        .clickable(onClick = onViewAll)
++                        .padding(horizontal = 10.dp, vertical = 4.dp),
++                )
++            }
++        }
++        if (items.isEmpty() && loading) {
++            Row(modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) {
++                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
++            }
++        } else if (items.isNotEmpty()) {
++            androidx.compose.foundation.lazy.LazyRow(
++                horizontalArrangement = Arrangement.spacedBy(10.dp),
++                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 24.dp),
+             ) {
+-                NuvioInputField(
+-                    value = state.searchQuery,
+-                    onValueChange = JellyfinRepository::setSearchQuery,
+-                    placeholder = "Search your Jellyfin server…",
++                androidx.compose.foundation.lazy.items(items, key = { it.id }) { item ->
++                    Box(modifier = Modifier.width(124.dp)) {
++                        JellyfinPosterCell(
++                            item = item,
++                            posterUrl = JellyfinRepository.posterUrlFor(item),
++                            isSelected = false,
++                            onClick = { onOpenDetails(item.id) },
++                        )
++                    }
++                }
++            }
++        }
 +    }
 +}
 +
@@ -1405,20 +1514,12 @@ index 76e8719b0..731ff9542 100644
 +                modifier = Modifier.fillMaxSize(),
 +                contentAlignment = Alignment.Center,
 +            ) { CircularProgressIndicator() }
- 
--            // Middle: search + sort + poster grid
--            Column(
--                modifier = Modifier.weight(1f),
--                verticalArrangement = Arrangement.spacedBy(10.dp),
++
 +            state.itemsError != null && state.items.isEmpty() -> Column(
 +                modifier = Modifier.fillMaxSize(),
 +                horizontalAlignment = Alignment.CenterHorizontally,
 +                verticalArrangement = Arrangement.Center,
-             ) {
--                NuvioInputField(
--                    value = state.searchQuery,
--                    onValueChange = JellyfinRepository::setSearchQuery,
--                    placeholder = "Search your Jellyfin server…",
++            ) {
 +                Text(
 +                    text = state.itemsError.orEmpty(),
 +                    style = MaterialTheme.typography.bodyMedium,
@@ -1582,7 +1683,7 @@ index 76e8719b0..731ff9542 100644
          }
      }
  }
-@@ -309,16 +435,17 @@ private fun JellyfinSignInContent(
+@@ -309,16 +493,17 @@ private fun JellyfinSignInContent(
      var username by remember { mutableStateOf("") }
      var password by remember { mutableStateOf("") }
  
@@ -1605,7 +1706,7 @@ index 76e8719b0..731ff9542 100644
                  .clip(RoundedCornerShape(16.dp))
                  .background(tokens.colors.surfaceCard)
                  .padding(24.dp),
-@@ -344,7 +471,7 @@ private fun JellyfinSignInContent(
+@@ -344,7 +529,7 @@ private fun JellyfinSignInContent(
                      onValueChange = { username = it },
                      placeholder = "Username",
                  )
@@ -1614,7 +1715,7 @@ index 76e8719b0..731ff9542 100644
                      value = password,
                      onValueChange = { password = it },
                      modifier = Modifier.fillMaxWidth(),
-@@ -357,9 +484,9 @@ private fun JellyfinSignInContent(
+@@ -357,9 +542,9 @@ private fun JellyfinSignInContent(
                              style = MaterialTheme.typography.bodyLarge,
                          )
                      },
@@ -1626,7 +1727,7 @@ index 76e8719b0..731ff9542 100644
                          focusedBorderColor = tokens.colors.borderFocus,
                          unfocusedBorderColor = tokens.colors.borderDefault,
                          focusedContainerColor = tokens.colors.surfaceElevated,
-@@ -371,7 +498,7 @@ private fun JellyfinSignInContent(
+@@ -371,7 +556,7 @@ private fun JellyfinSignInContent(
                      enabled = !state.isLoadingSession && serverUrl.isNotBlank() && username.isNotBlank(),
                      onClick = { JellyfinRepository.signIn(serverUrl, username, password) },
                      modifier = Modifier.fillMaxWidth(),
@@ -1635,7 +1736,7 @@ index 76e8719b0..731ff9542 100644
                  ) {
                      if (state.isLoadingSession) {
                          CircularProgressIndicator(
-@@ -429,11 +556,10 @@ private fun JellyfinLibraryRow(
+@@ -429,11 +614,10 @@ private fun JellyfinLibraryRow(
                  onClick = onToggleVisibility,
                  modifier = Modifier.size(30.dp),
              ) {
@@ -1651,7 +1752,7 @@ index 76e8719b0..731ff9542 100644
                  )
              }
          }
-@@ -485,7 +611,7 @@ private fun JellyfinPosterCell(
+@@ -485,7 +669,7 @@ private fun JellyfinPosterCell(
                  .background(tokens.colors.surfaceElevated),
          ) {
              if (posterUrl != null) {
@@ -1660,7 +1761,7 @@ index 76e8719b0..731ff9542 100644
                      model = posterUrl,
                      contentDescription = item.name,
                      contentScale = ContentScale.Crop,
-@@ -526,7 +652,6 @@ private fun JellyfinPosterCell(
+@@ -526,7 +710,6 @@ private fun JellyfinPosterCell(
              color = tokens.colors.textPrimary,
              maxLines = 2,
              overflow = TextOverflow.Ellipsis,
@@ -1668,7 +1769,7 @@ index 76e8719b0..731ff9542 100644
          )
          if (item.productionYear != null) {
              Text(
-@@ -537,272 +662,3 @@ private fun JellyfinPosterCell(
+@@ -537,272 +720,3 @@ private fun JellyfinPosterCell(
          }
      }
  }
@@ -1941,8 +2042,47 @@ index 76e8719b0..731ff9542 100644
 -        "${minutes}m"
 -    }
 -}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
+index 4d3b23b7..c3c9434d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
+@@ -73,6 +73,18 @@ object TmdbMetadataService {
+             }
+         }
+ 
++    /** Nuvio fork: person search by name, used when a source provides no TMDB person id. */
++    suspend fun searchPersonId(name: String): Int? = runCatching {
++        val settings = TmdbSettingsRepository.snapshot()
++        if (!settings.enabled) return@runCatching null
++        val language = normalizeTmdbLanguage(settings.language)
++        val response = fetch<TmdbPersonSearchResponse>(
++            endpoint = "search/person",
++            query = mapOf("query" to name, "language" to language, "include_adult" to "false"),
++        )
++        response.results.firstOrNull()?.id
++    }.getOrNull()
++
+     suspend fun fetchPersonDetail(
+         personId: Int,
+         preferCrewCredits: Boolean? = null,
+@@ -2236,3 +2248,15 @@ internal data class TmdbDiscoverResult(
+     @SerialName("vote_average") val voteAverage: Double? = null,
+     @SerialName("vote_count") val voteCount: Int? = null,
+ )
++
++
++@Serializable
++internal data class TmdbPersonSearchResponse(
++    val results: List<TmdbPersonSearchResult> = emptyList(),
++)
++
++@Serializable
++internal data class TmdbPersonSearchResult(
++    val id: Int = 0,
++    val name: String = "",
++)
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt
-index 629c2f969..210f006fd 100644
+index 629c2f96..210f006f 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt
 @@ -48,4 +48,9 @@ internal actual object JellyfinPlatform {
@@ -1955,93 +2095,3 @@ index 629c2f969..210f006fd 100644
 +        java.time.format.DateTimeFormatter.ofPattern("h:mm a").format(endTime).lowercase()
 +    }.getOrNull()
  }
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 73374973f..3405f7c2e 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -1794,7 +1794,16 @@ internal fun MainAppContent(
-                 }
-                 entry<JellyfinDetailRoute> { route ->
-                     val onBack = rememberGuardedPopBackStack(navController, route)
--                    JellyfinDetailScreen(route = route, onBack = onBack, onPlay = ::openJellyfinItem)
-+                    JellyfinDetailScreen(
-+                        route = route,
-+                        onBack = onBack,
-+                        onPlay = ::openJellyfinItem,
-+                        onOpenCast = { personId, personName ->
-+                            navController.navigate(
-+                                PersonDetailRoute(personId = personId, personName = personName),
-+                            )
-+                        },
-+                    )
-                 }
-                 entry<DownloadsRoute> { route ->
-                     DownloadsDestination(
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
-index 2fc702914..aa0eb10af 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
-@@ -45,6 +45,9 @@ import androidx.compose.ui.text.font.FontWeight
- import androidx.compose.ui.text.style.TextOverflow
- import androidx.compose.ui.unit.dp
- import androidx.lifecycle.compose.collectAsStateWithLifecycle
-+import androidx.compose.runtime.rememberCoroutineScope
-+import com.nuvio.app.features.tmdb.TmdbMetadataService
-+import kotlinx.coroutines.launch
- import coil3.compose.AsyncImage
- import com.nuvio.app.core.ui.nuvio
- import com.nuvio.app.features.details.MetaPerson
-@@ -67,15 +70,20 @@ fun JellyfinDetailScreen(
-     route: JellyfinDetailRoute,
-     onBack: () -> Unit,
-     onPlay: (JellyfinItem) -> Unit,
-+    onOpenCast: (Int, String) -> Unit = { _, _ -> },
- ) {
-     val state by JellyfinRepository.uiState.collectAsStateWithLifecycle()
-     val tokens = MaterialTheme.nuvio
-+    val castScope = rememberCoroutineScope()
- 
-     LaunchedEffect(route.itemId) {
-         JellyfinRepository.initialize()
-         JellyfinRepository.selectItemById(route.itemId)
-     }
- 
-+    androidx.compose.runtime.CompositionLocalProvider(
-+        com.nuvio.app.core.ui.LocalUseNativeNavigation provides false,
-+    ) {
-     Box(
-         modifier = Modifier
-             .fillMaxSize()
-@@ -192,17 +200,16 @@ private fun JellyfinDetailContent(
-             meta = meta,
-             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-         )
--        if (!item.overview.isNullOrBlank()) {
--            ExpandableDescription(
--                text = item.overview.orEmpty(),
--                collapsedMaxLines = 4,
--                modifier = Modifier.padding(horizontal = 24.dp),
--                color = tokens.colors.textPrimary,
--            )
--        }
-         DetailCastSection(
-             cast = meta.cast,
-             modifier = Modifier.padding(top = 12.dp),
-+            onCastClick = { person, _ ->
-+                castScope.launch {
-+                    TmdbMetadataService.searchPersonId(person.name)?.let { id ->
-+                        onOpenCast(id, person.name)
-+                    }
-+                }
-+            },
-         )
-         if (item.isSeries && state.seasons.isNotEmpty()) {
-             JellyfinSeasonsChips(
-@@ -219,6 +226,7 @@ private fun JellyfinDetailContent(
-         }
-         Spacer(modifier = Modifier.height(40.dp))
-     }
-+    }
- }
- 
- /** The TV photo's badge pills: "1080p H264 · English Dolby Atmos 5.1 · CC None (+38)" + Ends at. */
