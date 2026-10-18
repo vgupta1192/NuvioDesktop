@@ -561,10 +561,10 @@ index 000000000..caf187e9c
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesDesktop.kt
 new file mode 100644
-index 000000000..65b9c6718
+index 000000000..3d50f4ebf
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesDesktop.kt
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,53 @@
 +package com.nuvio.app.features.player
 +
 +import com.nuvio.app.core.storage.DesktopStorage
@@ -588,6 +588,11 @@ index 000000000..65b9c6718
 +    fun ensureStore() {
 +        if (installed) return
 +        installed = true
++        // Nuvio fork: the chip/store diagnostics the mobile app shows in its shareable sync log
++        // go to the launcher console here (same [nuvio sync] lines).
++        SyncedSubtitles.logSink = { message ->
++            com.nuvio.app.features.player.audiosync.SyncLog.i(message)
++        }
 +        SyncedSubtitles.installStore(
 +            load = { name -> runCatching { File(dir, name).takeIf { it.isFile }?.readText() }.getOrNull() },
 +            save = { name, value ->

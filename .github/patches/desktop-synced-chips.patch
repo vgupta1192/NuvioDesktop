@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncSyncedLabel.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncSyncedLabel.kt
-index 943e7a59f..260e8fdd2 100644
+index 943e7a59f..335937119 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncSyncedLabel.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncSyncedLabel.kt
 @@ -27,15 +27,20 @@ import nuvio.composeapp.generated.resources.autosync_label_synced
@@ -24,7 +24,7 @@ index 943e7a59f..260e8fdd2 100644
      }
  
      fun clear() {
-@@ -43,19 +48,55 @@ internal object AutoSyncSyncedSubtitle {
+@@ -43,19 +48,61 @@ internal object AutoSyncSyncedSubtitle {
      }
  }
  
@@ -37,6 +37,12 @@ index 943e7a59f..260e8fdd2 100644
 + *  add-on subtitle that already has a saved synced timing for this title + stream. */
  @Composable
  internal fun AutoSyncedChip(subtitleUrl: String, selected: Boolean) {
++    // Nuvio fork: never let a chip decision failure take the player down with it.
++    runCatching { AutoSyncedChipBody(subtitleUrl, selected) }
++}
++
++@Composable
++private fun AutoSyncedChipBody(subtitleUrl: String, selected: Boolean) {
 +    // Nuvio fork diagnostics: the stable-looking file name of every row shown in the list, so a
 +    // shared log capture can be compared against the saved timings' URLs on the server.
 +    val rowBase = subtitleUrl.substringBefore('?').substringAfterLast('/')
@@ -84,7 +90,7 @@ index 943e7a59f..260e8fdd2 100644
              .padding(horizontal = 8.dp, vertical = 3.dp),
          horizontalArrangement = Arrangement.spacedBy(4.dp),
          verticalAlignment = Alignment.CenterVertically,
-@@ -63,12 +104,12 @@ internal fun AutoSyncedChip(subtitleUrl: String, selected: Boolean) {
+@@ -63,12 +110,12 @@ internal fun AutoSyncedChip(subtitleUrl: String, selected: Boolean) {
          Icon(
              imageVector = Icons.Rounded.Sync,
              contentDescription = null,

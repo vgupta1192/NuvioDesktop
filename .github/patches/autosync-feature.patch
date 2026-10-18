@@ -442,10 +442,10 @@ index 7ce25ea2c..531aafaba 100644
      LaunchedEffect(controller, sourceAvailable, playWhenReady) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 new file mode 100644
-index 000000000..61e6168e5
+index 000000000..55e8dbef3
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-@@ -0,0 +1,352 @@
+@@ -0,0 +1,384 @@
 +package com.nuvio.app.features.player
 +
 +import co.touchlab.kermit.Logger
@@ -473,6 +473,8 @@ index 000000000..61e6168e5
 +private fun isHttpUrl(url: String): Boolean =
 +    url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)
 +
++private fun shortUrl(url: String): String = url.substringBefore('?').substringAfterLast('/').ifBlank { url.take(48) }
++
 +/**
 + * Wraps the libmpv desktop controller with the AutoSync capability. The subtitle is attached
 + * immediately (unsynced) so playback is never blocked; the speech-based engine
@@ -480,7 +482,8 @@ index 000000000..61e6168e5
 + * audio at dialogue-dense spots, correlates it with the subtitle's cue timeline and, when a
 + * confident constant-shift mapping is found, swaps the track to a retimed SRT carrying the
 + * corrected timing. When the chosen subtitle never fits the audio, a better-matching file in the
-+ * same language is synced in its place.
++ * same language is synced in its place. Every decision is logged (Kermit + the shareable sync
++ * log) so a "nothing happened" report from the launcher console is always explainable.
 + */
 +internal class AutoSyncNativePlayerController(
 +    private val base: PlayerEngineController,
@@ -522,7 +525,7 @@ index 000000000..61e6168e5
 +    init {
 +        SyncedSubtitlesDesktop.ensureStore() // Nuvio fork: synced subtitles
 +        AutoSyncPreferences.ensureLoaded()
-+        AutoSyncPreferencesPlatform.install() // Nuvio fork: mobile-style AutoSync rows persist
++        AutoSyncPreferencesPlatform.install() // Nuvio fork: mobile-style AutoSync rows persist (+ legacy toggle migration)
 +    }
 +
 +    override fun setAutoSyncAppliedListener(
@@ -540,11 +543,13 @@ index 000000000..61e6168e5
 +    }
 +
 +    override fun setSubtitleUriWithAutoSync(url: String) {
++        autoSyncLog.i { "AutoSync requested (startup scope) for ${shortUrl(url)}" }
 +        if (restoreSynced(url)) return // Nuvio fork: synced subtitles
 +        runSpeechSync(url, startupScope = true)
 +    }
 +
 +    override fun setSubtitleUriWithSelectedAutoSync(url: String) {
++        autoSyncLog.i { "AutoSync requested (selected scope) for ${shortUrl(url)}" }
 +        if (restoreSynced(url)) return // Nuvio fork: synced subtitles
 +        runSpeechSync(url, startupScope = false)
 +    }
@@ -554,7 +559,10 @@ index 000000000..61e6168e5
 +     * stream (on any device), so AutoSync does not run again.
 +     */
 +    private fun restoreSynced(url: String): Boolean {
-+        val file = SyncedSubtitlesDesktop.savedFileFor(url) ?: return false
++        val file = runCatching { SyncedSubtitlesDesktop.savedFileFor(url) }
++            .onFailure { autoSyncLog.w { "saved-subtitle lookup failed: ${it.message}" } }
++            .getOrNull()
++            ?: return false
 +        cancelAutoSync()
 +        SyncedSubtitles.restoredUrls += url
 +        base.setSubtitleDelayMs(0)
@@ -562,7 +570,8 @@ index 000000000..61e6168e5
 +        activeSyncedKey = url
 +        AutoSyncSyncedSubtitle.mark(url)
 +        appliedListener?.invoke(url, 0)
-+        autoSyncLog.i { "showing saved synced subtitle ($url)" }
++        autoSyncLog.i { "showing saved synced subtitle ($url) - AutoSync run skipped" }
++        SyncLog.i("restored saved synced subtitle ${shortUrl(url)} from the account")
 +        return true
 +    }
 +
@@ -620,11 +629,18 @@ index 000000000..61e6168e5
 +            !isHttpUrl(streamUrlAtCall) ||
 +            selectedUrl == streamUrlAtCall
 +        ) {
++            autoSyncLog.i {
++                "AutoSync skipped (selected=${isHttpUrl(selectedUrl)} stream=${isHttpUrl(streamUrlAtCall)} " +
++                    "sameUrl=${selectedUrl == streamUrlAtCall}) - plain attach"
++            }
 +            setSubtitleUri(selectedUrl)
 +            return
 +        }
 +        val selectedSubtitle = subtitleCandidates().firstOrNull { it.url == selectedUrl }
-+        if (selectedSubtitle == null || selectedSubtitle.language.isBlank()) {
++        if (selectedSubtitle == null) {
++            autoSyncLog.i {
++                "AutoSync skipped: the picked subtitle is not among the ${subtitleCandidates().size} stream candidates - plain attach"
++            }
 +            setSubtitleUri(selectedUrl)
 +            return
 +        }
@@ -634,6 +650,9 @@ index 000000000..61e6168e5
 +        ) {
 +            // AutoSync already ran once for this stream, or the user turned auto-sync-off at
 +            // start; attach the plain way unless the synced track is already exactly this one.
++            autoSyncLog.i {
++                "AutoSync startup run not claimed (toggle off or already ran for this stream) - plain attach"
++            }
 +            if (activeSyncedKey != selectedUrl) {
 +                setSubtitleUri(selectedUrl)
 +            }
@@ -664,7 +683,11 @@ index 000000000..61e6168e5
 +
 +            try {
 +                notifyAutoSync(bubbleRunId, "working", "Auto Sync • Listening for dialogue…", null)
-+                SyncLog.i("speech sync start for ${selectedUrl.substringAfterLast('/').ifBlank { selectedUrl }}")
++                autoSyncLog.i {
++                    "speech sync start: subtitle=${shortUrl(selectedUrl)} lang=${selectedLanguage.ifBlank { "?" }} " +
++                        "startupScope=$startupScope candidates=${subtitleCandidates().size}"
++                }
++                SyncLog.i("speech sync start for ${shortUrl(selectedUrl)}")
 +
 +                val body = try {
 +                    AutoSyncSubtitleHttp.get(selectedUrl, selectedHeaders, SUBTITLE_BODY_MAX_BYTES).body
@@ -676,13 +699,16 @@ index 000000000..61e6168e5
 +                }
 +                if (body.isNullOrBlank()) {
 +                    if (!stillRelevant()) return@launch
++                    autoSyncLog.w { "speech sync: subtitle download failed or empty" }
 +                    SyncLog.w("speech sync: subtitle download failed")
 +                    notifyFailure(bubbleRunId)
 +                    return@launch
 +                }
 +
 +                // Alternatives in the selected subtitle's language, tested when it never fits.
-+                val alternatives = if (startupScope) {
++                // A blank language still runs the sync for the picked file itself; only the
++                // alternative search needs a language to match against.
++                val alternatives = if (startupScope && selectedLanguage.isNotBlank()) {
 +                    subtitleCandidates()
 +                        .filter { it.url != selectedUrl && it.url != sourceUrlAtStart }
 +                        .distinctBy { it.url }
@@ -717,6 +743,7 @@ index 000000000..61e6168e5
 +
 +                if (!stillRelevant()) return@launch
 +                if (result == null) {
++                    autoSyncLog.w { "speech sync finished with no confident match" }
 +                    notifyFailure(bubbleRunId)
 +                    return@launch
 +                }
@@ -729,6 +756,10 @@ index 000000000..61e6168e5
 +                    source = "speech",
 +                    activityScore = result.peak,
 +                )
++                autoSyncLog.i {
++                    "speech sync matched ${shortUrl(chosenUrl)}: scale=${result.scale} " +
++                        "shift=${result.shiftMs.roundToLong()}ms peak=%.2f switched=${result.switched}".format(result.peak)
++                }
 +                // A confident correction within the user's tolerance keeps the selected
 +                // subtitle's original timing instead of retiming it.
 +                val toleranceMs = AutoSyncPreferencesRepository.syncToleranceMs.value
@@ -743,6 +774,7 @@ index 000000000..61e6168e5
 +                }
 +                if (!applied) {
 +                    if (!stillRelevant()) return@launch
++                    autoSyncLog.w { "speech sync: the retimed track could not be attached" }
 +                    notifyFailure(bubbleRunId)
 +                    return@launch
 +                }
@@ -772,7 +804,7 @@ index 000000000..61e6168e5
 +            } catch (cancel: CancellationException) {
 +                throw cancel
 +            } catch (error: Throwable) {
-+                autoSyncLog.w { "AUTO_SYNC failed: ${error.message}" }
++                autoSyncLog.w { "AUTO_SYNC failed: ${error.javaClass.simpleName}: ${error.message}" }
 +                if (!stillRelevant()) return@launch
 +                notifyFailure(bubbleRunId)
 +            }
@@ -850,10 +882,10 @@ index 000000000..79cad8c3c
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferencesPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferencesPlatform.desktop.kt
 new file mode 100644
-index 000000000..13c1e19b8
+index 000000000..f7b62540b
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferencesPlatform.desktop.kt
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,55 @@
 +package com.nuvio.app.features.player.autosync
 +
 +import com.nuvio.app.core.storage.DesktopStorage
@@ -864,12 +896,19 @@ index 000000000..13c1e19b8
 + * Nuvio fork: persists the mobile-style AutoSync settings rows (auto-sync at start, thorough
 + * search, tolerance) on the desktop, the way AutoSyncPreferencesAndroid does on phones. Without
 + * this the rows render with defaults and forget every change.
++ *
++ * Also migrates the removed old engine's toggle: users who had turned AutoSync on in the
++ * duplicate settings section keep it on (the old store's enabled flag seeds auto-sync-on-start
++ * the first time the new keys are read).
 + */
 +internal object AutoSyncPreferencesPlatform {
 +    private const val STORE_NAME = "nuvio_autosync_settings"
 +    private const val AUTO_SYNC_ON_START_KEY = "preferred_subtitle_auto_sync_on_start"
 +    private const val AGGRESSIVE_MODE_KEY = "auto_sync_aggressive_mode"
 +    private const val SYNC_TOLERANCE_MS_KEY = "auto_sync_tolerance_ms"
++
++    private const val LEGACY_STORE_NAME = "nuvio_autosync"
++    private const val LEGACY_ENABLED_KEY = "automatic_subtitle_sync_enabled"
 +
 +    @Volatile
 +    private var installed = false
@@ -887,6 +926,17 @@ index 000000000..13c1e19b8
 +                loadSyncToleranceMs = { store.getInt(ProfileScopedKey.of(SYNC_TOLERANCE_MS_KEY)) },
 +                saveSyncToleranceMs = { toleranceMs -> store.putInt(ProfileScopedKey.of(SYNC_TOLERANCE_MS_KEY), toleranceMs) },
 +            )
++            // One-time migration: the old cue-reference engine's enable toggle becomes the
++            // mobile-style auto-sync-at-start toggle when the new keys were never written.
++            AutoSyncPreferencesRepository.ensureLoaded()
++            val newUserValue = store.getBoolean(ProfileScopedKey.of(AUTO_SYNC_ON_START_KEY))
++            if (newUserValue == null) {
++                val legacyEnabled = DesktopStorage.store(LEGACY_STORE_NAME)
++                    .getBoolean(LEGACY_ENABLED_KEY) ?: false
++                if (legacyEnabled && !AutoSyncPreferencesRepository.preferredSubtitleAutoSyncOnStart.value) {
++                    AutoSyncPreferencesRepository.setPreferredSubtitleAutoSyncOnStart(true)
++                }
++            }
 +            installed = true
 +        }
 +    }

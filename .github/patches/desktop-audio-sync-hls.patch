@@ -429,10 +429,10 @@ index 000000000..6b15ded72
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 new file mode 100644
-index 000000000..5fed3e64d
+index 000000000..a6eee5e7d
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
-@@ -0,0 +1,256 @@
+@@ -0,0 +1,270 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.SubtitleSyncCue
@@ -465,6 +465,8 @@ index 000000000..5fed3e64d
 +    internal const val SPOT_MS = 45_000L
 +    private const val MAX_ALTERNATIVES = 6
 +    private const val MAX_SUBTITLE_BODY_BYTES = 8 * 1024 * 1024
++
++    private val log = co.touchlab.kermit.Logger.withTag("NuvioAutoSync")
 +
 +    /** An alternative add-on subtitle the engine may switch to. */
 +    data class Alternative(
@@ -516,10 +518,14 @@ index 000000000..5fed3e64d
 +                fetchText(url, hdrs)
 +            }
 +        }
++        if (playlist == null) log.i { "speech sync: not an HLS playlist (sampling direct from the stream URL)" }
 +        // Subtitle end ~ film end (credits have no dialogue); only the spot planner uses this.
 +        val fallbackDurationMs = (selectedTrack.endsMs.maxOrNull() ?: 0L).let { it + it / 10 } + SPOT_MS
 +        val durationMs = playlist?.durationMs?.takeIf { it > 0 } ?: fallbackDurationMs
 +        val windows = DialogueSpotPlanner.plan(listOf(selectedTrack), durationMs, SPOT_COUNT, SPOT_MS)
++        log.i {
++            "speech sync: ${selectedTrack.size} dialogue cues, ${durationMs / 1_000}s media, sampling ${windows.size} spots"
++        }
 +        SyncLog.i("speech sync: ${selectedTrack.size} dialogue cues, $durationMs ms media, sampling ${windows.size} spots")
 +        onProgress("Listening for dialogue…")
 +
@@ -533,12 +539,18 @@ index 000000000..5fed3e64d
 +                    sampleDirectWindow(request.streamUrl, request.streamHeaders, window, tmpDir)
 +                }
 +            }
-+            if (spot != null) spots += spot
++            if (spot == null) {
++                log.w { "speech sync: spot at ${window / 1_000}s failed to sample" }
++            } else {
++                spots += spot
++                log.i { "speech sync: spot at ${window / 1_000}s sampled, ${spot.speechMs / 1_000}s of speech" }
++            }
 +            if (spots.size >= 2) {
 +                lockedFor(request, selectedCues, selectedTrack, spots, onProgress)?.let { return it }
 +            }
 +        }
 +        if (spots.isEmpty()) {
++            log.w { "speech sync: no audio could be sampled (HLS playlist=${playlist != null})" }
 +            SyncLog.w("speech sync: no audio could be sampled")
 +            return null
 +        }
@@ -549,6 +561,7 @@ index 000000000..5fed3e64d
 +        if (alternatives.isNotEmpty()) {
 +            onProgress("Testing ${alternatives.size} other subtitles…")
 +            SyncLog.i("speech sync: selected subtitle never locked; testing ${alternatives.size} alternatives")
++            log.i { "speech sync: selected subtitle never locked on ${spots.size} spots; testing ${alternatives.size} alternatives" }
 +            val segments = buildSegments(spots)
 +            val prepared = SubtitleAudioAligner.prepare(
 +                segments = segments,
@@ -589,6 +602,7 @@ index 000000000..5fed3e64d
 +            }
 +        }
 +        SyncLog.w("speech sync: no subtitle matched the audio (spots=${spots.size})")
++            log.w { "speech sync: no subtitle matched the audio (spots=${spots.size})" }
 +        return null
 +    }
 +
