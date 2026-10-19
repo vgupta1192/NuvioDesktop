@@ -1,9 +1,9 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
 new file mode 100644
-index 000000000..efd5a73ef
+index 000000000..3d08d8036
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
-@@ -0,0 +1,136 @@
+@@ -0,0 +1,159 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.desktop.NativePlayerBridge
@@ -40,14 +40,21 @@ index 000000000..efd5a73ef
 +    ): Boolean {
 +        val java = javaLauncher()
 +        val classpath = System.getProperty("java.class.path")?.takeIf { it.isNotBlank() }
++            ?: codeSourceClasspath()
 +        if (java == null || classpath == null) {
-+            // No usable child runtime (unexpected for the packaged app, possible in dev runs):
-+            // dump in-process rather than losing AutoSync/generated subtitles entirely.
++            logModeOnce(
++                "audio dump: IN-PROCESS fallback (${if (java == null) "no bundled java" else "no classpath"}) - " +
++                    "no timeout cap, mpv decides when to give up",
++            )
++            // No usable child runtime (packaged apps can launch with java.class.path unset;
++            // the code-source fallback above usually recovers it): dump in-process rather
++            // than losing AutoSync/generated subtitles entirely.
 +            return runCatching {
 +                NativePlayerBridge.ensureLoaded()
 +                NativePlayerBridge.dumpAudioWav(url, headerLines, outPath, startSec, endSec)
 +            }.getOrDefault(false)
 +        }
++        logModeOnce("audio dump: child jvm (timeout=${timeoutSec}s)")
 +        val command = mutableListOf(java, "-Xmx96m", "-Djava.awt.headless=true")
 +        System.getProperty("compose.application.resources.dir")?.let { command += "-Dcompose.application.resources.dir=$it" }
 +        command += listOf(
@@ -116,6 +123,22 @@ index 000000000..efd5a73ef
 +        }
 +        val launcher = File(home, "bin/$executable")
 +        return launcher.takeIf(File::isFile)?.absolutePath
++    }
++
++    /**
++     * Packaged launchers may leave java.class.path unset; the jar (or classes dir) this class
++     * was loaded from is a working classpath for the child.
++     */
++    private fun codeSourceClasspath(): String? = runCatching {
++        AudioDumpProcess::class.java.protectionDomain.codeSource.location.toURI().path
++            ?.takeIf { it.isNotBlank() && File(it).exists() }
++    }.getOrNull()
++
++    private val modeAnnounced = java.util.concurrent.atomic.AtomicBoolean(false)
++
++    private fun logModeOnce(line: String) {
++        if (!modeAnnounced.compareAndSet(false, true)) return
++        SyncLog.w(line)
 +    }
 +}
 +
@@ -791,10 +814,10 @@ index 000000000..6b15ded72
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 new file mode 100644
-index 000000000..5934bcf48
+index 000000000..b26cdb83a
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
-@@ -0,0 +1,368 @@
+@@ -0,0 +1,394 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.SubtitleSyncCue
@@ -831,6 +854,7 @@ index 000000000..5934bcf48
 +    /** What the last run actually did, for the mobile-style statistics readout. */
 +    data class RunStats(
 +        val spotsSampled: Int,
++        val spotsFailed: Int,
 +        val spotsPlanned: Int,
 +        val listenedSec: Long,
 +        val sampledBytes: Long,
@@ -919,13 +943,13 @@ index 000000000..5934bcf48
 +            "speech sync: ${selectedTrack.size} dialogue cues, ${durationMs / 1_000}s media, " +
 +                "sampling ${windows.size} spots ${if (playlist != null) "(HLS)" else "(direct)"}",
 +        )
-+        onProgress("Listening for dialogue…")
-+
 +        val spots = ArrayList<HlsAudioSpotSampler.Spot>()
++        var spotsFailed = 0
 +
 +        fun recordStats(tested: Int = 0, ruledOut: Int = 0) {
 +            lastStats = RunStats(
 +                spotsSampled = spots.size,
++                spotsFailed = spotsFailed,
 +                spotsPlanned = windows.size,
 +                listenedSec = spots.size * (SPOT_MS / 1000),
 +                sampledBytes = spots.sumOf { it.bytes },
@@ -935,17 +959,33 @@ index 000000000..5934bcf48
 +            )
 +        }
 +
-+        fun panelLines(tested: Int? = null): String {
++        fun panelLines(tested: Int? = null, empty: Boolean = false): String {
 +            val mb = spots.sumOf { it.bytes } / (1024L * 1024L)
 +            val lines = mutableListOf(
-+                "Listened ${spots.size * (SPOT_MS / 1000)}s of audio ($mb MB)",
-+                "Across the film: sampled ${spots.size} of ${windows.size} dialogue spots in ${(System.currentTimeMillis() - runStartMs) / 1000}s",
++                if (empty) {
++                    "Listened 0s of audio yet"
++                } else {
++                    "Listened ${spots.size * (SPOT_MS / 1000)}s of audio ($mb MB)"
++                },
 +            )
++            lines += if (empty) {
++                "Across the film: sampling ${windows.size} dialogue spots"
++            } else {
++                "Across the film: ${spots.size} ok · $spotsFailed failed of ${windows.size} dialogue spots in ${(System.currentTimeMillis() - runStartMs) / 1000}s"
++            }
 +            if (tested != null) lines += "Other subtitles: testing $tested"
 +            return lines.joinToString("\n")
 +        }
-+        for (window in windows) {
++        onProgress("Listening for dialogue…\n" + panelLines(empty = true))
++
++        // Direct (non-HLS) links can refuse the mid-file seek the planner picks (the seek needs
++        // the mp4 index; some hosts throttle or block the range requests that fetch it). The
++        // file START needs no seek at all, so a failed direct spot falls back to 0 s / 75 s.
++        val queue = ArrayDeque(windows)
++        var directFallbackStage = 0
++        while (queue.isNotEmpty()) {
 +            currentCoroutineContext().ensureActive()
++            val window = queue.removeFirst()
 +            val spotStartMs = System.currentTimeMillis()
 +            val spot = withContext(Dispatchers.IO) {
 +                if (playlist != null) {
@@ -958,6 +998,15 @@ index 000000000..5934bcf48
 +            if (spot == null) {
 +                log.w { "speech sync: spot at ${window / 1_000}s failed to sample" }
 +                SyncLog.w("speech sync: spot ${spots.size + 1}/${windows.size} at ${window / 1_000}s failed after ${spotSecs}s")
++                spotsFailed++
++                recordStats()
++                onProgress("Listening for dialogue…\n" + panelLines())
++                if (playlist == null && directFallbackStage < 2 && window != 0L && window != 75_000L) {
++                    val fallback = if (directFallbackStage == 0) 0L else 75_000L
++                    directFallbackStage++
++                    SyncLog.i("speech sync: seek to ${window / 1_000}s failed - retrying from the file start (${fallback / 1_000}s)")
++                    queue.addFirst(fallback)
++                }
 +            } else {
 +                spots += spot
 +                log.i { "speech sync: spot at ${window / 1_000}s sampled, ${spot.speechMs / 1_000}s of speech" }
@@ -965,10 +1014,10 @@ index 000000000..5934bcf48
 +                    "speech sync: spot ${spots.size}/${windows.size} at ${window / 1_000}s ok, " +
 +                        "${spot.speechMs / 1_000}s of speech (${spotSecs}s)",
 +                )
-+                onProgress("Listening for dialogue… (${spots.size}/${windows.size})\n" + panelLines())
++                recordStats()
++                onProgress("Listening for dialogue… (${spots.size} ok · $spotsFailed failed)\n" + panelLines())
 +            }
 +            if (spots.size >= 2) {
-+                recordStats()
 +                lockedFor(request, selectedCues, selectedTrack, spots, onProgress)?.let { return it }
 +            }
 +        }

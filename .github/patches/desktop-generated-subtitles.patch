@@ -2092,10 +2092,10 @@ index b7d15ba1f..28ef33d8d 100644
  #undef NP
  } // extern "C"
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index 4730c231f..51830de72 100644
+index 4730c231f..14d8ddd1a 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-@@ -3915,3 +3915,109 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
+@@ -3915,3 +3915,112 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
                                          stripSdh:stripSdh == JNI_TRUE];
      });
  }
@@ -2166,6 +2166,9 @@ index 4730c231f..51830de72 100644
 +                case MPV_EVENT_LOG_MESSAGE: {
 +                    mpv_event_log_message *message = (mpv_event_log_message *)event->data;
 +                    if (message->text && message->text[0]) {
++                        // Live: the parent's output-tail capture sees why a dump stalls even
++                        // when this process is killed before the summary print runs.
++                        fprintf(stderr, "nuvio-dump: %s", message->text);
 +                        strlcpy(logTail[logCount % 16], message->text, sizeof(logTail[0]));
 +                        logCount++;
 +                    }
