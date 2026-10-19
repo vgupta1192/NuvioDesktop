@@ -77,10 +77,10 @@ index b3665232a..90d5c0737 100644
          PlayerEpisodesPanel(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
 new file mode 100644
-index 000000000..088ade6ca
+index 000000000..864190ea4
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
-@@ -0,0 +1,351 @@
+@@ -0,0 +1,355 @@
 +package com.nuvio.app.features.player
 +
 +import androidx.compose.runtime.compositionLocalOf
@@ -268,6 +268,7 @@ index 000000000..088ade6ca
 +                    json.decodeFromString<List<String>>(result.data).map { key -> variant to key }
 +                }
 +            }.getOrNull().orEmpty().distinct()
++            log("synced subs: video-wide keys=${keysByVariant.map { it.second }}")
 +            for ((variant, key) in keysByVariant) {
 +                if (_playback.value != next) break
 +                val remote = runCatching {
@@ -280,7 +281,10 @@ index 000000000..088ade6ca
 +                    )
 +                    decodeList(result.data)
 +                }.getOrNull().orEmpty()
-+                if (remote.isNotEmpty() && _playback.value == next) merge(next, remote, store = false)
++                if (remote.isNotEmpty()) {
++                    log("synced subs: video-wide rows=${remote.size} for key=$key")
++                    if (_playback.value == next) merge(next, remote, store = false)
++                }
 +            }
 +        }
 +    }

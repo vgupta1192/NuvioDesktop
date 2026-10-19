@@ -740,10 +740,10 @@ index 7ce25ea2c..531aafaba 100644
      LaunchedEffect(controller, sourceAvailable, playWhenReady) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 new file mode 100644
-index 000000000..d8728430a
+index 000000000..0bd441676
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-@@ -0,0 +1,440 @@
+@@ -0,0 +1,451 @@
 +package com.nuvio.app.features.player
 +
 +import co.touchlab.kermit.Logger
@@ -764,10 +764,14 @@ index 000000000..d8728430a
 +import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.Job
 +import kotlinx.coroutines.launch
++import kotlinx.coroutines.withTimeout
 +
 +private val autoSyncLog = Logger.withTag("NuvioAutoSync")
 +
 +private const val SUBTITLE_BODY_MAX_BYTES = 8 * 1024 * 1024
++
++/** A stuck run must still end: sampling six spots normally finishes well inside this. */
++private const val SYNC_RUN_TIMEOUT_MS = 120_000L
 +
 +private fun isHttpUrl(url: String): Boolean =
 +    url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)
@@ -1062,21 +1066,28 @@ index 000000000..d8728430a
 +                    emptyList()
 +                }
 +
-+                val result = SpeechAutoSyncEngine.run(
-+                    request = SpeechAutoSyncEngine.Request(
-+                        streamUrl = sourceUrlAtStart,
-+                        streamHeaders = sourceHeadersAtStart,
-+                        selectedUrl = selectedUrl,
-+                        selectedHeaders = selectedHeaders,
-+                        selectedBody = body,
-+                        alternatives = alternatives,
-+                    ),
-+                    onProgress = { text ->
-+                        if (stillRelevant()) {
-+                            notifyAutoSync(bubbleRunId, "working", "Auto Sync • $text", null)
-+                        }
-+                    },
-+                )
++                val result = try {
++                    withTimeout(SYNC_RUN_TIMEOUT_MS) {
++                        SpeechAutoSyncEngine.run(
++                            request = SpeechAutoSyncEngine.Request(
++                                streamUrl = sourceUrlAtStart,
++                                streamHeaders = sourceHeadersAtStart,
++                                selectedUrl = selectedUrl,
++                                selectedHeaders = selectedHeaders,
++                                selectedBody = body,
++                                alternatives = alternatives,
++                            ),
++                            onProgress = { text ->
++                                if (stillRelevant()) {
++                                    notifyAutoSync(bubbleRunId, "working", "Auto Sync • $text", null)
++                                }
++                            },
++                        )
++                    }
++                } catch (timeout: TimeoutCancellationException) {
++                    SpeechAutoSyncEngine.lastFailure = "timed out after 2 minutes"
++                    null
++                }
 +
 +                if (!stillRelevant()) return@launch
 +                if (result == null) {
