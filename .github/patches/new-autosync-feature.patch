@@ -1,0 +1,2995 @@
+diff --git a/composeApp/src/commonMain/composeResources/values/autosync_strings.xml b/composeApp/src/commonMain/composeResources/values/autosync_strings.xml
+index 31739af9a..6cbbd5e69 100644
+--- a/composeApp/src/commonMain/composeResources/values/autosync_strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/autosync_strings.xml
+@@ -10,4 +10,12 @@
+     <string name="settings_playback_auto_sync_tolerance_description">Keep the original subtitle timing when the sync would move it by no more than this. Tap to change.</string>
+     <string name="settings_playback_auto_sync_tolerance_off">Off</string>
+     <string name="settings_playback_auto_sync_tolerance_value">%1$d ms</string>
++    <string name="settings_playback_auto_sync_debug_logs">Auto Sync Debug Log</string>
++    <string name="settings_playback_auto_sync_debug_logs_description">Record every AutoSync decision (spots, speech, confidence) in the shareable sync log.</string>
++    <string name="settings_playback_audio_sync_fallback">Audio Sync Fallback</string>
++    <string name="settings_playback_audio_sync_fallback_description">Samples the stream's audio and matches it against the subtitle when a sync is needed. This is what performs the sync.</string>
++    <string name="settings_playback_audio_sync_show_statistics">Show Auto Sync Statistics</string>
++    <string name="settings_playback_audio_sync_show_statistics_description">Show what a sync did - the applied shift and confidence, or why it failed - in its bubble.</string>
++    <string name="settings_playback_audio_sync_share_log">Share Auto Sync Log</string>
++    <string name="settings_playback_audio_sync_share_log_description">Copy the recent AutoSync report (timings and decisions, never audio or text) to the clipboard.</string>
+ </resources>
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopHooks.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopHooks.kt
+new file mode 100644
+index 000000000..5c3828805
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopHooks.kt
+@@ -0,0 +1,9 @@
++package com.nuvio.app.features.autosync
++
++/**
++ * Platform-provided AutoSync conveniences the shared settings UI can call. The desktop sets
++ * [shareLog] (clipboard + file); platforms without a log leave it null and the row hides.
++ */
++internal object AutoSyncDesktopHooks {
++    var shareLog: (() -> Unit)? = null
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPreferencesRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPreferencesRepository.kt
+index 5ece5c860..3b1e674a6 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPreferencesRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPreferencesRepository.kt
+@@ -25,6 +25,18 @@ internal object AutoSyncPreferencesRepository {
+     private val _syncToleranceMs = MutableStateFlow(0)
+     val syncToleranceMs: StateFlow<Int> = _syncToleranceMs.asStateFlow()
+ 
++    /** Verbose decision lines in the sync log (the shareable AutoSync report). */
++    private val _debugLogsEnabled = MutableStateFlow(false)
++    val debugLogsEnabled: StateFlow<Boolean> = _debugLogsEnabled.asStateFlow()
++
++    /** The audio-sampling fallback (the speech engine); off = subtitles attach unsynced. */
++    private val _audioFallbackEnabled = MutableStateFlow(true)
++    val audioFallbackEnabled: StateFlow<Boolean> = _audioFallbackEnabled.asStateFlow()
++
++    /** Show what a sync did (shift, confidence, failure reason) in its bubble. */
++    private val _showStatistics = MutableStateFlow(true)
++    val showStatistics: StateFlow<Boolean> = _showStatistics.asStateFlow()
++
+     private var loadedProfileId: Int? = null
+     private var loadPersistedValue: (() -> Boolean?)? = null
+     private var savePersistedValue: ((Boolean) -> Unit)? = null
+@@ -32,6 +44,12 @@ internal object AutoSyncPreferencesRepository {
+     private var saveAggressiveModePersistedValue: ((Boolean) -> Unit)? = null
+     private var loadSyncTolerancePersistedValue: (() -> Int?)? = null
+     private var saveSyncTolerancePersistedValue: ((Int) -> Unit)? = null
++    private var loadDebugLogsPersistedValue: (() -> Boolean?)? = null
++    private var saveDebugLogsPersistedValue: ((Boolean) -> Unit)? = null
++    private var loadAudioFallbackPersistedValue: (() -> Boolean?)? = null
++    private var saveAudioFallbackPersistedValue: ((Boolean) -> Unit)? = null
++    private var loadShowStatisticsPersistedValue: (() -> Boolean?)? = null
++    private var saveShowStatisticsPersistedValue: ((Boolean) -> Unit)? = null
+     private var lastStartupSessionKey: Int? = null
+     private var lastStartupPlaybackKey: String? = null
+ 
+@@ -42,6 +60,12 @@ internal object AutoSyncPreferencesRepository {
+         saveAggressiveMode: (Boolean) -> Unit = {},
+         loadSyncToleranceMs: () -> Int? = { null },
+         saveSyncToleranceMs: (Int) -> Unit = {},
++        loadDebugLogs: () -> Boolean? = { null },
++        saveDebugLogs: (Boolean) -> Unit = {},
++        loadAudioFallback: () -> Boolean? = { null },
++        saveAudioFallback: (Boolean) -> Unit = {},
++        loadShowStatistics: () -> Boolean? = { null },
++        saveShowStatistics: (Boolean) -> Unit = {},
+     ) {
+         loadPersistedValue = load
+         savePersistedValue = save
+@@ -49,6 +73,12 @@ internal object AutoSyncPreferencesRepository {
+         saveAggressiveModePersistedValue = saveAggressiveMode
+         loadSyncTolerancePersistedValue = loadSyncToleranceMs
+         saveSyncTolerancePersistedValue = saveSyncToleranceMs
++        loadDebugLogsPersistedValue = loadDebugLogs
++        saveDebugLogsPersistedValue = saveDebugLogs
++        loadAudioFallbackPersistedValue = loadAudioFallback
++        saveAudioFallbackPersistedValue = saveAudioFallback
++        loadShowStatisticsPersistedValue = loadShowStatistics
++        saveShowStatisticsPersistedValue = saveShowStatistics
+         loadedProfileId = null
+     }
+ 
+@@ -60,6 +90,9 @@ internal object AutoSyncPreferencesRepository {
+         _aggressiveMode.value = loadAggressiveModePersistedValue?.invoke() ?: true
+         _syncToleranceMs.value = loadSyncTolerancePersistedValue?.invoke()
+             ?.takeIf { it in syncToleranceOptionsMs } ?: 0
++        _debugLogsEnabled.value = loadDebugLogsPersistedValue?.invoke() ?: false
++        _audioFallbackEnabled.value = loadAudioFallbackPersistedValue?.invoke() ?: true
++        _showStatistics.value = loadShowStatisticsPersistedValue?.invoke() ?: true
+         loadedProfileId = profileId
+         lastStartupSessionKey = null
+         lastStartupPlaybackKey = null
+@@ -86,6 +119,27 @@ internal object AutoSyncPreferencesRepository {
+         saveSyncTolerancePersistedValue?.invoke(toleranceMs)
+     }
+ 
++    fun setDebugLogsEnabled(enabled: Boolean) {
++        ensureLoaded()
++        if (_debugLogsEnabled.value == enabled) return
++        _debugLogsEnabled.value = enabled
++        saveDebugLogsPersistedValue?.invoke(enabled)
++    }
++
++    fun setAudioFallbackEnabled(enabled: Boolean) {
++        ensureLoaded()
++        if (_audioFallbackEnabled.value == enabled) return
++        _audioFallbackEnabled.value = enabled
++        saveAudioFallbackPersistedValue?.invoke(enabled)
++    }
++
++    fun setShowStatistics(enabled: Boolean) {
++        ensureLoaded()
++        if (_showStatistics.value == enabled) return
++        _showStatistics.value = enabled
++        saveShowStatisticsPersistedValue?.invoke(enabled)
++    }
++
+     fun claimStartupRun(sessionKey: Int, playbackKey: String): Boolean {
+         ensureLoaded()
+         if (!_preferredSubtitleAutoSyncOnStart.value) return false
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
+index 211fe93b9..138adb598 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
+@@ -2,6 +2,7 @@ package com.nuvio.app.features.player
+ 
+ import com.nuvio.app.features.autosync.AutoSyncPlayerController
+ import com.nuvio.app.features.autosync.AutoSyncSubtitleCandidate
++import com.nuvio.app.features.streams.StreamSubtitle
+ 
+ internal fun PlayerEngineController.setAutoSyncSubtitleCandidates(
+     candidates: List<AutoSyncSubtitleCandidate>,
+@@ -32,3 +33,10 @@ internal fun PlayerEngineController.setAutoSyncAppliedListener(
+ ) {
+     (this as? AutoSyncPlayerController)?.setAutoSyncAppliedListener(listener)
+ }
++
++internal fun PlayerEngineController.setAutoSyncSubtitleStreamCandidates(
++    candidates: List<StreamSubtitle>,
++) {
++    (this as? com.nuvio.app.features.player.AutoSyncPlayerController)
++        ?.setAutoSyncSubtitleStreamCandidates(candidates)
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncContracts.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncContracts.kt
+new file mode 100644
+index 000000000..c19f0bd9f
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncContracts.kt
+@@ -0,0 +1,44 @@
++package com.nuvio.app.features.player
++
++import com.nuvio.app.features.streams.StreamSubtitle
++
++/**
++ * Optional AutoSync (automatic subtitle sync) capability layered beside PlayerEngineController.
++ * Implemented only by engines that can run the analysis (desktop libmpv); other platforms keep
++ * the plain subtitle attach path. Mirrors NuvioTV's AutoSyncPlayerController contract.
++ */
++interface AutoSyncPlayerController {
++    /** Attach [url] as an external subtitle and run AutoSync in startup scope (once per stream). */
++    fun setSubtitleUriWithAutoSync(url: String)
++
++    /** Attach [url] as an external subtitle and always run AutoSync for exactly this subtitle. */
++    fun setSubtitleUriWithSelectedAutoSync(url: String)
++
++    /** Called after AutoSync confirmed or corrected the timing of [subtitleUrl]. */
++    fun setAutoSyncAppliedListener(listener: ((subtitleUrl: String, delayMs: Int) -> Unit)?) {}
++
++    /** Called with a short user-facing message when AutoSync cannot sync the subtitle. */
++    fun setAutoSyncMessageListener(listener: ((message: String) -> Unit)?) {}
++
++    /**
++     * Called with AutoSync's progress for the Reshaped-style bubble: [kind] is "working",
++     * "success", "failure" or "dismiss". Used instead of the message listener while the
++     * bubble is turned on.
++     */
++    fun setAutoSyncBubbleListener(listener: ((kind: String, message: String) -> Unit)?) {}
++
++    /**
++     * Stream-typed candidates (carrying request headers): the stream's own subtitles plus every
++     * add-on's, pushed by the player runtime. The player surface's own list only ever contains
++     * the stream's subtitles - without this push, a picked add-on subtitle cannot be matched to
++     * a candidate and AutoSync silently skips it.
++     */
++    fun setAutoSyncSubtitleStreamCandidates(candidates: List<StreamSubtitle>) {}
++}
++
++/** One downloadable add-on subtitle AutoSync may analyse or swap in as a better match. */
++data class AutoSyncSubtitleCandidate(
++    val url: String,
++    val language: String,
++    val name: String? = null,
++)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
+index 9f276d756..4257e412f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
+@@ -262,6 +262,9 @@ data class PlayerControlsState(
+     val submitIntroSuccessToken: Long = 0L,
+     val notificationMessage: String = "",
+     val notificationToken: Long = 0L,
++    val autoSyncBubbleKind: String = "",
++    val autoSyncBubbleMessage: String = "",
++    val autoSyncBubbleToken: Long = 0L,
+     val party: PlayerControlPartyState = PlayerControlPartyState(),
+ )
+ 
+@@ -342,6 +345,8 @@ data class PlayerControlSubtitleOptionItem(
+     val title: String = "",
+     val metadata: String = "",
+     val isSelected: Boolean = false,
++    /** The row has a saved synced timing (this sync or any device's) - shows the Auto synced chip. */
++    val autoSynced: Boolean = false,
+ )
+ 
+ data class PlayerControlSubtitleCueItem(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
+index 39cac5c3e..1da51a823 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
+@@ -181,6 +181,7 @@ internal class PlayerScreenRuntime(
+     var playerControllerSourceUrl by mutableStateOf<String?>(null)
+     var errorMessage by mutableStateOf<String?>(null)
+     var isScrubbingTimeline by mutableStateOf(false)
++    val seekPreview = com.nuvio.app.features.player.seekpreview.SeekPreviewSession() // Seek previews hook
+     var scrubbingPositionMs by mutableStateOf<Long?>(null)
+     var pausedOverlayVisible by mutableStateOf(false)
+     var gestureFeedback by mutableStateOf<GestureFeedbackState?>(null)
+@@ -220,6 +221,9 @@ internal class PlayerScreenRuntime(
+     var playerControlsSubmitIntroSuccessToken by mutableStateOf(0L)
+     var playerNotificationMessage by mutableStateOf("")
+     var playerNotificationToken by mutableStateOf(0L)
++    var autoSyncBubbleKind by mutableStateOf("")
++    var autoSyncBubbleMessage by mutableStateOf("")
++    var autoSyncBubbleToken by mutableStateOf(0L)
+     var episodeStreamsPanelState by mutableStateOf(EpisodeStreamsPanelState())
+     var playerMetaVideos by mutableStateOf<List<MetaVideo>>(emptyList())
+     var playerMeta by mutableStateOf<MetaDetails?>(null)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
+index cdd759d66..b586b6768 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
+@@ -22,10 +22,28 @@ internal val PlayerScreenRuntime.visibleAddonSubtitles: List<AddonSubtitle>
+             subtitles = addonSubtitles,
+             settings = playerSettingsUiState,
+         )
+-        val selectedId = selectedAddonSubtitleId ?: return filtered
+-        if (filtered.any { it.matchesSelection(selectedId) }) return filtered
+-        val selectedSub = addonSubtitles.findSelectedAddon(selectedId) ?: return filtered
+-        return listOf(selectedSub) + filtered
++        val selectedId = selectedAddonSubtitleId ?: return GeneratedSubtitles.withEntry(filtered)
++        if (filtered.any { it.matchesSelection(selectedId) }) {
++            return GeneratedSubtitles.withEntry(filtered)
++        }
++        val selectedSub = addonSubtitles.findSelectedAddon(selectedId) ?: return GeneratedSubtitles.withEntry(filtered)
++        return GeneratedSubtitles.withEntry(listOf(selectedSub) + filtered)
++    }
++
++/**
++ * The addon subtitles Nuvio may pick on its own. The generated subtitle joins them as the user
++ * chose: "always" puts it first; "when none found" keeps it last (any real subtitle in the
++ * language wins) and only once the real ones have loaded; otherwise it is left out.
++ */
++private val PlayerScreenRuntime.addonSubtitlesForAutoPick: List<AddonSubtitle>
++    get() = when (GeneratedSubtitles.mode.value) {
++        GeneratedSubtitles.MODE_ALWAYS -> addonSubtitles.sortedBy { !GeneratedSubtitles.isGenerated(it.url) }
++        GeneratedSubtitles.MODE_MISSING -> if (isLoadingAddonSubtitles) {
++            addonSubtitles.filterNot { GeneratedSubtitles.isGenerated(it.url) }
++        } else {
++            addonSubtitles
++        }
++        else -> addonSubtitles.filterNot { GeneratedSubtitles.isGenerated(it.url) }
+     }
+ 
+ internal val PlayerScreenRuntime.selectedAddonSubtitle: AddonSubtitle?
+@@ -139,7 +157,10 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded(): Bool
+                     selectedAddonSubtitleId = preference.addonSubtitleId ?: persistedUrl
+                     selectedSubtitleIndex = -1
+                     useCustomSubtitles = true
+-                    if (!maybeAutoSyncRestoredSubtitleAtStart(persistedUrl)) {
++                    val autoSync = playerController as? AutoSyncPlayerController // desktop libmpv AutoSync
++                    if (autoSync != null) {
++                        autoSync.setSubtitleUriWithAutoSync(persistedUrl)
++                    } else if (!maybeAutoSyncRestoredSubtitleAtStart(persistedUrl)) {
+                         playerController?.setSubtitleUri(persistedUrl)
+                     }
+                     preferredSubtitleSelectionApplied = true
+@@ -161,7 +182,8 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded(): Bool
+                         selectedAddonSubtitleId = subtitle.selectionKey
+                         selectedSubtitleIndex = -1
+                         useCustomSubtitles = true
+-                        playerController?.setSubtitleUri(subtitle.url)
++                        val autoSync = playerController as? AutoSyncPlayerController
++                        if (autoSync != null) autoSync.setSubtitleUriWithAutoSync(subtitle.url) else playerController?.setSubtitleUri(subtitle.url)
+                         preferredSubtitleSelectionApplied = true
+                         isUserExplicitSubtitleSelection = true
+                     } else {
+@@ -243,7 +265,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+         val isPrimarySatisfied = primaryTarget != null && currentSelectedLang != null &&
+             SubtitleLanguageMatching.matchesLanguageCode(currentSelectedLang, primaryTarget)
+         val hasBetterAddonMatch = !isPrimarySatisfied && primaryTarget != null &&
+-            addonSubtitles.any { SubtitleLanguageMatching.matchesLanguageCode(it.language, primaryTarget) }
++            addonSubtitlesForAutoPick.any { SubtitleLanguageMatching.matchesLanguageCode(it.language, primaryTarget) }
+         if (!hasBetterAddonMatch) return
+     }
+ 
+@@ -287,7 +309,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+             return
+         }
+         if (matchedTargetPosition > 0 && !isLoadingAddonSubtitles) {
+-            val primaryAddonMatch = addonSubtitles.firstOrNull { subtitle ->
++            val primaryAddonMatch = addonSubtitlesForAutoPick.firstOrNull { subtitle ->
+                 SubtitleLanguageMatching.matchesLanguageCode(subtitle.language, selectionPlan.targets.first())
+             }
+             if (primaryAddonMatch != null) {
+@@ -295,7 +317,10 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+                 selectedAddonSubtitleId = primaryAddonMatch.selectionKey
+                 selectedSubtitleIndex = -1
+                 useCustomSubtitles = true
+-                if (!maybeAutoSyncPreferredSubtitleAtStart(primaryAddonMatch)) { // AutoSync hook
++                val autoSync = playerController as? AutoSyncPlayerController // desktop libmpv AutoSync
++                if (autoSync != null) {
++                    autoSync.setSubtitleUriWithAutoSync(primaryAddonMatch.url)
++                } else if (!maybeAutoSyncPreferredSubtitleAtStart(primaryAddonMatch)) { // AutoSync hook
+                     playerController?.setSubtitleUri(primaryAddonMatch.url)
+                 }
+                 return
+@@ -326,7 +351,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+             return
+         }
+         val forcedAddonMatch = if (selectedAudioTrack != null) {
+-            addonSubtitles.firstOrNull { subtitle ->
++            addonSubtitlesForAutoPick.firstOrNull { subtitle ->
+                 addonSubtitleIsForced(subtitle) &&
+                     addonSubtitleMatchesLanguage(subtitle, requiredForcedTarget) &&
+                     addonSubtitleMatchesSelectedAudioLanguage(subtitle, selectedAudioTrack)
+@@ -339,7 +364,8 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+             selectedAddonSubtitleId = forcedAddonMatch.selectionKey
+             selectedSubtitleIndex = -1
+             useCustomSubtitles = true
+-            playerController?.setSubtitleUri(forcedAddonMatch.url)
++            val autoSync = playerController as? AutoSyncPlayerController
++            if (autoSync != null) autoSync.setSubtitleUriWithAutoSync(forcedAddonMatch.url) else playerController?.setSubtitleUri(forcedAddonMatch.url)
+         } else {
+             disableAutomaticSubtitleSelection()
+         }
+@@ -368,7 +394,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+     if (playbackSnapshot.isLoading) return
+ 
+     val addonMatch = selectionPlan.targets.firstNotNullOfOrNull { target ->
+-        addonSubtitles.firstOrNull { subtitle ->
++        addonSubtitlesForAutoPick.firstOrNull { subtitle ->
+             (!subtitleStyle.useForcedSubtitles || !addonSubtitleIsForced(subtitle)) &&
+                 SubtitleLanguageMatching.matchesLanguageCode(subtitle.language, target)
+         }
+@@ -378,7 +404,10 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+         selectedAddonSubtitleId = addonMatch.selectionKey
+         selectedSubtitleIndex = -1
+         useCustomSubtitles = true
+-        if (!maybeAutoSyncPreferredSubtitleAtStart(addonMatch)) { // AutoSync hook
++        val autoSync = playerController as? AutoSyncPlayerController // desktop libmpv AutoSync
++        if (autoSync != null) {
++            autoSync.setSubtitleUriWithAutoSync(addonMatch.url)
++        } else if (!maybeAutoSyncPreferredSubtitleAtStart(addonMatch)) { // AutoSync hook
+             playerController?.setSubtitleUri(addonMatch.url)
+         }
+     } else if (!preferredSubtitleSelectionApplied) {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
+index 95fb67c5d..0be504670 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
+@@ -35,6 +35,7 @@ import com.nuvio.app.features.p2p.P2pStreamingState
+ import com.nuvio.app.features.party.PartyRepository
+ import com.nuvio.app.features.p2p.formatP2pMegabytes
+ import com.nuvio.app.features.p2p.formatP2pSpeed
++import com.nuvio.app.features.player.AutoSyncPlayerController
+ import com.nuvio.app.features.player.skip.SkipIntroRepository
+ import com.nuvio.app.features.streams.AddonStreamGroup
+ import com.nuvio.app.features.streams.StreamBadgeSettingsRepository
+@@ -428,6 +429,9 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+         submitIntroSuccessToken = playerControlsSubmitIntroSuccessToken,
+         notificationMessage = playerNotificationMessage,
+         notificationToken = playerNotificationToken,
++        autoSyncBubbleKind = autoSyncBubbleKind,
++        autoSyncBubbleMessage = autoSyncBubbleMessage,
++        autoSyncBubbleToken = autoSyncBubbleToken,
+         party = partyControls,
+         showOpeningOverlay = openingOverlayWanted,
+         openingArtwork = background ?: poster,
+@@ -475,6 +479,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+     val enableSurfaceGestures = !isDesktop && !isInPip
+ 
+     BindAutoSyncRuntimeEffects() // AutoSync hook
++    BindSyncedSubtitleEffects() // Nuvio fork: synced subtitles
+ 
+     Box(
+         modifier = Modifier
+@@ -553,6 +558,22 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+                     playerController = controller.takeIf { sourceAvailable }
+                     playerLifecycleController = controller
+                     playerControllerSourceUrl = surfaceSource?.sourceUrl
++                    (controller as? AutoSyncPlayerController)?.setAutoSyncAppliedListener { _, delayMs ->
++                        subtitleDelayMs = delayMs
++                    }
++                    (controller as? AutoSyncPlayerController)?.setAutoSyncMessageListener { message ->
++                        if (isDesktop) {
++                            playerNotificationMessage = message
++                            playerNotificationToken += 1L
++                        }
++                    }
++                    (controller as? AutoSyncPlayerController)?.setAutoSyncBubbleListener { kind, message ->
++                        if (isDesktop) {
++                            autoSyncBubbleKind = kind
++                            autoSyncBubbleMessage = message
++                            autoSyncBubbleToken += 1L
++                        }
++                    }
+                 },
+                 onSnapshot = { snapshot ->
+                     if (!updatePlaybackSnapshot(snapshot)) return@PlatformPlayerSurface
+@@ -647,7 +668,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,
+     val partyState by PartyRepository.state.collectAsStateWithLifecycle()
+     val partyActive = partyState.party != null
+     AnimatedVisibility(
+-        visible = (controlsVisible || showParentalGuide) && !playerControlsLocked && !isInPip,
++        visible = (controlsVisible || showParentalGuide) && !playerControlsLocked && !isInPip && !seekPreview.showSyncPanel, // Seek previews hook
+         enter = fadeIn(),
+         exit = fadeOut(),
+     ) {
+@@ -767,7 +788,8 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,
+                 isScrubbingTimeline = true
+                 scrubbingPositionMs = positionMs
+             },
+-            onScrubFinished = { positionMs -> finishTimelineSeek(positionMs) },
++            onScrubFinished = { rawPositionMs -> finishTimelineSeek(seekPreviewAligned(rawPositionMs)) }, // Seek previews hook
++
+             horizontalSafePadding = horizontalSafePadding,
+             modifier = Modifier.fillMaxSize(),
+         )
+@@ -1043,7 +1065,8 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
+             selectedSubtitleIndex = -1
+             useCustomSubtitles = true
+             persistAddonSubtitlePreference(addon)
+-            playerController?.setSubtitleUri(addon.url)
++            val autoSync = playerController as? AutoSyncPlayerController
++            if (autoSync != null) autoSync.setSubtitleUriWithSelectedAutoSync(addon.url) else playerController?.setSubtitleUri(addon.url)
+         }
+         "subtitleDelayDelta" -> setSubtitleDelay((subtitleDelayMs + value.toInt()).coerceIn(SUBTITLE_DELAY_MIN_MS, SUBTITLE_DELAY_MAX_MS))
+         "subtitleDelayReset" -> setSubtitleDelay(0)
+@@ -1536,6 +1559,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSubtitleSelection(): PlayerCon
+                             it.isNotBlank() && it != title
+                         }.orEmpty(),
+                         isSelected = option.id == selectedOptionId,
++                        autoSynced = SyncedSubtitles.isSyncedRow(option.subtitle.url), // Nuvio fork: synced chip
+                     )
+                 }
+             }
+@@ -1793,7 +1817,9 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+             useCustomSubtitles = true
+             preferredSubtitleSelectionApplied = true
+             persistAddonSubtitlePreference(addon)
+-            attachSelectedAddonSubtitleWithAutoSync(addon.url) // AutoSync hook
++            val autoSync = playerController as? AutoSyncPlayerController // desktop libmpv AutoSync
++            SyncedSubtitles.userPicked = true // Nuvio fork: synced subtitles
++            if (autoSync != null) autoSync.setSubtitleUriWithSelectedAutoSync(addon.url) else attachSelectedAddonSubtitleWithAutoSync(addon.url) // AutoSync hook
+             if (hasBurnedInServerSubtitle) clearServerSubtitleTrack()
+         },
+         onFetchAddonSubtitles = { fetchAddonSubtitlesForActiveItem() },
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt
+index 228e2dd09..e784a67b4 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt
+@@ -4,13 +4,22 @@ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.remember
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.autosync.AutoSyncDesktopHooks
+ import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
+ import com.nuvio.app.features.player.SubtitleLanguageOption
+ import com.nuvio.app.isIos
+ import nuvio.composeapp.generated.resources.Res
++import nuvio.composeapp.generated.resources.settings_playback_audio_sync_fallback
++import nuvio.composeapp.generated.resources.settings_playback_audio_sync_fallback_description
++import nuvio.composeapp.generated.resources.settings_playback_audio_sync_share_log
++import nuvio.composeapp.generated.resources.settings_playback_audio_sync_share_log_description
++import nuvio.composeapp.generated.resources.settings_playback_audio_sync_show_statistics
++import nuvio.composeapp.generated.resources.settings_playback_audio_sync_show_statistics_description
+ import nuvio.composeapp.generated.resources.settings_playback_auto_sync_mode_aggressive
+ import nuvio.composeapp.generated.resources.settings_playback_auto_sync_mode_aggressive_description
+ import nuvio.composeapp.generated.resources.settings_playback_auto_sync_mode_passive
++import nuvio.composeapp.generated.resources.settings_playback_auto_sync_debug_logs
++import nuvio.composeapp.generated.resources.settings_playback_auto_sync_debug_logs_description
+ import nuvio.composeapp.generated.resources.settings_playback_auto_sync_mode_passive_description
+ import nuvio.composeapp.generated.resources.settings_playback_auto_sync_tolerance
+ import nuvio.composeapp.generated.resources.settings_playback_auto_sync_tolerance_description
+@@ -38,6 +47,18 @@ internal fun AutoSyncPlaybackSettingsRows(
+         AutoSyncPreferencesRepository.ensureLoaded()
+         AutoSyncPreferencesRepository.syncToleranceMs
+     }.collectAsStateWithLifecycle()
++    val debugLogsEnabled by remember {
++        AutoSyncPreferencesRepository.ensureLoaded()
++        AutoSyncPreferencesRepository.debugLogsEnabled
++    }.collectAsStateWithLifecycle()
++    val audioFallbackEnabled by remember {
++        AutoSyncPreferencesRepository.ensureLoaded()
++        AutoSyncPreferencesRepository.audioFallbackEnabled
++    }.collectAsStateWithLifecycle()
++    val showStatistics by remember {
++        AutoSyncPreferencesRepository.ensureLoaded()
++        AutoSyncPreferencesRepository.showStatistics
++    }.collectAsStateWithLifecycle()
+     if (isIos) return
+ 
+     val preferredLanguageAvailable =
+@@ -98,4 +119,43 @@ internal fun AutoSyncPlaybackSettingsRows(
+             AutoSyncPreferencesRepository.setSyncToleranceMs(next)
+         },
+     )
++    // Desktop parity with the phone's Auto Sync rows: debug log, the audio fallback itself,
++    // its statistics in the bubble, and the shareable sync report.
++    SettingsGroupDivider(isTablet = isTablet)
++    SettingsSwitchRow(
++        title = stringResource(Res.string.settings_playback_auto_sync_debug_logs),
++        description = stringResource(Res.string.settings_playback_auto_sync_debug_logs_description),
++        checked = debugLogsEnabled,
++        enabled = enabled,
++        isTablet = isTablet,
++        onCheckedChange = AutoSyncPreferencesRepository::setDebugLogsEnabled,
++    )
++    SettingsGroupDivider(isTablet = isTablet)
++    SettingsSwitchRow(
++        title = stringResource(Res.string.settings_playback_audio_sync_fallback),
++        description = stringResource(Res.string.settings_playback_audio_sync_fallback_description),
++        checked = audioFallbackEnabled,
++        enabled = enabled && preferredSubtitleAutoSyncOnStart,
++        isTablet = isTablet,
++        onCheckedChange = AutoSyncPreferencesRepository::setAudioFallbackEnabled,
++    )
++    SettingsGroupDivider(isTablet = isTablet)
++    SettingsSwitchRow(
++        title = stringResource(Res.string.settings_playback_audio_sync_show_statistics),
++        description = stringResource(Res.string.settings_playback_audio_sync_show_statistics_description),
++        checked = showStatistics,
++        enabled = enabled && preferredSubtitleAutoSyncOnStart && audioFallbackEnabled,
++        isTablet = isTablet,
++        onCheckedChange = AutoSyncPreferencesRepository::setShowStatistics,
++    )
++    AutoSyncDesktopHooks.shareLog?.let { shareLog ->
++        SettingsGroupDivider(isTablet = isTablet)
++        SettingsNavigationRow(
++            title = stringResource(Res.string.settings_playback_audio_sync_share_log),
++            description = stringResource(Res.string.settings_playback_audio_sync_share_log_description),
++            enabled = enabled,
++            isTablet = isTablet,
++            onClick = { shareLog() },
++        )
++    }
+ }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+index c8d3188db..ea7b67407 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+@@ -583,6 +583,12 @@ private fun PlaybackSettingsSection(
+                     )
+                 }
+                 SettingsGroupDivider(isTablet = isTablet)
++                GeneratedSubtitleSettingsRows(isTablet = isTablet) // Generated subtitles hook
++                SettingsGroupDivider(isTablet = isTablet)
++                SubtitleFontSettingsSection(isTablet = isTablet) // Nuvio fork: custom subtitle font
++                SettingsGroupDivider(isTablet = isTablet)
++                ConnectionFitSettingsSection(isTablet = isTablet) // Nuvio fork: connection-speed fit
++                SettingsGroupDivider(isTablet = isTablet)
+                 SettingsSwitchRow(
+                     title = stringResource(Res.string.settings_playback_subtitle_strip_sdh),
+                     description = stringResource(Res.string.settings_playback_subtitle_strip_sdh_description),
+@@ -624,6 +630,9 @@ private fun PlaybackSettingsSection(
+             }
+         }
+ 
++        SeekPreviewSettingsSection(isTablet = isTablet) // Seek previews hook
++
++
+         SettingsSection(
+             title = stringResource(Res.string.settings_playback_section_subtitle_rendering),
+             isTablet = isTablet,
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
+index c6fa48498..9e58aca31 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
+@@ -26,6 +26,7 @@ import com.nuvio.app.features.discordrpc.DiscordPresenceManager
+ import com.nuvio.app.features.p2p.P2pStreamingEngine
+ import com.nuvio.app.features.plugins.configureDesktopQuickJsLibrary
+ import com.nuvio.app.features.player.PlatformPlayerSurface
++import com.nuvio.app.features.player.seekpreview.installSeekrDesktopPreferences
+ import com.nuvio.app.features.player.desktop.DesktopAppFullscreenController
+ import com.nuvio.app.features.player.desktop.DesktopHostOs
+ import com.nuvio.app.features.player.desktop.DesktopWindowGeometry
+@@ -58,6 +59,7 @@ fun main(args: Array<String>) {
+     }
+     applyDesktopRendererPreference()
+     SentryInitializer.start()
++    com.nuvio.app.features.player.autosync.AutoSyncPreferencesPlatform.install() // AutoSync hook: mobile-style rows persist on desktop
+     configureDesktopQuickJsLibrary()
+     configureDesktopChrome()
+     configureLinuxSwingGlobalsBeforeAwt()
+@@ -69,6 +71,7 @@ fun main(args: Array<String>) {
+     ProfileRepository.loadCachedProfiles()
+     AppIconRepository.ensureLoaded()
+     DiscordPresenceManager.start()
++    com.nuvio.app.core.network.resetBackendToOfficialOnce() // Fork: installs stuck on a saved custom server never reach the self-hosted backend
+ 
+     application {
+         val appIconState by AppIconRepository.state.collectAsState()
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/network/BackendConfigurationReset.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/network/BackendConfigurationReset.desktop.kt
+new file mode 100644
+index 000000000..d1ba53c18
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/network/BackendConfigurationReset.desktop.kt
+@@ -0,0 +1,29 @@
++package com.nuvio.app.core.network
++
++import com.nuvio.app.core.storage.DesktopStorage
++
++/**
++ * Nuvio fork: a desktop install that once saved a custom server keeps talking to it forever -
++ * the choice outlives every update - so its synced-subtitle pulls and pushes never reach the
++ * self-hosted backend this fork is built around, and the "Auto synced" chips silently stay
++ * empty. Once per install: drop any saved custom server and use the baked-in one. The active
++ * backend is always logged so a launcher-console report can prove where the app talks.
++ */
++internal fun resetBackendToOfficialOnce() {
++    runCatching {
++        val store = DesktopStorage.store("backend_configuration")
++        if (store.getBoolean("official_reset_v1") != true) {
++            val active = ServerConfigurationRepository.active.value
++            if (active.isCustom) {
++                val official = officialConfiguration()
++                ServerConfigurationRepository.useOfficial()
++                println(
++                    "[nuvio] backend switched from the saved custom ${active.backendUrl} " +
++                        "to the built-in ${official.backendUrl} - log in again if asked",
++                )
++            }
++            store.putBoolean("official_reset_v1", true)
++        }
++        println("[nuvio] backend: ${ServerConfigurationRepository.active.value.backendUrl}")
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
+index 7ce25ea2c..531aafaba 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
+@@ -31,11 +31,15 @@ import androidx.compose.ui.unit.dp
+ import com.nuvio.app.core.ui.AppPresenceState
+ import com.nuvio.app.core.ui.LocalNuvioPlatformDensity
+ import com.nuvio.app.core.ui.PresenceSnapshot
++import com.nuvio.app.features.streams.StreamSubtitle
+ import com.nuvio.app.features.player.desktop.DesktopHostOs
+ import com.nuvio.app.features.player.desktop.DesktopPlayerPictureInPicture
+ import com.nuvio.app.features.player.desktop.NativePlayerController
+ import com.nuvio.app.features.player.desktop.NativePlayerHost
+ import com.nuvio.app.features.player.desktop.desktopFullscreenChanges
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
+ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.flow.drop
+ 
+@@ -45,7 +49,7 @@ actual fun PlatformPlayerSurface(
+     sourceAudioUrl: String?,
+     sourceHeaders: Map<String, String>,
+     sourceResponseHeaders: Map<String, String>,
+-    externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle>,
++    externalSubtitles: List<StreamSubtitle>,
+     streamType: String?,
+     useYoutubeChunkedPlayback: Boolean,
+     modifier: Modifier,
+@@ -74,6 +78,7 @@ actual fun PlatformPlayerSurface(
+             sourceUrl = sourceUrl,
+             sourceAvailable = sourceAvailable,
+             sourceHeaders = sourceHeaders,
++            externalSubtitles = externalSubtitles,
+             modifier = modifier,
+             playWhenReady = playWhenReady,
+             resizeMode = resizeMode,
+@@ -106,6 +111,7 @@ private fun NativePlayerSurface(
+     sourceUrl: String,
+     sourceAvailable: Boolean,
+     sourceHeaders: Map<String, String>,
++    externalSubtitles: List<StreamSubtitle>,
+     modifier: Modifier,
+     playWhenReady: Boolean,
+     resizeMode: PlayerResizeMode,
+@@ -123,7 +129,21 @@ private fun NativePlayerSurface(
+ ) {
+     val platformDensity = LocalNuvioPlatformDensity.current
+     val host = remember { NativePlayerHost() }
++    val latestSourceUrl = rememberUpdatedState(sourceUrl)
++    val latestSourceHeaders = rememberUpdatedState(sourceHeaders)
++    val latestExternalSubtitles = rememberUpdatedState(externalSubtitles)
++    val autoSyncScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
+     val controller = remember(host) { NativePlayerController(host) }
++    val autoSyncController = remember(host) {
++        AutoSyncNativePlayerController(
++            base = controller,
++            scope = autoSyncScope,
++            sourceUrl = { latestSourceUrl.value },
++            sourceHeaders = { sanitizePlaybackHeaders(latestSourceHeaders.value) },
++            subtitleCandidates = { latestExternalSubtitles.value },
++            playerInstanceKey = controller.hashCode(),
++        )
++    }
+     val hostFirstPaintComplete = remember { mutableStateOf(false) }
+     val hostFirstFullSizePaintComplete = remember { mutableStateOf(false) }
+     val playbackHeaders = remember(sourceHeaders) { sanitizePlaybackHeaders(sourceHeaders) }
+@@ -139,7 +159,7 @@ private fun NativePlayerSurface(
+     val nvidiaRtxSuperResolutionEnabled = playerSettings.nvidiaRtxSuperResolutionEnabled
+ 
+     SideEffect {
+-        onControllerReady(controller)
++        onControllerReady(autoSyncController)
+     }
+ 
+     DisposableEffect(host) {
+@@ -175,7 +195,10 @@ private fun NativePlayerSurface(
+     }
+ 
+     DisposableEffect(controller, sourceAvailable, sourceUrl, playbackHeaders) {
+-        onDispose { controller.dispose() }
++        onDispose {
++            autoSyncController.dispose()
++            controller.dispose()
++        }
+     }
+ 
+     // The controls overlay owns the player shortcuts. After alt-tab, desktop
+@@ -218,7 +241,7 @@ private fun NativePlayerSurface(
+         initialPositionRequestKey?.let { key ->
+             latestOnInitialPositionHandled.value(key, initialPositionMs > 0L)
+         }
+-        onControllerReady(controller)
++        onControllerReady(autoSyncController)
+     }
+ 
+     LaunchedEffect(controller, sourceAvailable, playWhenReady) {
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
+new file mode 100644
+index 000000000..22f137257
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
+@@ -0,0 +1,460 @@
++package com.nuvio.app.features.player
++
++import co.touchlab.kermit.Logger
++import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
++import com.nuvio.app.features.autosync.AutoSyncSyncedSubtitle
++import com.nuvio.app.features.player.autosync.AutoSyncPreferences
++import com.nuvio.app.features.player.autosync.AutoSyncPreferencesPlatform
++import com.nuvio.app.features.player.autosync.AutoSyncSubtitleHttp
++import com.nuvio.app.features.player.autosync.PlayerAutoSyncBridge
++import com.nuvio.app.features.player.autosync.SubtitleLanguageMatching
++import com.nuvio.app.features.player.autosync.constantShiftRetime
++import com.nuvio.app.features.player.autosync.maxAlignmentShiftMs
++import com.nuvio.app.features.player.audiosync.SpeechAutoSyncEngine
++import com.nuvio.app.features.player.audiosync.SyncLog
++import com.nuvio.app.features.streams.StreamSubtitle
++import kotlin.math.roundToLong
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.TimeoutCancellationException
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withTimeout
++
++private val autoSyncLog = Logger.withTag("NuvioAutoSync")
++
++private const val SUBTITLE_BODY_MAX_BYTES = 8 * 1024 * 1024
++
++/** A stuck run must still end: sampling six spots normally finishes well inside this. */
++// 5 min: 6 spots x 30 s per-dump cap is 3 min on a slow link, plus the alternatives phase.
++private const val SYNC_RUN_TIMEOUT_MS = 300_000L
++
++private fun isHttpUrl(url: String): Boolean =
++    url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)
++
++private fun shortUrl(url: String): String = url.substringBefore('?').substringAfterLast('/').ifBlank { url.take(48) }
++
++/**
++ * Wraps the libmpv desktop controller with the AutoSync capability. The subtitle is attached
++ * immediately (unsynced) so playback is never blocked; the speech-based engine
++ * ([SpeechAutoSyncEngine], the desktop port of NuvioMobile's flow) then samples the stream's
++ * audio at dialogue-dense spots, correlates it with the subtitle's cue timeline and, when a
++ * confident constant-shift mapping is found, swaps the track to a retimed SRT carrying the
++ * corrected timing. When the chosen subtitle never fits the audio, a better-matching file in the
++ * same language is synced in its place. Every decision is logged (Kermit + the shareable sync
++ * log) so a "nothing happened" report from the launcher console is always explainable.
++ */
++internal class AutoSyncNativePlayerController(
++    private val base: PlayerEngineController,
++    private val scope: CoroutineScope,
++    private val sourceUrl: () -> String,
++    private val sourceHeaders: () -> Map<String, String>,
++    private val subtitleCandidates: () -> List<StreamSubtitle>,
++    private val playerInstanceKey: Int,
++) : PlayerEngineController by base, AutoSyncPlayerController {
++
++    private var autoSyncJob: Job? = null
++
++    /** Stream-typed candidates (stream's own + every add-on's), pushed by the player runtime. */
++    @Volatile
++    private var streamCandidates: List<StreamSubtitle> = emptyList()
++
++    override fun setAutoSyncSubtitleStreamCandidates(candidates: List<StreamSubtitle>) {
++        streamCandidates = candidates
++    }
++
++    /**
++     * The player surface's list only ever contains the STREAM's own subtitles; without the
++     * runtime-pushed add-ons, a picked add-on subtitle fails the candidate match below and
++     * AutoSync silently skips it (no bubble, no sync) - exactly the "nothing happens" report.
++     */
++    private fun allSubtitleCandidates(): List<StreamSubtitle> {
++        val pushed = streamCandidates
++        val surface = subtitleCandidates()
++        if (pushed.isEmpty()) return surface
++        val merged = ArrayList(pushed)
++        for (subtitle in surface) {
++            if (merged.none { it.url == subtitle.url }) merged += subtitle
++        }
++        return merged
++    }
++
++    /** What this wrapper last attached: the selected URL, the retimed copy of it, or null. */
++    @Volatile
++    private var activeSyncedKey: String? = null
++
++    private var appliedListener: ((subtitleUrl: String, delayMs: Int) -> Unit)? = null
++    private var messageListener: ((message: String) -> Unit)? = null
++    private var bubbleListener: ((kind: String, message: String) -> Unit)? = null
++
++    /** The run whose bubble is still showing "working", so a cancelled run can dismiss it. */
++    private var bubbleRun = 0L
++    private var openBubbleRun = -1L
++
++    /**
++     * Reports AutoSync's progress: to the bubble while it is turned on, else as a plain
++     * message ([plain]; null means the plain path stays quiet).
++     */
++    private fun notifyAutoSync(runId: Long, kind: String, bubble: String, plain: String?) {
++        // Listeners write Compose state on this background thread; a faulty listener must never
++        // take the sync run (or the app) down.
++        runCatching {
++            val bubbleTarget = bubbleListener
++            if (bubbleTarget != null && AutoSyncPreferences.bubbleToastsEnabled.value) {
++                openBubbleRun = if (kind == "working") runId else -1L
++                bubbleTarget(kind, bubble)
++            } else if (plain != null) {
++                messageListener?.invoke(plain)
++            }
++        }.onFailure { autoSyncLog.w { "notify failed: ${it.message}" } }
++    }
++
++    init {
++        SyncedSubtitlesDesktop.ensureStore() // Nuvio fork: synced subtitles
++        AutoSyncPreferences.ensureLoaded()
++        AutoSyncPreferencesPlatform.install() // Nuvio fork: mobile-style AutoSync rows persist (+ legacy toggle migration)
++    }
++
++    override fun setAutoSyncAppliedListener(
++        listener: ((subtitleUrl: String, delayMs: Int) -> Unit)?,
++    ) {
++        appliedListener = listener
++    }
++
++    override fun setAutoSyncMessageListener(listener: ((message: String) -> Unit)?) {
++        messageListener = listener
++    }
++
++    override fun setAutoSyncBubbleListener(listener: ((kind: String, message: String) -> Unit)?) {
++        bubbleListener = listener
++    }
++
++    override fun setSubtitleUriWithAutoSync(url: String) {
++        autoSyncLog.i { "AutoSync requested (startup scope) for ${shortUrl(url)}" }
++        if (restoreSynced(url)) return // Nuvio fork: synced subtitles
++        runSpeechSync(url, startupScope = true)
++    }
++
++    override fun setSubtitleUriWithSelectedAutoSync(url: String) {
++        autoSyncLog.i { "AutoSync requested (selected scope) for ${shortUrl(url)}" }
++        if (restoreSynced(url)) return // Nuvio fork: synced subtitles
++        runSpeechSync(url, startupScope = false)
++    }
++
++    /**
++     * Nuvio fork: shows [url] with the timing saved when it was synced before for this title +
++     * stream (on any device), so AutoSync does not run again.
++     */
++    private fun restoreSynced(url: String): Boolean {
++        val file = runCatching { SyncedSubtitlesDesktop.savedFileFor(url) }
++            .onFailure { autoSyncLog.w { "saved-subtitle lookup failed: ${it.message}" } }
++            .getOrNull()
++            ?: return false
++        cancelAutoSync()
++        SyncedSubtitles.restoredUrls += url
++        base.setSubtitleDelayMs(0)
++        base.setSubtitleUri(file.absolutePath)
++        activeSyncedKey = url
++        AutoSyncSyncedSubtitle.mark(url)
++        runCatching { appliedListener?.invoke(url, 0) }
++            .onFailure { autoSyncLog.w { "applied listener failed: ${it.message}" } }
++        autoSyncLog.i { "showing saved synced subtitle ($url) - AutoSync run skipped" }
++        SyncLog.i("restored saved synced subtitle ${shortUrl(url)} from the account")
++        return true
++    }
++
++    // Plain attaches mean the user (or the runtime) chose un-synced timing; cancel any running
++    // analysis and forget the synced state so a later retime cannot land on the wrong track.
++    override fun setSubtitleUri(url: String) {
++        if (restoreSynced(url)) return // Nuvio fork: synced subtitles
++        cancelAutoSync()
++        activeSyncedKey = url
++        AutoSyncSyncedSubtitle.clear()
++        base.setSubtitleUri(url)
++    }
++
++    override fun clearExternalSubtitle() {
++        cancelAutoSync()
++        activeSyncedKey = null
++        AutoSyncSyncedSubtitle.clear()
++        base.clearExternalSubtitle()
++    }
++
++    override fun clearExternalSubtitleAndSelect(trackIndex: Int) {
++        cancelAutoSync()
++        activeSyncedKey = null
++        AutoSyncSyncedSubtitle.clear()
++        base.clearExternalSubtitleAndSelect(trackIndex)
++    }
++
++    /** Called when the player surface is disposed so a running analysis cannot linger. */
++    fun dispose() {
++        cancelAutoSync()
++        appliedListener = null
++        messageListener = null
++        bubbleListener = null
++    }
++
++    private fun cancelAutoSync() {
++        autoSyncJob?.cancel()
++        autoSyncJob = null
++    }
++
++    /**
++     * Runs the speech-based sync for [selectedUrl], mirroring NuvioMobile: the subtitle attaches
++     * unsynced right away, the engine samples the stream's audio and either retimes the selected
++     * file or switches to a better-matching one. Startup runs are gated on the user's
++     * auto-sync-on-start toggle; a subtitle the user picked explicitly always gets a sync run.
++     */
++    private fun runSpeechSync(
++        selectedUrl: String,
++        startupScope: Boolean,
++    ) {
++        AutoSyncPreferencesRepository.ensureLoaded()
++        val streamUrlAtCall = sourceUrl()
++        if (
++            !isHttpUrl(selectedUrl) ||
++            !isHttpUrl(streamUrlAtCall) ||
++            selectedUrl == streamUrlAtCall
++        ) {
++            autoSyncLog.i {
++                "AutoSync skipped (selected=${isHttpUrl(selectedUrl)} stream=${isHttpUrl(streamUrlAtCall)} " +
++                    "sameUrl=${selectedUrl == streamUrlAtCall}) - plain attach"
++            }
++            setSubtitleUri(selectedUrl)
++            return
++        }
++        val selectedSubtitle = allSubtitleCandidates().firstOrNull { it.url == selectedUrl }
++        if (selectedSubtitle == null) {
++            autoSyncLog.i {
++                "AutoSync skipped: the picked subtitle is not among the ${allSubtitleCandidates().size} stream candidates - plain attach"
++            }
++            setSubtitleUri(selectedUrl)
++            return
++        }
++        // The audio fallback IS the sync; with it off (mobile-parity toggle) subtitles attach
++        // unsynced and the claim is not consumed.
++        if (!AutoSyncPreferencesRepository.audioFallbackEnabled.value) {
++            autoSyncLog.i { "audio sync fallback is off - plain attach" }
++            setSubtitleUri(selectedUrl)
++            return
++        }
++
++        if (
++            startupScope &&
++            !AutoSyncPreferencesRepository.claimStartupRun(playerInstanceKey, streamUrlAtCall)
++        ) {
++            // AutoSync already ran once for this stream, or the user turned auto-sync-off at
++            // start; attach the plain way unless the synced track is already exactly this one.
++            autoSyncLog.i {
++                "AutoSync startup run not claimed (toggle off or already ran for this stream) - plain attach"
++            }
++            if (activeSyncedKey != selectedUrl) {
++                setSubtitleUri(selectedUrl)
++            }
++            return
++        }
++
++        cancelAutoSync()
++
++        val sourceUrlAtStart = streamUrlAtCall
++        val sourceHeadersAtStart = sourceHeaders()
++        val selectedHeaders = selectedSubtitle.headers.orEmpty()
++        val selectedLanguage = selectedSubtitle.language
++        val selectedName = selectedSubtitle.name.orEmpty()
++
++        // The subtitle is attached unsynced right away so the user reads it while the engine
++        // works; a confident result later swaps the track to the retimed copy.
++        base.setSubtitleDelayMs(0)
++        base.setSubtitleUri(selectedUrl)
++        activeSyncedKey = selectedUrl
++        AutoSyncSyncedSubtitle.clear()
++
++        val bubbleRunId = ++bubbleRun
++        autoSyncJob = scope.launch {
++            // The user can switch to a built-in track, turn subtitles off or open another stream
++            // while this runs; the outcomes below must then leave their choice alone.
++            fun stillRelevant(): Boolean =
++                sourceUrl() == sourceUrlAtStart && activeSyncedKey == selectedUrl
++
++            try {
++                notifyAutoSync(bubbleRunId, "working", "Auto Sync • Listening for dialogue…", null)
++                autoSyncLog.i {
++                    "speech sync start: subtitle=${shortUrl(selectedUrl)} lang=${selectedLanguage.ifBlank { "?" }} " +
++                        "startupScope=$startupScope candidates=${allSubtitleCandidates().size}"
++                }
++                SyncLog.i("speech sync start for ${shortUrl(selectedUrl)}")
++
++                val body = try {
++                    AutoSyncSubtitleHttp.get(selectedUrl, selectedHeaders, SUBTITLE_BODY_MAX_BYTES).body
++                } catch (cancel: CancellationException) {
++                    throw cancel
++                } catch (error: Exception) {
++                    autoSyncLog.w { "AUTO_SYNC subtitle download failed: ${error.message}" }
++                    null
++                }
++                if (body.isNullOrBlank()) {
++                    if (!stillRelevant()) return@launch
++                    autoSyncLog.w { "speech sync: subtitle download failed or empty" }
++                    SyncLog.w("speech sync: subtitle download failed")
++                    SpeechAutoSyncEngine.lastFailure = "the subtitle could not be downloaded"
++                    notifyFailure(bubbleRunId)
++                    return@launch
++                }
++
++                // Alternatives in the selected subtitle's language, tested when it never fits.
++                // A blank language still runs the sync for the picked file itself; only the
++                // alternative search needs a language to match against.
++                val alternatives = if (startupScope && selectedLanguage.isNotBlank()) {
++                    allSubtitleCandidates()
++                        .filter { it.url != selectedUrl && it.url != sourceUrlAtStart }
++                        .distinctBy { it.url }
++                        .filter { SubtitleLanguageMatching.matchesLanguageCode(it.language, selectedLanguage) }
++                        .map { candidate ->
++                            SpeechAutoSyncEngine.Alternative(
++                                url = candidate.url,
++                                language = candidate.language,
++                                name = candidate.name.orEmpty(),
++                                headers = candidate.headers.orEmpty(),
++                            )
++                        }
++                } else {
++                    emptyList()
++                }
++
++                val result = try {
++                    withTimeout(SYNC_RUN_TIMEOUT_MS) {
++                        SpeechAutoSyncEngine.run(
++                            request = SpeechAutoSyncEngine.Request(
++                                streamUrl = sourceUrlAtStart,
++                                streamHeaders = sourceHeadersAtStart,
++                                selectedUrl = selectedUrl,
++                                selectedHeaders = selectedHeaders,
++                                selectedBody = body,
++                                alternatives = alternatives,
++                            ),
++                            onProgress = { text ->
++                                if (stillRelevant()) {
++                                    notifyAutoSync(bubbleRunId, "working", "Auto Sync • $text", null)
++                                }
++                            },
++                        )
++                    }
++                } catch (timeout: TimeoutCancellationException) {
++                    SpeechAutoSyncEngine.lastFailure = "timed out after 5 minutes"
++                    null
++                }
++
++                if (!stillRelevant()) {
++                    SyncLog.i("speech sync finished but was discarded (subtitle or stream changed mid-run)")
++                    return@launch
++                }
++                if (result == null) {
++                    autoSyncLog.w { "speech sync finished with no confident match" }
++                    notifyFailure(bubbleRunId)
++                    return@launch
++                }
++
++                val chosenUrl = result.subtitleUrl
++                val timeline = constantShiftRetime(
++                    cues = result.cues,
++                    scale = result.scale,
++                    shiftMs = result.shiftMs,
++                    source = "speech",
++                    activityScore = result.peak,
++                )
++                autoSyncLog.i {
++                    "speech sync matched ${shortUrl(chosenUrl)}: scale=${result.scale} " +
++                        "shift=${result.shiftMs.roundToLong()}ms peak=%.2f switched=${result.switched}".format(result.peak)
++                }
++                // A confident correction within the user's tolerance keeps the selected
++                // subtitle's original timing instead of retiming it.
++                val toleranceMs = AutoSyncPreferencesRepository.syncToleranceMs.value
++                val withinToleranceMs = toleranceMs.takeIf {
++                    it > 0 && !result.switched && timeline.maxAlignmentShiftMs() <= it
++                }
++                val applied = if (withinToleranceMs != null) {
++                    base.setSubtitleDelayMs(0)
++                    true
++                } else {
++                    PlayerAutoSyncBridge.attachRetimedSubtitle(base, result.cues, timeline)
++                }
++                if (!applied) {
++                    if (!stillRelevant()) return@launch
++                    autoSyncLog.w { "speech sync: the retimed track could not be attached" }
++                    notifyFailure(bubbleRunId)
++                    return@launch
++                }
++
++                if (chosenUrl != selectedUrl) {
++                    // Track the swap so stillRelevant() and the startup claim stay correct.
++                    activeSyncedKey = chosenUrl
++                }
++                runCatching { appliedListener?.invoke(chosenUrl, 0) }
++                    .onFailure { autoSyncLog.w { "applied listener failed: ${it.message}" } }
++                AutoSyncSyncedSubtitle.mark(chosenUrl)
++                // Nuvio fork: keep the retimed subtitle for the other devices on the account.
++                PlayerAutoSyncBridge.lastRetimedSrt?.let { srt ->
++                    if (withinToleranceMs == null) {
++                        SyncedSubtitles.save(chosenUrl, srt, method = "autosync", nowMs = System.currentTimeMillis())
++                    }
++                }
++                val statistics = if (AutoSyncPreferencesRepository.showStatistics.value) {
++                    " • " + when {
++                        withinToleranceMs != null -> "within tolerance"
++                        else -> "shift ${timeline.maxAlignmentShiftMs().roundToLong()} ms · confidence %.2f".format(result.peak)
++                    }
++                } else {
++                    ""
++                }
++                notifyAutoSync(
++                    bubbleRunId,
++                    "success",
++                    when {
++                        withinToleranceMs != null -> "Auto Sync • Subtitles already in sync$statistics"
++                        result.switched -> "Auto Sync • Switched to a subtitle that matches the audio$statistics"
++                        else -> "Auto Sync • Subtitles synced$statistics"
++                    },
++                    null,
++                )
++            } catch (cancel: CancellationException) {
++                throw cancel
++            } catch (error: Throwable) {
++                autoSyncLog.w { "AUTO_SYNC failed: ${error.javaClass.simpleName}: ${error.message}" }
++                // A thrown error used to reach the bubble with NO reason: record it where the
++                // bubble (and the shareable log) can see it.
++                SpeechAutoSyncEngine.lastFailure = "${error.javaClass.simpleName}: ${error.message.orEmpty()}"
++                SyncLog.w("AUTO_SYNC failed: ${error.javaClass.simpleName}: ${error.message}")
++                if (!stillRelevant()) return@launch
++                notifyFailure(bubbleRunId)
++            }
++        }.also { job ->
++            job.invokeOnCompletion {
++                // A run that ended without a result (cancelled, or the stream changed) must not
++                // leave its "working" bubble on screen. A newer run owns the bubble otherwise.
++                runCatching {
++                    if (openBubbleRun == bubbleRunId) {
++                        openBubbleRun = -1L
++                        bubbleListener?.invoke("dismiss", "")
++                    }
++                }
++            }
++        }
++    }
++
++    /** The plain failure outcome: the unsynced subtitle attached at the start stays as it is. */
++    private fun notifyFailure(bubbleRunId: Long) {
++        val reason = SpeechAutoSyncEngine.lastFailure
++        val detail = if (AutoSyncPreferencesRepository.showStatistics.value && !reason.isNullOrBlank()) {
++            " • $reason"
++        } else {
++            ""
++        }
++        notifyAutoSync(
++            bubbleRunId,
++            "failure",
++            "Auto Sync • Sync failed • subtitle timing not changed$detail",
++            "Sync failed: Auto Sync couldn't match this subtitle to the audio.$detail",
++        )
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferences.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferences.kt
+new file mode 100644
+index 000000000..79cad8c3c
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferences.kt
+@@ -0,0 +1,44 @@
++package com.nuvio.app.features.player.autosync
++
++import com.nuvio.app.core.storage.DesktopStorage
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++
++/**
++ * AutoSync-owned preferences that outlived the old cue-reference engine: the bubble toggle.
++ *
++ * Kept outside PlayerSettingsDataStore / PlayerSettingsRepository on purpose: no migrations or
++ * constructor wiring in the shared settings architecture just for this feature. The sync
++ * behaviour itself (auto-sync at start, thorough search, tolerance) lives in the shared
++ * AutoSyncPreferencesRepository, the same store the mobile-style settings rows write.
++ */
++internal object AutoSyncPreferences {
++    private const val STORE_NAME = "nuvio_autosync"
++    private const val KEY_BUBBLE_TOASTS = "automatic_subtitle_sync_bubble_toasts"
++
++    private val lock = Any()
++    @Volatile private var initialized = false
++
++    /** Show AutoSync's progress in the Reshaped-style bubble instead of plain toasts. */
++    private val _bubbleToastsEnabled = MutableStateFlow(true)
++    val bubbleToastsEnabled: StateFlow<Boolean> = _bubbleToastsEnabled.asStateFlow()
++
++    private fun store() = DesktopStorage.store(STORE_NAME)
++
++    fun ensureLoaded() {
++        if (initialized) return
++        synchronized(lock) {
++            if (initialized) return
++            _bubbleToastsEnabled.value = store().getBoolean(KEY_BUBBLE_TOASTS) ?: true
++            initialized = true
++        }
++    }
++
++    fun setBubbleToastsEnabled(enabled: Boolean) {
++        ensureLoaded()
++        if (_bubbleToastsEnabled.value == enabled) return
++        _bubbleToastsEnabled.value = enabled
++        store().putBoolean(KEY_BUBBLE_TOASTS, enabled)
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferencesPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferencesPlatform.desktop.kt
+new file mode 100644
+index 000000000..2985e7861
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferencesPlatform.desktop.kt
+@@ -0,0 +1,70 @@
++package com.nuvio.app.features.player.autosync
++
++import com.nuvio.app.core.storage.DesktopStorage
++import com.nuvio.app.core.storage.ProfileScopedKey
++import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
++
++/**
++ * Nuvio fork: persists the mobile-style AutoSync settings rows (auto-sync at start, thorough
++ * search, tolerance) on the desktop, the way AutoSyncPreferencesAndroid does on phones. Without
++ * this the rows render with defaults and forget every change.
++ *
++ * Also migrates the removed old engine's toggle: users who had turned AutoSync on in the
++ * duplicate settings section keep it on (the old store's enabled flag seeds auto-sync-on-start
++ * the first time the new keys are read).
++ */
++internal object AutoSyncPreferencesPlatform {
++    private const val STORE_NAME = "nuvio_autosync_settings"
++    private const val AUTO_SYNC_ON_START_KEY = "preferred_subtitle_auto_sync_on_start"
++    private const val AGGRESSIVE_MODE_KEY = "auto_sync_aggressive_mode"
++    private const val SYNC_TOLERANCE_MS_KEY = "auto_sync_tolerance_ms"
++    private const val DEBUG_LOGS_KEY = "auto_sync_debug_logs"
++    private const val AUDIO_FALLBACK_KEY = "auto_sync_audio_fallback"
++    private const val SHOW_STATISTICS_KEY = "auto_sync_show_statistics"
++
++    private const val LEGACY_STORE_NAME = "nuvio_autosync"
++    private const val LEGACY_ENABLED_KEY = "automatic_subtitle_sync_enabled"
++
++    @Volatile
++    private var installed = false
++
++    fun install() {
++        if (installed) return
++        synchronized(this) {
++            if (installed) return
++            val store = DesktopStorage.store(STORE_NAME)
++            AutoSyncPreferencesRepository.installPersistence(
++                load = { store.getBoolean(ProfileScopedKey.of(AUTO_SYNC_ON_START_KEY)) },
++                save = { enabled -> store.putBoolean(ProfileScopedKey.of(AUTO_SYNC_ON_START_KEY), enabled) },
++                loadAggressiveMode = { store.getBoolean(ProfileScopedKey.of(AGGRESSIVE_MODE_KEY)) },
++                saveAggressiveMode = { enabled -> store.putBoolean(ProfileScopedKey.of(AGGRESSIVE_MODE_KEY), enabled) },
++                loadSyncToleranceMs = { store.getInt(ProfileScopedKey.of(SYNC_TOLERANCE_MS_KEY)) },
++                saveSyncToleranceMs = { toleranceMs -> store.putInt(ProfileScopedKey.of(SYNC_TOLERANCE_MS_KEY), toleranceMs) },
++                loadDebugLogs = { store.getBoolean(ProfileScopedKey.of(DEBUG_LOGS_KEY)) },
++                saveDebugLogs = { enabled -> store.putBoolean(ProfileScopedKey.of(DEBUG_LOGS_KEY), enabled) },
++                loadAudioFallback = { store.getBoolean(ProfileScopedKey.of(AUDIO_FALLBACK_KEY)) },
++                saveAudioFallback = { enabled -> store.putBoolean(ProfileScopedKey.of(AUDIO_FALLBACK_KEY), enabled) },
++                loadShowStatistics = { store.getBoolean(ProfileScopedKey.of(SHOW_STATISTICS_KEY)) },
++                saveShowStatistics = { enabled -> store.putBoolean(ProfileScopedKey.of(SHOW_STATISTICS_KEY), enabled) },
++            )
++            // One-time migration: the old cue-reference engine's enable toggle becomes the
++            // mobile-style auto-sync-at-start toggle when the new keys were never written.
++            AutoSyncPreferencesRepository.ensureLoaded()
++            val newUserValue = store.getBoolean(ProfileScopedKey.of(AUTO_SYNC_ON_START_KEY))
++            if (newUserValue == null &&
++                !AutoSyncPreferencesRepository.preferredSubtitleAutoSyncOnStart.value
++            ) {
++                when (DesktopStorage.store(LEGACY_STORE_NAME).getBoolean(LEGACY_ENABLED_KEY)) {
++                    // The user had the old engine on: keep it on.
++                    true -> AutoSyncPreferencesRepository.setPreferredSubtitleAutoSyncOnStart(true)
++                    // The user explicitly turned the old engine off: respect that.
++                    false -> Unit
++                    // Never chose anywhere (fresh install): this fork exists to play with
++                    // AutoSync, so start with it on instead of a silent no-op engine.
++                    null -> AutoSyncPreferencesRepository.setPreferredSubtitleAutoSyncOnStart(true)
++                }
++            }
++            installed = true
++        }
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncSubtitleCueParser.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncSubtitleCueParser.kt
+new file mode 100644
+index 000000000..14b0669b6
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncSubtitleCueParser.kt
+@@ -0,0 +1,414 @@
++package com.nuvio.app.features.player.autosync
++
++import com.nuvio.app.features.player.SubtitleSyncCue
++import kotlin.math.max
++
++/**
++ * AutoSync's subtitle cue parser (SRT, WebVTT, ASS/SSA and TTML), with cooperative cancellation
++ * for long files. Nuvio TV's own [com.nuvio.app.features.player.PlayerSubtitleCueParser] only
++ * reads SRT and WebVTT, so AutoSync keeps this one to itself and leaves Nuvio's untouched.
++ */
++internal object AutoSyncSubtitleCueParser {
++    private val timestampRegex = Regex("""(?:(\d+):)?(\d{1,2}):(\d{2})([.,](\d+))?""")
++    private const val CANCELLATION_CHECK_INTERVAL = 64
++
++    fun parse(text: String, sourceUrl: String? = null): List<SubtitleSyncCue> =
++        parse(
++            text = text,
++            sourceUrl = sourceUrl,
++            cancellationCheck = null,
++        )
++
++    internal fun parse(
++        text: String,
++        sourceUrl: String?,
++        cancellationCheck: (() -> Unit)?,
++    ): List<SubtitleSyncCue> {
++        cancellationCheck?.invoke()
++        val cleanedText = cleanText(text)
++        cancellationCheck?.invoke()
++        return when (detectSubtitleFormat(sourceUrl, cleanedText)) {
++            SubtitleFormatHint.WebVtt -> parseVtt(cleanedText, cancellationCheck)
++            SubtitleFormatHint.Ass -> parseAss(cleanedText, cancellationCheck)
++            SubtitleFormatHint.Ttml -> parseTtml(cleanedText, cancellationCheck)
++            SubtitleFormatHint.Srt -> parseSrt(cleanedText, cancellationCheck)
++        }
++    }
++
++    private fun cleanText(rawText: String): String =
++        rawText
++            .replace("\uFEFF", "")
++            .replace("\r\n", "\n")
++            .replace('\r', '\n')
++
++    private enum class SubtitleFormatHint {
++        Srt,
++        WebVtt,
++        Ass,
++        Ttml,
++    }
++
++    private fun detectSubtitleFormat(sourceUrl: String?, text: String): SubtitleFormatHint {
++        val sourcePath = sourceUrl
++            ?.substringBefore('?')
++            ?.substringBefore('#')
++            ?.lowercase()
++            .orEmpty()
++        val sample = text.take(4_096).lowercase()
++
++        return when {
++            sourcePath.endsWith(".vtt") || sourcePath.endsWith(".webvtt") || text.trimStart().startsWith("WEBVTT") ->
++                SubtitleFormatHint.WebVtt
++            sourcePath.endsWith(".ass") || sourcePath.endsWith(".ssa") ||
++                (sample.contains("[events]") && sample.contains("dialogue:")) ->
++                SubtitleFormatHint.Ass
++            sourcePath.endsWith(".ttml") || sourcePath.endsWith(".dfxp") || sourcePath.endsWith(".xml") ||
++                Regex("""<tt[\s>]""", RegexOption.IGNORE_CASE).containsMatchIn(text.take(512)) ->
++                SubtitleFormatHint.Ttml
++            else -> SubtitleFormatHint.Srt
++        }
++    }
++
++    private fun parseSrt(
++        text: String,
++        cancellationCheck: (() -> Unit)? = null,
++    ): List<SubtitleSyncCue> {
++        val blocks = text.split(Regex("""\n\s*\n"""))
++        val cues = mutableListOf<SubtitleSyncCue>()
++        var cancellationCounter = 0
++        for (block in blocks) {
++            checkCancellation(cancellationCounter++, cancellationCheck)
++            val lines = block
++                .lines()
++                .map { it.trim() }
++                .filter { it.isNotEmpty() }
++            if (lines.isEmpty()) continue
++
++            var index = 0
++            if (lines[index].all { it.isDigit() } && index + 1 < lines.size) {
++                index++
++            }
++            val timing = lines.getOrNull(index) ?: continue
++            if (!timing.contains("-->")) continue
++            val (startTimeMs, endTimeMs) = parseStartEndTimeMs(timing) ?: continue
++            if (endTimeMs - startTimeMs <= 0) continue
++            val textLines = lines.drop(index + 1)
++            val cueText = normalizeCueText(textLines.joinToString("\n"))
++            if (cueText.isBlank()) continue
++            cues += SubtitleSyncCue(startTimeMs = startTimeMs, endTimeMs = endTimeMs, text = cueText)
++        }
++        return cues
++    }
++
++    private fun parseVtt(
++        text: String,
++        cancellationCheck: (() -> Unit)? = null,
++    ): List<SubtitleSyncCue> {
++        val lines = text
++            .lines()
++            .map { it.trimEnd() }
++
++        val cues = mutableListOf<SubtitleSyncCue>()
++        var cursor = 0
++        var cancellationCounter = 0
++
++        while (cursor < lines.size) {
++            checkCancellation(cancellationCounter++, cancellationCheck)
++            val line = lines[cursor].trim()
++            if (line.isBlank()) {
++                cursor++
++                continue
++            }
++            if (line.startsWith("WEBVTT")) {
++                cursor++
++                continue
++            }
++            if (isWebVttMetadataBlockHeader(line)) {
++                val nextLine = lines.getOrNull(cursor + 1)?.trim().orEmpty()
++                if (nextLine.isEmpty() || !nextLine.contains("-->")) {
++                    cursor = skipWebVttBlock(lines, cursor + 1)
++                    continue
++                }
++            }
++
++            var timingLine = line
++            var textStart = cursor + 1
++            if (!timingLine.contains("-->")) {
++                timingLine = lines.getOrNull(cursor + 1)?.trim().orEmpty()
++                textStart = cursor + 2
++            }
++            if (!timingLine.contains("-->")) {
++                cursor++
++                continue
++            }
++
++            val (startTimeMs, endTimeMs) = parseStartEndTimeMs(timingLine) ?: run {
++                cursor++
++                continue
++            }
++            if (endTimeMs - startTimeMs <= 0) {
++                cursor++
++                continue
++            }
++
++            val textParts = mutableListOf<String>()
++            var i = textStart
++            while (i < lines.size && lines[i].isNotBlank()) {
++                textParts += lines[i].trim()
++                i++
++            }
++            val cueText = normalizeCueText(textParts.joinToString("\n"))
++            if (cueText.isNotBlank()) {
++                cues += SubtitleSyncCue(startTimeMs = startTimeMs, endTimeMs = endTimeMs, text = cueText)
++            }
++            cursor = i + 1
++        }
++
++        return cues
++    }
++
++    private val defaultAssFormatFields = listOf(
++        "Layer",
++        "Start",
++        "End",
++        "Style",
++        "Name",
++        "MarginL",
++        "MarginR",
++        "MarginV",
++        "Effect",
++        "Text",
++    )
++
++    private fun parseAss(
++        text: String,
++        cancellationCheck: (() -> Unit)? = null,
++    ): List<SubtitleSyncCue> {
++        var inEventsSection = false
++        var formatFields: List<String>? = null
++        var cancellationCounter = 0
++
++        val cues = text.lines()
++            .mapNotNull { rawLine ->
++                checkCancellation(cancellationCounter++, cancellationCheck)
++                val line = rawLine.trim()
++                when {
++                    line.equals("[Events]", ignoreCase = true) -> {
++                        inEventsSection = true
++                        null
++                    }
++                    line.startsWith("[") && line.endsWith("]") -> {
++                        inEventsSection = false
++                        null
++                    }
++                    inEventsSection && line.startsWith("Format:", ignoreCase = true) -> {
++                        formatFields = line.substringAfter(':')
++                            .split(',')
++                            .map { it.trim() }
++                        null
++                    }
++                    inEventsSection && line.startsWith("Dialogue:", ignoreCase = true) ->
++                        parseAssDialogue(line.substringAfter(':'), formatFields)
++                    else -> null
++                }
++            }
++        cancellationCheck?.invoke()
++        return cues.sortedBy { it.startTimeMs }
++    }
++
++    private fun parseAssDialogue(payload: String, formatFields: List<String>?): SubtitleSyncCue? {
++        val fields = formatFields.orEmpty()
++        val parts = payload
++            .split(',', limit = fields.ifEmpty { defaultAssFormatFields }.size)
++            .map { it.trim() }
++        val startIndex = fields.indexOfField("Start").takeIf { it >= 0 } ?: 1
++        val endIndex = fields.indexOfField("End").takeIf { it >= 0 } ?: 2
++        val textIndex = fields.indexOfField("Text").takeIf { it >= 0 } ?: 9
++
++        if (parts.size <= startIndex || parts.size <= textIndex) return null
++        val start = parseTimestampMs(parts[startIndex]) ?: return null
++        val end = parts.getOrNull(endIndex)?.let { parseTimestampMs(it) } ?: (start + 3000L)
++        if (end - start <= 0) return null
++        val body = normalizeCueText(
++            parts[textIndex]
++                .replace(Regex("""\{[^}]*}"""), "")
++                .replace("\\N", "\n")
++                .replace("\\n", "\n")
++                .replace("\\h", " ")
++        )
++        return if (body.isBlank()) null else SubtitleSyncCue(startTimeMs = start, endTimeMs = end, text = body)
++    }
++
++    private fun parseTtml(
++        text: String,
++        cancellationCheck: (() -> Unit)? = null,
++    ): List<SubtitleSyncCue> {
++        val frameRate = parseTtmlFrameRate(text)
++        var cancellationCounter = 0
++        val cues = Regex("""(?is)<p\b([^>]*)>(.*?)</p>""")
++            .findAll(text)
++            .mapNotNull { match ->
++                checkCancellation(cancellationCounter++, cancellationCheck)
++                val attrs = match.groupValues[1]
++                val startRaw = attrs.attributeValue("begin")
++                    ?: attrs.attributeValue("start")
++                    ?: return@mapNotNull null
++                val endRaw = attrs.attributeValue("end")
++                val start = parseTtmlTimestamp(startRaw, frameRate) ?: return@mapNotNull null
++                val end = endRaw?.let { parseTtmlTimestamp(it, frameRate) } ?: (start + 3000L)
++                if (end - start <= 0) return@mapNotNull null
++                val body = normalizeCueText(
++                    match.groupValues[2]
++                        .replace(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE), "\n")
++                )
++                if (body.isBlank()) null else SubtitleSyncCue(startTimeMs = start, endTimeMs = end, text = body)
++            }
++            .toList()
++        cancellationCheck?.invoke()
++        return cues.sortedBy { it.startTimeMs }
++    }
++
++    private fun parseTtmlFrameRate(text: String): Double {
++        val rootAttributes = Regex("""(?is)<tt\b([^>]*)>""")
++            .find(text)
++            ?.groupValues
++            ?.getOrNull(1)
++            .orEmpty()
++        val baseFrameRate =
++            rootAttributes.attributeValue("ttp:frameRate")?.toDoubleOrNull()
++                ?: rootAttributes.attributeValue("frameRate")?.toDoubleOrNull()
++                ?: 30.0
++        val multiplierRaw =
++            rootAttributes.attributeValue("ttp:frameRateMultiplier")
++                ?: rootAttributes.attributeValue("frameRateMultiplier")
++        val multiplier = multiplierRaw
++            ?.trim()
++            ?.split(Regex("""\s+"""))
++            ?.takeIf { it.size == 2 }
++            ?.let { parts ->
++                val numerator = parts[0].toDoubleOrNull()
++                val denominator = parts[1].toDoubleOrNull()
++                if (numerator != null && denominator != null && denominator > 0.0) {
++                    numerator / denominator
++                } else {
++                    null
++                }
++            }
++            ?: 1.0
++        val effective = baseFrameRate * multiplier
++        return effective.takeIf { it.isFinite() && it > 0.0 } ?: 30.0
++    }
++
++    private fun parseTtmlTimestamp(raw: String, frameRate: Double): Long? {
++        val cleaned = raw.trim().substringBefore(' ')
++        if (cleaned.isBlank()) return null
++
++        parseClockTimeWithFrames(cleaned, frameRate)?.let { return it }
++        parseTimestampMs(cleaned)?.let { return it }
++
++        val match = Regex("""^([0-9]+(?:\.[0-9]+)?)(ms|h|m|s)$""", RegexOption.IGNORE_CASE)
++            .matchEntire(cleaned)
++            ?: return null
++        val value = match.groupValues[1].toDoubleOrNull() ?: return null
++        val multiplier = when (match.groupValues[2].lowercase()) {
++            "h" -> 3_600_000.0
++            "m" -> 60_000.0
++            "s" -> 1_000.0
++            "ms" -> 1.0
++            else -> return null
++        }
++        return max(0L, (value * multiplier).toLong())
++    }
++
++    private fun parseClockTimeWithFrames(raw: String, frameRate: Double): Long? {
++        if (!frameRate.isFinite() || frameRate <= 0.0) return null
++        val parts = raw.split(':')
++        if (parts.size != 4) return null
++
++        val hours = parts[0].toLongOrNull() ?: return null
++        val minutes = parts[1].toLongOrNull() ?: return null
++        val seconds = parts[2].toLongOrNull() ?: return null
++        val frames = parts[3].toDoubleOrNull() ?: return null
++        val frameMs = frames * 1_000.0 / frameRate
++        return max(
++            0L,
++            (hours * 3_600_000.0 + minutes * 60_000.0 + seconds * 1_000.0 + frameMs).toLong(),
++        )
++    }
++
++    private fun isWebVttMetadataBlockHeader(line: String): Boolean {
++        return line == "STYLE" ||
++            line == "REGION" ||
++            line == "NOTE" ||
++            line.startsWith("NOTE ") ||
++            line.startsWith("NOTE\t")
++    }
++
++    private fun skipWebVttBlock(lines: List<String>, start: Int): Int {
++        var cursor = start
++        while (cursor < lines.size && lines[cursor].isNotBlank()) {
++            cursor++
++        }
++        return if (cursor < lines.size) cursor + 1 else cursor
++    }
++
++    private fun parseStartEndTimeMs(timingLine: String): Pair<Long, Long>? {
++        val parts = timingLine.split("-->")
++        if (parts.size != 2) return null
++        val startTimeMs = parseTimestampMs(parts[0].trim().substringBefore(' ')) ?: return null
++        val endTimeMs = parseTimestampMs(parts[1].trim().substringBefore(' ')) ?: return null
++        return startTimeMs to endTimeMs
++    }
++
++    private fun parseTimestampMs(rawTimestamp: String): Long? {
++        val match = timestampRegex.matchEntire(rawTimestamp.trim()) ?: return null
++        val hours = match.groupValues[1].toLongOrNull() ?: 0L
++        val minutes = match.groupValues[2].toLongOrNull() ?: 0L
++        val seconds = match.groupValues[3].toLongOrNull() ?: 0L
++        val millisRaw = match.groupValues[5]
++        val millis = when (millisRaw.length) {
++            0 -> 0L
++            1 -> "${millisRaw}00".toLong()
++            2 -> "${millisRaw}0".toLong()
++            else -> millisRaw.take(3).toLongOrNull() ?: 0L
++        }
++        return ((hours * 3600L) + (minutes * 60L) + seconds) * 1000L + millis
++    }
++
++    private fun checkCancellation(
++        index: Int,
++        cancellationCheck: (() -> Unit)?,
++    ) {
++        if (
++            cancellationCheck != null &&
++            index % CANCELLATION_CHECK_INTERVAL == 0
++        ) {
++            cancellationCheck()
++        }
++    }
++
++    private fun List<String>.indexOfField(name: String): Int =
++        indexOfFirst { it.equals(name, ignoreCase = true) }
++
++    private fun String.attributeValue(name: String): String? =
++        Regex("""\b${Regex.escape(name)}\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
++            .find(this)
++            ?.groupValues
++            ?.getOrNull(1)
++            ?.takeIf { it.isNotBlank() }
++
++    private fun normalizeCueText(text: String): String {
++        return text
++            .replace(Regex("""<(?:\d+:)?\d{1,2}:\d{2}(?:[.,]\d+)?>"""), "")
++            .replace(Regex("""</?[a-zA-Z0-9._-]+(?: [^>]*)?>"""), "")
++            .replace("&nbsp;", " ")
++            .replace("&amp;", "&")
++            .replace("&lt;", "<")
++            .replace("&gt;", ">")
++            .replace("&quot;", "\"")
++            .lines()
++            .map { it.replace(Regex("""[ \t]+"""), " ").trim() }
++            .filter { it.isNotBlank() }
++            .joinToString("\n")
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncSubtitleHttp.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncSubtitleHttp.kt
+new file mode 100644
+index 000000000..8079a20b5
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncSubtitleHttp.kt
+@@ -0,0 +1,135 @@
++package com.nuvio.app.features.player.autosync
++
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.ensureActive
++import kotlinx.coroutines.withContext
++import java.io.ByteArrayOutputStream
++import java.net.URI
++import java.net.http.HttpClient
++import java.net.http.HttpRequest
++import java.net.http.HttpResponse
++import java.time.Duration
++import kotlin.text.Charsets
++
++/**
++ * AutoSync-only subtitle HTTP path (desktop replacement for NuvioTV's OkHttp-based AutoSyncSubtitleHttp, same name).
++ *
++ * Runs on Dispatchers.IO with a hard response-size cap; the read loop polls coroutine
++ * cancellation, and the request timeout bounds any straggling call.
++ */
++internal object AutoSyncSubtitleHttp {
++    private const val READ_BUFFER_BYTES = 32 * 1024
++    private const val INITIAL_BUFFER_BYTES = 64 * 1024
++    private const val TRUNCATION_SUFFIX = "\n...[truncated]"
++    private const val REQUEST_TIMEOUT_MS = 15_000L
++
++    private val httpClient: HttpClient = HttpClient.newBuilder()
++        .followRedirects(HttpClient.Redirect.NORMAL)
++        .connectTimeout(Duration.ofSeconds(5))
++        .build()
++
++    suspend fun get(
++        url: String,
++        headers: Map<String, String>,
++        maxResponseBodyBytes: Int,
++    ): AutoSyncRawHttpResponse {
++        val callerContext = currentCoroutineContext()
++        return withContext(Dispatchers.IO) {
++            try {
++                val requestBuilder = HttpRequest.newBuilder(URI.create(url))
++                    .GET()
++                    .timeout(Duration.ofMillis(REQUEST_TIMEOUT_MS))
++                headers.forEach { (name, value) ->
++                    // Let the HTTP stack negotiate transparent compression instead of forwarding
++                    // caller-provided Accept-Encoding, matching the TV build's raw-HTTP behavior.
++                    if (!name.equals("Accept-Encoding", ignoreCase = true)) {
++                        requestBuilder.header(name, value)
++                    }
++                }
++
++                val response = httpClient.send(
++                    requestBuilder.build(),
++                    HttpResponse.BodyHandlers.ofInputStream(),
++                )
++                response.body().use { stream ->
++                    val body = readResponseBodyLimited(
++                        stream = stream,
++                        maxBytes = maxResponseBodyBytes,
++                        contentType = response.headers().firstValue("Content-Type").orElse(null),
++                        onCancel = { callerContext.ensureActive() },
++                    )
++                    AutoSyncRawHttpResponse(
++                        status = response.statusCode(),
++                        statusText = "",
++                        url = response.uri().toString(),
++                        body = body,
++                        headers = response.headers().map()
++                            .mapKeys { (name, _) -> name.lowercase() }
++                            .mapValues { (_, values) -> values.joinToString(",") },
++                    )
++                }
++            } catch (cancel: CancellationException) {
++                throw cancel
++            } catch (error: Exception) {
++                callerContext.ensureActive()
++                throw error
++            }
++        }
++    }
++
++    private fun readResponseBodyLimited(
++        stream: java.io.InputStream,
++        maxBytes: Int,
++        contentType: String?,
++        onCancel: () -> Unit,
++    ): String {
++        val limit = maxBytes.coerceAtLeast(0)
++        val output = ByteArrayOutputStream(INITIAL_BUFFER_BYTES)
++        val buffer = ByteArray(READ_BUFFER_BYTES)
++        var remaining = limit
++        var truncated = false
++
++        while (remaining > 0) {
++            onCancel()
++            val read = stream.read(buffer, 0, minOf(buffer.size, remaining))
++            if (read < 0) break
++            if (read == 0) continue
++            output.write(buffer, 0, read)
++            remaining -= read
++        }
++
++        if (remaining == 0) {
++            truncated = stream.read() != -1
++        }
++
++        val bytes = output.toByteArray()
++        val charset = contentType
++            ?.substringAfter(';', "")
++            ?.trim()
++            ?.removePrefix("charset=")
++            ?.removePrefix("\"")
++            ?.trimEnd('"')
++            ?.takeIf { it.isNotBlank() }
++            ?.let { name ->
++                runCatching { java.nio.charset.Charset.forName(name) }.getOrNull()
++            }
++            ?: Charsets.UTF_8
++        val decoded = try {
++            String(bytes, charset)
++        } catch (_: Exception) {
++            String(bytes, Charsets.UTF_8)
++        }
++
++        return if (truncated) "$decoded$TRUNCATION_SUFFIX" else decoded
++    }
++}
++
++internal data class AutoSyncRawHttpResponse(
++    val status: Int,
++    val statusText: String,
++    val url: String,
++    val body: String,
++    val headers: Map<String, String>,
++)
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncTimelineRetime.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncTimelineRetime.kt
+new file mode 100644
+index 000000000..70eedbcbc
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncTimelineRetime.kt
+@@ -0,0 +1,108 @@
++package com.nuvio.app.features.player.autosync
++
++import com.nuvio.app.features.player.SubtitleSyncCue
++import kotlin.math.abs
++
++/**
++ * The retime shape the desktop AutoSync engine hands to [PlayerAutoSyncBridge]: the retimed cue
++ * list plus the linear transform (media time = subtitle time * alignmentScale +
++ * alignmentInterceptMs) that produced it. The old cue-reference engine's group matching lived
++ * here too; the speech-based engine (features.player.audiosync) only ever produces whole-file
++ * transforms, so only the model remains.
++ */
++internal data class AutoSyncCueGroup(
++    val referenceStartIndex: Int,
++    val referenceCount: Int,
++    val targetStartIndex: Int,
++    val targetCount: Int,
++    val cost: Double,
++)
++
++internal data class AutoSyncRetimedCue(
++    val originalStartTimeMs: Long,
++    val originalEndTimeMs: Long,
++    val startTimeMs: Long,
++    val endTimeMs: Long,
++)
++
++internal data class AutoSyncTimelineRetimeResult(
++    val cues: List<AutoSyncRetimedCue>,
++    val groups: List<AutoSyncCueGroup>,
++    val targetCoverage: Double,
++    val referenceCoverage: Double,
++    val skippedTargetCues: Int,
++    val skippedReferenceCues: Int,
++    val longestTargetSkipRun: Int,
++    val averageGroupCost: Double,
++    val oneToOneGroups: Int,
++    val oneToTwoGroups: Int,
++    val twoToOneGroups: Int,
++    val oneToThreeGroups: Int,
++    val threeToOneGroups: Int,
++    val twoToTwoGroups: Int,
++    val confident: Boolean,
++    val alignmentSource: String = "provided",
++    val alignmentScale: Double = 1.0,
++    val alignmentInterceptMs: Double = 0.0,
++    val activityScore: Double = 0.0,
++    val activityMargin: Double = 0.0,
++    val coverageSegmentsPassed: Int = 0,
++    val simpleGroupRatio: Double = 0.0,
++    val localizedMismatchIgnored: Boolean = false,
++    /** Median |offset| matched groups still needed after the alignment transform. */
++    val medianGroupResidualMs: Double = 0.0,
++    /** Failed confidence gates, for debug logs; null when confident. */
++    val rejectReason: String? = null,
++)
++
++/**
++ * Largest correction the alignment transform applies anywhere in the subtitle's span. The
++ * transform is linear, so the extremes are at the first and last cue.
++ */
++internal fun AutoSyncTimelineRetimeResult.maxAlignmentShiftMs(): Double {
++    fun shiftAt(timeMs: Long): Double = abs((alignmentScale - 1.0) * timeMs + alignmentInterceptMs)
++    val first = cues.firstOrNull()?.originalStartTimeMs ?: return abs(alignmentInterceptMs)
++    return maxOf(shiftAt(first), shiftAt(cues.last().originalStartTimeMs))
++}
++
++/**
++ * Builds the whole-file retime a speech alignment found: every cue maps through
++ * media = subtitle * [scale] + [shiftMs].
++ */
++internal fun constantShiftRetime(
++    cues: List<SubtitleSyncCue>,
++    scale: Double,
++    shiftMs: Double,
++    source: String,
++    activityScore: Double,
++): AutoSyncTimelineRetimeResult {
++    val retimed = cues.map { cue ->
++        AutoSyncRetimedCue(
++            originalStartTimeMs = cue.startTimeMs,
++            originalEndTimeMs = cue.endTimeMs,
++            startTimeMs = (cue.startTimeMs * scale + shiftMs).toLong().coerceAtLeast(0L),
++            endTimeMs = (cue.endTimeMs * scale + shiftMs).toLong().coerceAtLeast(0L),
++        )
++    }
++    return AutoSyncTimelineRetimeResult(
++        cues = retimed,
++        groups = emptyList(),
++        targetCoverage = 1.0,
++        referenceCoverage = 1.0,
++        skippedTargetCues = 0,
++        skippedReferenceCues = 0,
++        longestTargetSkipRun = 0,
++        averageGroupCost = 0.0,
++        oneToOneGroups = retimed.size,
++        oneToTwoGroups = 0,
++        twoToOneGroups = 0,
++        oneToThreeGroups = 0,
++        threeToOneGroups = 0,
++        twoToTwoGroups = 0,
++        confident = true,
++        alignmentSource = source,
++        alignmentScale = scale,
++        alignmentInterceptMs = shiftMs,
++        activityScore = activityScore,
++    )
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/PlayerAutoSyncBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/PlayerAutoSyncBridge.kt
+new file mode 100644
+index 000000000..55659328e
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/PlayerAutoSyncBridge.kt
+@@ -0,0 +1,213 @@
++package com.nuvio.app.features.player.autosync
++
++import com.nuvio.app.core.storage.DesktopStorage
++import com.nuvio.app.features.player.PlayerEngineController
++import com.nuvio.app.features.player.SubtitleSyncCue
++import java.nio.file.Files
++import java.nio.file.Path
++import java.nio.file.StandardCopyOption
++import kotlin.math.abs
++import kotlin.math.roundToLong
++
++private const val BOUNDARY_TOLERANCE_MS = 500L
++private const val DIRECT_INDEX_TOLERANCE_MS = 50L
++private const val RETIMED_FILES_TO_KEEP = 4
++
++/**
++ * Applies an AutoSync retiming to the mpv-based desktop player. mpv cannot retime a loaded
++ * subtitle track, so the confident path materializes the retimed cues as a temporary SRT file
++ * and swaps the external track onto it; the caller resets mpv's sub-delay first so the baked
++ * correction is not applied twice.
++ */
++internal object PlayerAutoSyncBridge {
++    private val retimeDir: Path by lazy {
++        DesktopStorage.cacheDir.resolve("autosync").also { Files.createDirectories(it) }
++    }
++
++    /**
++     * Writes [cues] retimed by [timeline] to a temp SRT file, clears any manual sub-delay and
++     * swaps the player's external subtitle to the retimed file. Returns false when nothing was
++     * written (the caller then attaches the original subtitle unchanged).
++     */
++    /** Nuvio fork: the last retimed subtitle as SRT, saved as a synced subtitle on success. */
++    @Volatile
++    var lastRetimedSrt: String? = null
++
++    fun attachRetimedSubtitle(
++        base: PlayerEngineController,
++        cues: List<SubtitleSyncCue>,
++        timeline: AutoSyncTimelineRetimeResult,
++    ): Boolean {
++        if (cues.isEmpty() || timeline.cues.isEmpty()) return false
++        val retimed = retimeCues(cues, timeline)
++        if (retimed.isEmpty()) return false
++        val file = try {
++            writeRetimedSrt(retimed)
++        } catch (_: Exception) {
++            return false
++        }
++        // mpv's sub-delay is global and sticky across sub-add; zero it before the swap so the
++        // baked correction is not doubled. This also clears the controller's pending delay.
++        base.setSubtitleDelayMs(0)
++        base.setSubtitleUri(file.toAbsolutePath().toString())
++        pruneOldRetimeFiles(keep = file)
++        return true
++    }
++
++    /** Port of the TV sidecar bridge's retime mapping (direct index, boundaries, affine). */
++    private fun retimeCues(
++        source: List<SubtitleSyncCue>,
++        timeline: AutoSyncTimelineRetimeResult,
++    ): List<SubtitleSyncCue> {
++        retimeByIndexIfCompatible(source, timeline)?.let { direct -> return direct }
++
++        val startBoundaries = ArrayList<TimingBoundary>(timeline.cues.size)
++        val endBoundaries = ArrayList<TimingBoundary>(timeline.cues.size)
++        timeline.cues.forEach { cue ->
++            startBoundaries += TimingBoundary(cue.originalStartTimeMs, cue.startTimeMs)
++            endBoundaries += TimingBoundary(cue.originalEndTimeMs, cue.endTimeMs)
++        }
++        startBoundaries.sortBy { it.originalMs }
++        endBoundaries.sortBy { it.originalMs }
++
++        fun mapTime(originalMs: Long, boundaries: List<TimingBoundary>): Long {
++            if (boundaries.isNotEmpty()) {
++                var low = 0
++                var high = boundaries.size
++                while (low < high) {
++                    val mid = (low + high) ushr 1
++                    if (boundaries[mid].originalMs < originalMs) low = mid + 1 else high = mid
++                }
++
++                val first = (low - 2).coerceAtLeast(0)
++                val last = (low + 2).coerceAtMost(boundaries.lastIndex)
++                var best: TimingBoundary? = null
++                var bestError = Long.MAX_VALUE
++                if (first <= last) {
++                    for (index in first..last) {
++                        val candidate = boundaries[index]
++                        val error = abs(candidate.originalMs - originalMs)
++                        if (error < bestError) {
++                            best = candidate
++                            bestError = error
++                        }
++                    }
++                }
++                if (best != null && bestError <= BOUNDARY_TOLERANCE_MS) {
++                    return best.retimedMs.coerceAtLeast(0L)
++                }
++            }
++
++            return (
++                originalMs.toDouble() * timeline.alignmentScale +
++                    timeline.alignmentInterceptMs
++                ).roundToLong().coerceAtLeast(0L)
++        }
++
++        val out = ArrayList<SubtitleSyncCue>(source.size)
++        source.forEach { cue ->
++            val startMs = mapTime(cue.startTimeMs, startBoundaries)
++            val endMs = mapTime(cue.endTimeMs, endBoundaries).coerceAtLeast(startMs + 1L)
++            out += cue.copy(startTimeMs = startMs, endTimeMs = endMs)
++        }
++
++        clampIntroducedOverlaps(source, out)
++        return out
++    }
++
++    private fun retimeByIndexIfCompatible(
++        source: List<SubtitleSyncCue>,
++        timeline: AutoSyncTimelineRetimeResult,
++    ): List<SubtitleSyncCue>? {
++        if (source.size != timeline.cues.size || source.isEmpty()) return null
++
++        val out = ArrayList<SubtitleSyncCue>(source.size)
++        for (index in source.indices) {
++            val entry = source[index]
++            val originalStartMs = entry.startTimeMs
++            val originalEndMs = entry.endTimeMs.coerceAtLeast(originalStartMs + 1L)
++
++            val retimedCue = timeline.cues[index]
++            if (
++                abs(originalStartMs - retimedCue.originalStartTimeMs) > DIRECT_INDEX_TOLERANCE_MS ||
++                abs(originalEndMs - retimedCue.originalEndTimeMs) > DIRECT_INDEX_TOLERANCE_MS
++            ) {
++                return null
++            }
++
++            val startMs = retimedCue.startTimeMs.coerceAtLeast(0L)
++            val endMs = retimedCue.endTimeMs.coerceAtLeast(startMs + 1L)
++            out += entry.copy(startTimeMs = startMs, endTimeMs = endMs)
++        }
++
++        clampIntroducedOverlaps(source, out)
++        return out
++    }
++
++    /** A retimed cue must not swallow a source-next cue that used to start after it. */
++    private fun clampIntroducedOverlaps(
++        source: List<SubtitleSyncCue>,
++        out: MutableList<SubtitleSyncCue>,
++    ) {
++        for (index in 0 until out.lastIndex) {
++            val sourceCurrent = source[index]
++            val sourceNext = source[index + 1]
++            if (sourceCurrent.endTimeMs <= sourceNext.startTimeMs) continue
++
++            val current = out[index]
++            val next = out[index + 1]
++            if (current.endTimeMs > next.startTimeMs && next.startTimeMs > current.startTimeMs) {
++                out[index] = current.copy(
++                    endTimeMs = next.startTimeMs.coerceAtLeast(current.startTimeMs + 1L),
++                )
++            }
++        }
++    }
++
++    private fun writeRetimedSrt(cues: List<SubtitleSyncCue>): Path {
++        val file = Files.createTempFile(retimeDir, "retime-", ".srt")
++        val builder = StringBuilder(cues.size * 48)
++        cues.forEachIndexed { index, cue ->
++            builder.append(index + 1).append('\n')
++            builder.append(formatSrtTime(cue.startTimeMs)).append(" --> ")
++                .append(formatSrtTime(cue.endTimeMs)).append('\n')
++            builder.append(cue.text.trim().ifEmpty { " " }).append("\n\n")
++        }
++        lastRetimedSrt = builder.toString() // Nuvio fork: synced subtitles
++        val tmp = file.resolveSibling(file.fileName.toString() + ".part")
++        Files.writeString(tmp, builder.toString(), Charsets.UTF_8)
++        Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING)
++        return file
++    }
++
++    private fun formatSrtTime(timeMs: Long): String {
++        val safe = timeMs.coerceAtLeast(0L)
++        val hours = safe / 3_600_000L
++        val minutes = (safe / 60_000L) % 60L
++        val seconds = (safe / 1_000L) % 60L
++        val millis = safe % 1_000L
++        return "%02d:%02d:%02d,%03d".format(hours, minutes, seconds, millis)
++    }
++
++    private fun pruneOldRetimeFiles(keep: Path) {
++        runCatching {
++            Files.list(retimeDir).use { stream ->
++                stream
++                    .filter { path ->
++                        path != keep &&
++                            path.fileName.toString().startsWith("retime-") &&
++                            path.fileName.toString().endsWith(".srt")
++                    }
++                    .sorted(Comparator.comparing { path: Path -> path.fileName.toString() }
++                        .reversed())
++                    .skip((RETIMED_FILES_TO_KEEP - 1).coerceAtLeast(0).toLong())
++                    .forEach { path -> runCatching { Files.deleteIfExists(path) } }
++            }
++        }
++    }
++}
++
++private data class TimingBoundary(
++    val originalMs: Long,
++    val retimedMs: Long,
++)
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/SubtitleLanguageMatching.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/SubtitleLanguageMatching.kt
+new file mode 100644
+index 000000000..4edf6ee72
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/SubtitleLanguageMatching.kt
+@@ -0,0 +1,387 @@
++package com.nuvio.app.features.player.autosync
++
++internal object SubtitleLanguageMatching {
++    internal val BRAZILIAN_TAGS = listOf(
++        "pt-br", "pt_br", "pob", "brazilian", "brazil", "brasil", "brasileiro", " br", "(br)",
++    )
++    internal val EUROPEAN_PT_TAGS = listOf(
++        "pt-pt", "pt_pt", "iberian", "european", "portugal", "europeu", " eu", "(eu)",
++    )
++    internal val LATINO_TAGS = listOf(
++        "es-419", "es_419", "es-la", "es-lat", "latino", "latinoamerica",
++        "latinoamericano", "latam", "lat am", "latin america",
++    )
++    internal val CASTILIAN_TAGS = listOf(
++        "es-es", "es_es", "castilian", "castellano", "spain", "españa", "espana", "iberian",
++    )
++    internal val INDONESIAN_TAGS = listOf(
++        "indonesia", "indonesian", "bahasa indonesia",
++    )
++
++    private val LANGUAGE_OVERRIDES = mapOf(
++        "pt" to "pt",
++        "pt-pt" to "pt",
++        "pt_pt" to "pt",
++        "por" to "pt",
++        "pt-br" to "pt-br",
++        "pt_br" to "pt-br",
++        "br" to "pt-br",
++        "pob" to "pt-br",
++        "fre" to "fr",
++        "ger" to "de",
++        "deu" to "de",
++        "dut" to "nl",
++        "nld" to "nl",
++        "chi" to "zh",
++        "zho" to "zh",
++        "jpn" to "ja",
++        "kor" to "ko",
++        "ara" to "ar",
++        "hin" to "hi",
++        "rus" to "ru",
++        "pol" to "pl",
++        "spa" to "es",
++        "spl" to "es-419",
++        "es-419" to "es-419",
++        "es_419" to "es-419",
++        "es-la" to "es-419",
++        "es-lat" to "es-419",
++        "fra" to "fr",
++        "ita" to "it",
++        "eng" to "en",
++        "swe" to "sv",
++        "nor" to "no",
++        "dan" to "da",
++        "fin" to "fi",
++        "tur" to "tr",
++        "ell" to "el",
++        "gre" to "el",
++        "heb" to "he",
++        "tha" to "th",
++        "vie" to "vi",
++        "ind" to "id",
++        "msa" to "ms",
++        "may" to "ms",
++        "ces" to "cs",
++        "cze" to "cs",
++        "hun" to "hu",
++        "ron" to "ro",
++        "rum" to "ro",
++        "ukr" to "uk",
++        "bul" to "bg",
++        "hrv" to "hr",
++        "srp" to "sr",
++        "slk" to "sk",
++        "slo" to "sk",
++        "slv" to "sl",
++        "zht" to "zh-tw",
++        "zhs" to "zh-cn",
++        "chi-tw" to "zh-tw",
++        "chi-cn" to "zh-cn",
++        "zh-tw" to "zh-tw",
++        "zh_tw" to "zh-tw",
++        "zh-cn" to "zh-cn",
++        "zh_cn" to "zh-cn",
++        "cat" to "ca",
++        "alb" to "sq",
++        "sqi" to "sq",
++        "bos" to "bs",
++        "mac" to "mk",
++        "mkd" to "mk",
++        "lav" to "lv",
++        "lit" to "lt",
++        "est" to "et",
++        "isl" to "is",
++        "ice" to "is",
++        "glg" to "gl",
++        "baq" to "eu",
++        "eus" to "eu",
++        "wel" to "cy",
++        "cym" to "cy",
++        "gle" to "ga",
++        "ben" to "bn",
++        "tam" to "ta",
++        "tel" to "te",
++        "mal" to "ml",
++        "kan" to "kn",
++        "mar" to "mr",
++        "pan" to "pa",
++        "guj" to "gu",
++        "urd" to "ur",
++        "fas" to "fa",
++        "per" to "fa",
++        "amh" to "am",
++        "swa" to "sw",
++        "zul" to "zu",
++        "afr" to "af",
++        "mlt" to "mt",
++        "bel" to "be",
++        "geo" to "ka",
++        "kat" to "ka",
++        "arm" to "hy",
++        "hye" to "hy",
++        "aze" to "az",
++        "kaz" to "kk",
++        "uzb" to "uz",
++        "mon" to "mn",
++        "khm" to "km",
++        "lao" to "lo",
++        "mya" to "my",
++        "bur" to "my",
++        "sin" to "si",
++        "nep" to "ne",
++        "tgl" to "tl",
++        "fil" to "tl",
++    )
++
++    private val LANGUAGE_NAMES = mapOf(
++        "af" to "afrikaans",
++        "sq" to "albanian",
++        "am" to "amharic",
++        "ar" to "arabic",
++        "hy" to "armenian",
++        "az" to "azerbaijani",
++        "eu" to "basque",
++        "be" to "belarusian",
++        "bn" to "bengali",
++        "bs" to "bosnian",
++        "bg" to "bulgarian",
++        "my" to "burmese",
++        "ca" to "catalan",
++        "zh" to "chinese",
++        "zh-cn" to "chinese",
++        "zh-tw" to "chinese",
++        "hr" to "croatian",
++        "cs" to "czech",
++        "da" to "danish",
++        "nl" to "dutch",
++        "en" to "english",
++        "et" to "estonian",
++        "tl" to "filipino",
++        "fi" to "finnish",
++        "fr" to "french",
++        "gl" to "galician",
++        "ka" to "georgian",
++        "de" to "german",
++        "el" to "greek",
++        "gu" to "gujarati",
++        "he" to "hebrew",
++        "hi" to "hindi",
++        "hu" to "hungarian",
++        "is" to "icelandic",
++        "id" to "indonesian",
++        "ga" to "irish",
++        "it" to "italian",
++        "ja" to "japanese",
++        "kn" to "kannada",
++        "kk" to "kazakh",
++        "km" to "khmer",
++        "ko" to "korean",
++        "lo" to "lao",
++        "lv" to "latvian",
++        "lt" to "lithuanian",
++        "mk" to "macedonian",
++        "ms" to "malay",
++        "ml" to "malayalam",
++        "mt" to "maltese",
++        "mr" to "marathi",
++        "mn" to "mongolian",
++        "ne" to "nepali",
++        "no" to "norwegian",
++        "pa" to "punjabi",
++        "fa" to "persian",
++        "pl" to "polish",
++        "pt" to "portuguese",
++        "pt-br" to "portuguese",
++        "ro" to "romanian",
++        "ru" to "russian",
++        "sr" to "serbian",
++        "si" to "sinhala",
++        "sk" to "slovak",
++        "sl" to "slovenian",
++        "es" to "spanish",
++        "es-419" to "spanish",
++        "sw" to "swahili",
++        "sv" to "swedish",
++        "ta" to "tamil",
++        "te" to "telugu",
++        "th" to "thai",
++        "tr" to "turkish",
++        "uk" to "ukrainian",
++        "ur" to "urdu",
++        "uz" to "uzbek",
++        "vi" to "vietnamese",
++        "cy" to "welsh",
++        "zu" to "zulu",
++    )
++
++    fun normalizeLanguageCode(lang: String): String {
++        val code = lang.trim().lowercase()
++        if (code.isBlank()) return ""
++
++        val normalizedCode = code.replace('_', '-')
++        val tokenized = normalizedCode
++            .replace('-', ' ')
++            .replace('.', ' ')
++            .replace('/', ' ')
++            .replace(Regex("\\s+"), " ")
++            .trim()
++
++        fun containsAny(vararg values: String): Boolean = values.any { value ->
++            tokenized.contains(value)
++        }
++
++        if (containsAny("portuguese", "portugues")) {
++            return when {
++                containsAny("brazil", "brasil", "brazilian", "brasileiro", "pt br", "ptbr", "pob", "(br)") ->
++                    "pt-br"
++                containsAny("portugal", "european", "europeu", "iberian", "pt pt", "ptpt") ->
++                    "pt"
++                else -> "pt"
++            }
++        }
++
++        if (containsAny("spanish", "espanol", "español", "castellano")) {
++            return if (containsAny(
++                    "latin",
++                    "latino",
++                    "latinoamerica",
++                    "latinoamericano",
++                    "lat am",
++                    "latam",
++                    "es 419",
++                    "es419",
++                    "la",
++                    "(419)",
++                )
++            ) {
++                "es-419"
++            } else {
++                "es"
++            }
++        }
++
++        if (containsAny("bahasa indonesia", "indonesian", "indonesia")) {
++            return "id"
++        }
++        if (containsAny("bahasa malaysia", "bahasa melayu", "malaysian")) {
++            return "ms"
++        }
++
++        return LANGUAGE_OVERRIDES[code] ?: normalizedCode
++    }
++
++    fun matchesLanguageCode(language: String?, target: String): Boolean {
++        if (language.isNullOrBlank()) return false
++        val normalizedLanguage = normalizeLanguageCode(language)
++        val normalizedTarget = normalizeLanguageCode(target)
++        if (matchesNormalizedLanguage(normalizedLanguage, normalizedTarget)) {
++            return true
++        }
++
++        val subtags = language.trim().lowercase()
++            .replace('_', '-')
++            .split('-', '.', '/', ' ')
++            .map { it.trim() }
++            .filter { it.isNotBlank() }
++        if (subtags.size <= 1) return false
++        for (subtag in subtags.drop(1)) {
++            if (subtag.length != 3) continue
++            val normalizedSubtag = normalizeLanguageCode(subtag)
++            if (matchesNormalizedLanguage(normalizedSubtag, normalizedTarget)) {
++                return true
++            }
++        }
++        return false
++    }
++
++    private fun matchesNormalizedLanguage(
++        normalizedLanguage: String,
++        normalizedTarget: String,
++    ): Boolean {
++        if (normalizedTarget == "pt") return normalizedLanguage == "pt"
++        if (normalizedTarget == "es") return normalizedLanguage == "es"
++        return normalizedLanguage == normalizedTarget ||
++            normalizedLanguage.startsWith("$normalizedTarget-") ||
++            normalizedLanguage.startsWith("${normalizedTarget}_")
++    }
++
++    fun detectTrackLanguageVariant(language: String?, name: String?, trackId: String?): String {
++        val baseLang = normalizeLanguageCode(language ?: "")
++        val haystack = listOfNotNull(name, language, trackId)
++            .joinToString(" ")
++            .lowercase()
++
++        if (baseLang == "pt" || baseLang == "por") {
++            val hasBrazilian = BRAZILIAN_TAGS.any { haystack.contains(it) }
++            val hasEuropean = EUROPEAN_PT_TAGS.any { haystack.contains(it) }
++            if (hasBrazilian && !hasEuropean) return "pt-br"
++            if (hasEuropean && !hasBrazilian) return "pt"
++            return baseLang
++        }
++
++        if (baseLang == "es" || baseLang == "spa") {
++            val hasLatino = LATINO_TAGS.any { haystack.contains(it) }
++            val hasCastilian = CASTILIAN_TAGS.any { haystack.contains(it) }
++            if (hasLatino && !hasCastilian) return "es-419"
++            if (hasCastilian && !hasLatino) return "es"
++            return baseLang
++        }
++
++        if (baseLang == "ms" || baseLang == "msa" || baseLang == "may") {
++            val hasIndonesian = INDONESIAN_TAGS.any { haystack.contains(it) }
++            if (hasIndonesian) return "id"
++            return baseLang
++        }
++
++        return baseLang
++    }
++
++    fun languageCodeToName(code: String): String {
++        val normalized = normalizeLanguageCode(code)
++        if (normalized == "none") return "none"
++        if (normalized == "und" || normalized == "unknown" || normalized == "unk") return "unknown"
++        return LANGUAGE_NAMES[normalized] ?: LANGUAGE_NAMES[normalized.substringBefore('-')] ?: normalized
++    }
++
++    fun languageCodeAppearsInHaystack(haystack: String, normalizedTarget: String): Boolean {
++        if (normalizedTarget.isBlank()) return false
++        var searchFrom = 0
++        while (searchFrom <= haystack.length - normalizedTarget.length) {
++            val matchIndex = haystack.indexOf(normalizedTarget, startIndex = searchFrom)
++            if (matchIndex < 0) return false
++
++            val before = matchIndex - 1
++            val after = matchIndex + normalizedTarget.length
++            val startsAtBoundary = before < 0 || !haystack[before].isLetterOrDigit()
++            val endsAtBoundary = after >= haystack.length || !haystack[after].isLetterOrDigit()
++            if (startsAtBoundary && endsAtBoundary) return true
++
++            searchFrom = matchIndex + 1
++        }
++        return false
++    }
++
++    fun trackMatchesLanguage(
++        name: String?,
++        language: String?,
++        trackId: String?,
++        target: String,
++    ): Boolean {
++        if (matchesLanguageCode(language, target)) return true
++        val normalizedTarget = normalizeLanguageCode(target)
++        val targetName = languageCodeToName(target)
++        val haystack = listOfNotNull(name, language, trackId)
++            .joinToString(" ")
++            .lowercase()
++        return languageCodeAppearsInHaystack(haystack, normalizedTarget) ||
++            (targetName.isNotBlank() && haystack.contains(targetName))
++    }
++
++    fun subtitleHasAnyTag(name: String?, language: String?, trackId: String?, tags: List<String>): Boolean {
++        val haystack = listOfNotNull(name, language, trackId)
++            .joinToString(" ")
++            .lowercase()
++        return tags.any { tag -> haystack.contains(tag) }
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index 45c048b2f..65f16e25c 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -333,6 +333,12 @@ internal class NativePlayerController(
+                             .onFailure { error -> recordTerminalDisposeFailure(error, "superseded create", created) }
+                         return@onSuccess
+                     }
++                    // Custom subtitle font (Nuvio fork): sub-fonts-dir must be set before the
++                    // first subtitle renders, and sub-font picks the imported family. The
++                    // connection-fit feed learns throughput from this handle's reads.
++                    com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.activeHandle = created
++                    com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.applyToPlayer()
++                    com.nuvio.app.features.player.ConnectionFitDesktopFeed.start(created)
+                     SwingUtilities.invokeLater {
+                         val shouldConfigure = synchronized(lifecycleLock) {
+                             when {
+@@ -800,6 +806,7 @@ internal class NativePlayerController(
+                     val current = if (failureMessage == null) detachPlayerHandle() else 0L
+                     if (current != 0L) {
+                         log.d { "pre-navigation dispose started handle=$current" }
++                        invalidateHandleUsersBeforeDispose(current)
+                         runCatching { nativeDispose(current) }
+                             .onSuccess { log.d { "pre-navigation dispose completed handle=$current" } }
+                             .onFailure { error ->
+@@ -964,7 +971,20 @@ internal class NativePlayerController(
+     }
+ 
+     /** Must be called while holding [lifecycleLock]. */
++    /**
++     * Fork: background users of [current] must drop it BEFORE any destroy starts, and their
++     * in-flight JNI calls must have drained - the native side turns the handle back into the
++     * Objective-C player with no lifetime check, so a straggler read is a guaranteed SIGABRT
++     * (seen in the macOS crash reports). EVERY nativeDispose path calls this first.
++     */
++    private fun invalidateHandleUsersBeforeDispose(current: Long) {
++        com.nuvio.app.features.player.ConnectionFitDesktopFeed.stop()
++        com.nuvio.app.features.player.generated.GeneratedSubtitlesDesktop.onPlayerHandleDisposed(current)
++        com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.clearActiveHandle(current)
++    }
++
+     private fun startTrackedDisposeLocked(current: Long) {
++        invalidateHandleUsersBeforeDispose(current)
+         val prior = disposeInFlight?.takeIf { it.isAlive }
+         disposeInFlight = Thread(
+             {
+@@ -1678,6 +1698,12 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+         appendJsonField("notificationMessage", notificationMessage)
+         append(',')
+         appendJsonField("notificationToken", notificationToken)
++        append(',')
++        appendJsonField("autoSyncBubbleKind", autoSyncBubbleKind)
++        append(',')
++        appendJsonField("autoSyncBubbleMessage", autoSyncBubbleMessage)
++        append(',')
++        appendJsonField("autoSyncBubbleToken", autoSyncBubbleToken)
+         append(",\"party\":")
+         append(partyJson.encodeToString(PlayerControlPartyState.serializer(), party.withWebviewImages(onImageReady)))
+         append('}')
+@@ -1880,6 +1906,8 @@ private fun StringBuilder.appendSubtitleOptionItemJson(item: PlayerControlSubtit
+     appendJsonField("metadata", item.metadata)
+     append(',')
+     appendJsonField("isSelected", item.isSelected)
++    append(',')
++    appendJsonField("autoSynced", item.autoSynced)
+     append('}')
+ }
+ 
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/composeApp/src/desktopMain/resources/player-ui/controls.css
+index e9227237b..043b09257 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.css
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
+@@ -292,6 +292,139 @@ button:disabled {
+   pointer-events: none;
+ }
+ 
++/* AutoSync bubble (NuvioMobile-Reshaped style) */
++.autosync-bubble {
++  position: absolute;
++  top: calc(20px + env(safe-area-inset-top));
++  left: 50%;
++  z-index: 43;
++  max-width: min(420px, calc(100% - 40px));
++  min-height: 46px;
++  padding: 8px 18px 8px 8px;
++  border: 1px solid rgba(255, 255, 255, .16);
++  border-radius: 23px;
++  background:
++    linear-gradient(180deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, .02)),
++    rgba(42, 42, 46, .72);
++  color: #fff;
++  box-shadow: 0 18px 44px rgba(0, 0, 0, .36), inset 0 1px 0 rgba(255, 255, 255, .14);
++  display: flex;
++  align-items: center;
++  gap: 11px;
++  opacity: 0;
++  transform: translate3d(-50%, -14px, 0) scale(.92);
++  pointer-events: none;
++  backdrop-filter: blur(22px) saturate(1.35);
++  -webkit-backdrop-filter: blur(22px) saturate(1.35);
++  transition:
++    opacity 280ms var(--ease-out),
++    transform 380ms cubic-bezier(.34, 1.56, .64, 1),
++    border-color 300ms var(--ease-out);
++  will-change: opacity, transform;
++}
++
++.autosync-bubble.visible {
++  opacity: 1;
++  transform: translate3d(-50%, 0, 0) scale(1);
++}
++
++.autosync-bubble.visible.pop .autosync-orb {
++  animation: autosync-orb-pop 420ms cubic-bezier(.34, 1.56, .64, 1);
++}
++
++.autosync-bubble[data-kind="success"] { border-color: rgba(48, 209, 88, .45); }
++.autosync-bubble[data-kind="failure"] { border-color: rgba(255, 69, 58, .45); }
++
++.player.opening-active .autosync-bubble,
++.player.error-active .autosync-bubble {
++  opacity: 0;
++}
++
++.autosync-orb {
++  position: relative;
++  width: 30px;
++  height: 30px;
++  flex-shrink: 0;
++  border-radius: 50%;
++  background: rgba(255, 255, 255, .12);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  transition: background-color 300ms var(--ease-out);
++}
++
++.autosync-bubble[data-kind="success"] .autosync-orb { background: #30d158; }
++.autosync-bubble[data-kind="failure"] .autosync-orb { background: #ff453a; }
++
++.autosync-orb-spinner {
++  width: 18px;
++  height: 18px;
++  border-radius: 50%;
++  border: 2.4px solid rgba(255, 255, 255, .25);
++  border-top-color: #fff;
++  animation: autosync-spin 900ms linear infinite;
++}
++
++.autosync-orb-icon {
++  display: none;
++  width: 18px;
++  height: 18px;
++  fill: none;
++  stroke: #fff;
++  stroke-width: 2.6;
++  stroke-linecap: round;
++  stroke-linejoin: round;
++}
++
++.autosync-bubble:not([data-kind="working"]) .autosync-orb-spinner { display: none; }
++.autosync-bubble[data-kind="success"] .autosync-orb-check,
++.autosync-bubble[data-kind="failure"] .autosync-orb-cross { display: block; }
++
++.autosync-text {
++  display: flex;
++  flex-direction: column;
++  min-width: 0;
++  line-height: 1.25;
++}
++
++.autosync-label {
++  font-size: 11px;
++  font-weight: 600;
++  letter-spacing: .02em;
++  color: rgba(255, 255, 255, .55);
++}
++
++.autosync-headline {
++  font-size: 14px;
++  font-weight: 650;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.autosync-detail {
++  font-size: 12px;
++  color: rgba(255, 255, 255, .62);
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++@keyframes autosync-spin {
++  to { transform: rotate(360deg); }
++}
++
++@keyframes autosync-orb-pop {
++  0% { transform: scale(.6); }
++  100% { transform: scale(1); }
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .autosync-bubble { transition: opacity 200ms linear; }
++  .autosync-orb-spinner { animation-duration: 2400ms; }
++  .autosync-bubble.visible.pop .autosync-orb { animation: none; }
++}
++
+ [hidden] {
+   display: none !important;
+ }
+@@ -2642,6 +2775,22 @@ button:disabled {
+   white-space: nowrap;
+ }
+ 
++.subtitle-autosync-chip {
++  align-self: flex-start;
++  padding: 2px 7px;
++  border-radius: 999px;
++  background: rgba(255, 255, 255, .1);
++  color: rgba(255, 255, 255, .88);
++  font-size: 10px;
++  line-height: 13px;
++  white-space: nowrap;
++}
++
++.subtitle-option-row.selected .subtitle-autosync-chip {
++  background: rgba(255, 255, 255, .18);
++  color: rgba(255, 255, 255, .95);
++}
++
+ .subtitle-option-row.selected .subtitle-source-chip {
+   border: 1px solid rgba(255, 255, 255, .22);
+   background: rgba(255, 255, 255, .14);
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
+index a6854130a..5b359e2c5 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.html
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.html
+@@ -258,6 +258,19 @@
+           </div>
+         </div>
+       </section>
++      <!-- AutoSync bubble (NuvioMobile-Reshaped style): progress and result of a subtitle sync -->
++      <section class="autosync-bubble" id="autoSyncBubble" data-kind="working" aria-live="polite" aria-atomic="true" aria-hidden="true">
++        <span class="autosync-orb" aria-hidden="true">
++          <span class="autosync-orb-spinner"></span>
++          <svg class="autosync-orb-icon autosync-orb-check" viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>
++          <svg class="autosync-orb-icon autosync-orb-cross" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>
++        </span>
++        <span class="autosync-text">
++          <span class="autosync-label">Auto Sync</span>
++          <span class="autosync-headline" id="autoSyncBubbleHeadline"></span>
++          <span class="autosync-detail" id="autoSyncBubbleDetail" hidden></span>
++        </span>
++      </section>
+       <section class="player-toast" id="playerToast" aria-live="polite" aria-atomic="true" aria-hidden="true">
+         <svg class="player-toast-icon" id="playerToastIcon" aria-hidden="true" hidden><use id="playerToastIconUse" href="#icon-speed"></use></svg>
+         <span class="player-toast-text" id="playerToastText"></span>
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
+index bf6b22009..4f1ccccc4 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.js
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
+@@ -356,6 +356,9 @@ let state = {
+   submitIntroContentKey: "",
+   notificationMessage: "",
+   notificationToken: 0,
++  autoSyncBubbleKind: "",
++  autoSyncBubbleMessage: "",
++  autoSyncBubbleToken: 0,
+ };
+ let isScrubbing = false;
+ let scrubPositionMs = 0;
+@@ -468,6 +471,45 @@ const chromeActivityThrottleMs = 300;
+ const hiddenCursorHideDelayMs = 3000;
+ const cursorActivityThrottleMs = 100;
+ const playerToastDurationMs = 1400;
++
++// AutoSync bubble (NuvioMobile-Reshaped style). Messages read "Auto Sync • headline • detail";
++// the bubble already says Auto Sync, so it shows the rest. A "working" bubble stays until its
++// result (or a dismiss) arrives; results fade out on their own.
++const autoSyncBubble = document.getElementById("autoSyncBubble");
++const autoSyncBubbleHeadline = document.getElementById("autoSyncBubbleHeadline");
++const autoSyncBubbleDetail = document.getElementById("autoSyncBubbleDetail");
++const autoSyncBubbleDurations = { working: 90000, success: 3200, failure: 5200 };
++let autoSyncBubbleTimer = 0;
++
++const hideAutoSyncBubble = () => {
++  if (!autoSyncBubble) return;
++  window.clearTimeout(autoSyncBubbleTimer);
++  autoSyncBubble.classList.remove("visible");
++  autoSyncBubble.setAttribute("aria-hidden", "true");
++};
++
++const showAutoSyncBubble = (kind, message) => {
++  if (!autoSyncBubble || !autoSyncBubbleHeadline || !autoSyncBubbleDetail) return;
++  if (kind === "dismiss" || !(kind in autoSyncBubbleDurations)) {
++    hideAutoSyncBubble();
++    return;
++  }
++  const parts = String(message || "").split(" • ").map(part => part.trim()).filter(Boolean);
++  const body = parts.length > 1 ? parts.slice(1) : parts;
++  const capitalized = text => text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
++  const headline = kind === "working" ? body[body.length - 1] || "" : body[0] || "";
++  const detail = kind === "working" ? "" : body.slice(1).join(" · ");
++  autoSyncBubbleHeadline.textContent = capitalized(headline);
++  autoSyncBubbleDetail.textContent = capitalized(detail);
++  autoSyncBubbleDetail.hidden = !detail;
++  autoSyncBubble.dataset.kind = kind;
++  autoSyncBubble.setAttribute("aria-hidden", "false");
++  autoSyncBubble.classList.remove("pop");
++  void autoSyncBubble.offsetWidth;
++  autoSyncBubble.classList.add("visible", "pop");
++  window.clearTimeout(autoSyncBubbleTimer);
++  autoSyncBubbleTimer = window.setTimeout(hideAutoSyncBubble, autoSyncBubbleDurations[kind]);
++};
+ const chromeInteractionSelector = [
+   "button",
+   "input",
+@@ -1173,6 +1215,7 @@ const subtitleSelectionOptions = () => normalizeItems(state.subtitleOptionItems)
+   title: String(item.title || ""),
+   metadata: String(item.metadata || ""),
+   selected: Boolean(item.isSelected),
++  autoSynced: Boolean(item.autoSynced),
+   index: Number(item.index) || 0,
+ }));
+ 
+@@ -1256,6 +1299,12 @@ const appendSubtitleOptionRow = option => {
+     metadata.textContent = option.metadata;
+     copy.appendChild(metadata);
+   }
++  if (option.autoSynced) {
++    const chip = document.createElement("span");
++    chip.className = "subtitle-autosync-chip";
++    chip.textContent = state.autoSyncedChipLabel || "Auto synced";
++    copy.appendChild(chip);
++  }
+   row.appendChild(copy);
+   row.appendChild(buildCheckIcon());
+   addonSubtitleList.appendChild(row);
+@@ -3225,6 +3274,7 @@ window.playerControls = nextState => {
+   const previousCloseToken = Number(state.closeModalsToken) || 0;
+   const previousSubmitIntroSuccessToken = Number(state.submitIntroSuccessToken) || 0;
+   const previousNotificationToken = Number(state.notificationToken) || 0;
++  const previousAutoSyncBubbleToken = Number(state.autoSyncBubbleToken) || 0;
+   const previousResizeLabel = state.resizeModeLabel || "";
+   const previousSpeedLabel = state.playbackSpeedLabel || "";
+   const previousEpisodeStreamsVisible = Boolean(state.episodeStreamsVisible);
+@@ -3261,6 +3311,10 @@ window.playerControls = nextState => {
+   if (notificationToken !== previousNotificationToken) {
+     showPlayerToast(state.notificationMessage);
+   }
++  const autoSyncBubbleToken = Number(state.autoSyncBubbleToken) || 0;
++  if (autoSyncBubbleToken !== previousAutoSyncBubbleToken) {
++    showAutoSyncBubble(state.autoSyncBubbleKind || "", state.autoSyncBubbleMessage || "");
++  }
+   if (!replayingParty) applyPartyControls(previousParty);
+   if (state.showP2pConsent && activeModal !== "p2pConsent") {
+     openPlayerModal("p2pConsent");
