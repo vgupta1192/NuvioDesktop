@@ -77,7 +77,7 @@ index b3665232a..90d5c0737 100644
          PlayerEpisodesPanel(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
 new file mode 100644
-index 000000000..cf0e0b2b2
+index 000000000..088ade6ca
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
 @@ -0,0 +1,351 @@
@@ -198,7 +198,7 @@ index 000000000..cf0e0b2b2
 +     * "tt…:S:E" on some platforms and bare "tt…" on others, so lookups (and saves) cover both.
 +     */
 +    private fun videoIdVariants(videoId: String): List<String> {
-+        val stripped = videoId.replace(Regex("(:\d+)+$"), "")
++        val stripped = videoId.replace(Regex("(:\\d+)+$"), "")
 +        return if (stripped.isBlank() || stripped == videoId) listOf(videoId) else listOf(videoId, stripped)
 +    }
 +

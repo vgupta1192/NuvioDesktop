@@ -269,10 +269,18 @@ index 000000000..6426f118a
 +    fun deleteModels()
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
-index a1f0b278a..a424b2bd0 100644
+index a1f0b278a..85860029a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
-@@ -54,6 +54,9 @@ internal fun PlayerScreenRuntime.BindAutoSyncRuntimeEffects() {
+@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
+ import com.nuvio.app.features.autosync.AutoSyncPlayerController
+ import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
+ import com.nuvio.app.features.autosync.AutoSyncSubtitleCandidate
++import com.nuvio.app.features.streams.StreamSubtitle
+ import kotlinx.coroutines.flow.collect
+ 
+ private fun List<AddonSubtitle>.toAutoSyncCandidates(): List<AutoSyncSubtitleCandidate> =
+@@ -54,6 +55,9 @@ internal fun PlayerScreenRuntime.BindAutoSyncRuntimeEffects() {
          activeController?.let { configureAutoSyncController(it) }
          onDispose { activeController?.setAutoSyncAppliedListener(null) }
      }
@@ -282,14 +290,16 @@ index a1f0b278a..a424b2bd0 100644
      LaunchedEffect(playerController, playbackSnapshot.isLoading, isLoadingAddonSubtitles, addonSubtitles) {
          // Add-ons can finish after Nuvio has completed its first track scan with no subtitle.
          // Retry that automatic pick only for AutoSync, while the user still has no selection.
-@@ -68,6 +71,13 @@ internal fun PlayerScreenRuntime.BindAutoSyncRuntimeEffects() {
+@@ -68,6 +72,15 @@ internal fun PlayerScreenRuntime.BindAutoSyncRuntimeEffects() {
      LaunchedEffect(playerController, externalSubtitles) {
          val controller = playerController ?: return@LaunchedEffect
          SubtitleRepository.addonSubtitles.collect { repositorySubtitles ->
 +            // Stream-typed push (headers included) so the desktop engine can match and download
 +            // ANY picked subtitle; the player surface's own list only has the stream's.
 +            controller.setAutoSyncSubtitleStreamCandidates(
-+                repositorySubtitles + externalSubtitles.filter { sub ->
++                repositorySubtitles.map { addon ->
++                    StreamSubtitle(url = addon.url, language = addon.language, name = addon.display)
++                } + externalSubtitles.filter { sub ->
 +                    repositorySubtitles.none { it.url == sub.url }
 +                },
 +            )
