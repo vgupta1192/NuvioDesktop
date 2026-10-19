@@ -462,10 +462,10 @@ index 95fb67c5d..e25b324b4 100644
          },
          onFetchAddonSubtitles = { fetchAddonSubtitlesForActiveItem() },
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt
-index 228e2dd09..b4d979dc3 100644
+index 228e2dd09..e784a67b4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt
-@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
+@@ -4,13 +4,22 @@ import androidx.compose.runtime.Composable
  import androidx.compose.runtime.getValue
  import androidx.compose.runtime.remember
  import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -473,7 +473,22 @@ index 228e2dd09..b4d979dc3 100644
  import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
  import com.nuvio.app.features.player.SubtitleLanguageOption
  import com.nuvio.app.isIos
-@@ -38,6 +39,18 @@ internal fun AutoSyncPlaybackSettingsRows(
+ import nuvio.composeapp.generated.resources.Res
++import nuvio.composeapp.generated.resources.settings_playback_audio_sync_fallback
++import nuvio.composeapp.generated.resources.settings_playback_audio_sync_fallback_description
++import nuvio.composeapp.generated.resources.settings_playback_audio_sync_share_log
++import nuvio.composeapp.generated.resources.settings_playback_audio_sync_share_log_description
++import nuvio.composeapp.generated.resources.settings_playback_audio_sync_show_statistics
++import nuvio.composeapp.generated.resources.settings_playback_audio_sync_show_statistics_description
+ import nuvio.composeapp.generated.resources.settings_playback_auto_sync_mode_aggressive
+ import nuvio.composeapp.generated.resources.settings_playback_auto_sync_mode_aggressive_description
+ import nuvio.composeapp.generated.resources.settings_playback_auto_sync_mode_passive
++import nuvio.composeapp.generated.resources.settings_playback_auto_sync_debug_logs
++import nuvio.composeapp.generated.resources.settings_playback_auto_sync_debug_logs_description
+ import nuvio.composeapp.generated.resources.settings_playback_auto_sync_mode_passive_description
+ import nuvio.composeapp.generated.resources.settings_playback_auto_sync_tolerance
+ import nuvio.composeapp.generated.resources.settings_playback_auto_sync_tolerance_description
+@@ -38,6 +47,18 @@ internal fun AutoSyncPlaybackSettingsRows(
          AutoSyncPreferencesRepository.ensureLoaded()
          AutoSyncPreferencesRepository.syncToleranceMs
      }.collectAsStateWithLifecycle()
@@ -492,7 +507,7 @@ index 228e2dd09..b4d979dc3 100644
      if (isIos) return
  
      val preferredLanguageAvailable =
-@@ -98,4 +111,43 @@ internal fun AutoSyncPlaybackSettingsRows(
+@@ -98,4 +119,43 @@ internal fun AutoSyncPlaybackSettingsRows(
              AutoSyncPreferencesRepository.setSyncToleranceMs(next)
          },
      )
