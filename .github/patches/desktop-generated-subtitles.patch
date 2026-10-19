@@ -1368,7 +1368,7 @@ index 000000000..6436bef50
 +}.getOrNull()
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt
 new file mode 100644
-index 000000000..2a6ba92b8
+index 000000000..71db77740
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt
 @@ -0,0 +1,70 @@
@@ -1439,7 +1439,7 @@ index 000000000..2a6ba92b8
 +    fun install() {
 +        if (installed) return
 +        installed = true
-+        com.nuvio.app.features.autosync.AutoSyncDesktopHooks.shareLog = { this@SyncLog.share() }
++        com.nuvio.app.features.autosync.AutoSyncDesktopHooks.shareLog = SyncLog::share
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
