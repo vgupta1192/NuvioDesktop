@@ -77,10 +77,10 @@ index b3665232a..90d5c0737 100644
          PlayerEpisodesPanel(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
 new file mode 100644
-index 000000000..ee07d09c0
+index 000000000..cf0e0b2b2
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
-@@ -0,0 +1,333 @@
+@@ -0,0 +1,351 @@
 +package com.nuvio.app.features.player
 +
 +import androidx.compose.runtime.compositionLocalOf
@@ -193,6 +193,15 @@ index 000000000..ee07d09c0
 +        return keys.isNotEmpty() && streamKeys(stream).any { it in keys }
 +    }
 +
++    /**
++     * Rows for the same title can live under a sibling id spelling: episode playbacks are keyed
++     * "tt…:S:E" on some platforms and bare "tt…" on others, so lookups (and saves) cover both.
++     */
++    private fun videoIdVariants(videoId: String): List<String> {
++        val stripped = videoId.replace(Regex("(:\d+)+$"), "")
++        return if (stripped.isBlank() || stripped == videoId) listOf(videoId) else listOf(videoId, stripped)
++    }
++
 +    /** Loads the stream marks of [videoId] from the device, then from the account. */
 +    fun requestMarks(videoId: String) {
 +        if (videoId.isBlank()) return
@@ -200,13 +209,15 @@ index 000000000..ee07d09c0
 +            val local = localLoad?.invoke(indexName(videoId))?.lines()?.filter { it.isNotBlank() }?.toSet().orEmpty()
 +            if (local.isNotEmpty()) _marks.update { it + (videoId to (it[videoId].orEmpty() + local)) }
 +            val remote = runCatching {
-+                val result = SupabaseProvider.client.postgrest.rpc(
-+                    "synced_subtitles_list",
-+                    buildJsonObject { put("p_video_id", videoId) },
-+                )
-+                (Json.parseToJsonElement(result.data) as? JsonArray)
-+                    ?.mapNotNull { it.jsonPrimitive.contentOrNull }
-+                    ?.toSet()
++                videoIdVariants(videoId).flatMap { variant ->
++                    val result = SupabaseProvider.client.postgrest.rpc(
++                        "synced_subtitles_list",
++                        buildJsonObject { put("p_video_id", variant) },
++                    )
++                    (Json.parseToJsonElement(result.data) as? JsonArray)
++                        ?.mapNotNull { it.jsonPrimitive.contentOrNull }
++                        .orEmpty()
++                }.toSet()
 +            }.getOrNull() ?: return@launch
 +            _marks.update { it + (videoId to (it[videoId].orEmpty() + remote)) }
 +        }
@@ -228,16 +239,18 @@ index 000000000..ee07d09c0
 +            val local = localLoad?.invoke(fileName(next))?.let(::decodeList).orEmpty()
 +            log("synced subs: local file rows=${local.size}")
 +            if (local.isNotEmpty() && _playback.value == next) merge(next, local, store = false)
-+            val remote = runCatching {
-+                val result = SupabaseProvider.client.postgrest.rpc(
-+                    "synced_subtitles_pull_all",
-+                    buildJsonObject {
-+                        put("p_video_id", next.videoId)
-+                        put("p_stream_key", next.streamKey)
-+                    },
-+                )
-+                decodeList(result.data)
-+            }.getOrNull().orEmpty()
++            val remote = videoIdVariants(next.videoId).flatMap { variant ->
++                runCatching {
++                    val result = SupabaseProvider.client.postgrest.rpc(
++                        "synced_subtitles_pull_all",
++                        buildJsonObject {
++                            put("p_video_id", variant)
++                            put("p_stream_key", next.streamKey)
++                        },
++                    )
++                    decodeList(result.data)
++                }.getOrNull().orEmpty()
++            }
 +            log("synced subs: keyed pull rows=${remote.size}")
 +            if (remote.isNotEmpty() && _playback.value == next) merge(next, remote, store = true)
 +        }
@@ -246,20 +259,22 @@ index 000000000..ee07d09c0
 +        // Pull every key known for the video and merge without persisting locally.
 +        scope.launch {
 +            if (_playback.value != next || !_saved.value?.second.isNullOrEmpty()) return@launch
-+            val allKeys = runCatching {
-+                val result = SupabaseProvider.client.postgrest.rpc(
-+                    "synced_subtitles_list",
-+                    buildJsonObject { put("p_video_id", next.videoId) },
-+                )
-+                json.decodeFromString<List<String>>(result.data)
-+            }.getOrNull().orEmpty()
-+            for (key in allKeys) {
++            val keysByVariant = runCatching {
++                videoIdVariants(next.videoId).flatMap { variant ->
++                    val result = SupabaseProvider.client.postgrest.rpc(
++                        "synced_subtitles_list",
++                        buildJsonObject { put("p_video_id", variant) },
++                    )
++                    json.decodeFromString<List<String>>(result.data).map { key -> variant to key }
++                }
++            }.getOrNull().orEmpty().distinct()
++            for ((variant, key) in keysByVariant) {
 +                if (_playback.value != next) break
 +                val remote = runCatching {
 +                    val result = SupabaseProvider.client.postgrest.rpc(
 +                        "synced_subtitles_pull_all",
 +                        buildJsonObject {
-+                            put("p_video_id", next.videoId)
++                            put("p_video_id", variant)
 +                            put("p_stream_key", key)
 +                        },
 +                    )
@@ -364,16 +379,19 @@ index 000000000..ee07d09c0
 +        merge(playback, listOf(saved), store = true)
 +        val encoded = json.encodeToString(Saved.serializer(), saved)
 +        scope.launch {
-+            runCatching {
-+                SupabaseProvider.client.postgrest.rpc(
-+                    "synced_subtitles_push_one",
-+                    buildJsonObject {
-+                        put("p_video_id", playback.videoId)
-+                        put("p_stream_key", playback.streamKey)
-+                        put("p_subtitle_key", fnv64(url))
-+                        put("p_payload", Json.parseToJsonElement(encoded))
-+                    },
-+                )
++            // Both spellings, so devices that key episodes differently still find the timing.
++            for (variant in videoIdVariants(playback.videoId)) {
++                runCatching {
++                    SupabaseProvider.client.postgrest.rpc(
++                        "synced_subtitles_push_one",
++                        buildJsonObject {
++                            put("p_video_id", variant)
++                            put("p_stream_key", playback.streamKey)
++                            put("p_subtitle_key", fnv64(url))
++                            put("p_payload", Json.parseToJsonElement(encoded))
++                        },
++                    )
++                }
 +            }
 +        }
 +    }

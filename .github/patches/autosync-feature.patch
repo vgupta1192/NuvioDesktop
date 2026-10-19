@@ -1,10 +1,35 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
+index 211fe93b9..138adb598 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
+@@ -2,6 +2,7 @@ package com.nuvio.app.features.player
+ 
+ import com.nuvio.app.features.autosync.AutoSyncPlayerController
+ import com.nuvio.app.features.autosync.AutoSyncSubtitleCandidate
++import com.nuvio.app.features.streams.StreamSubtitle
+ 
+ internal fun PlayerEngineController.setAutoSyncSubtitleCandidates(
+     candidates: List<AutoSyncSubtitleCandidate>,
+@@ -32,3 +33,10 @@ internal fun PlayerEngineController.setAutoSyncAppliedListener(
+ ) {
+     (this as? AutoSyncPlayerController)?.setAutoSyncAppliedListener(listener)
+ }
++
++internal fun PlayerEngineController.setAutoSyncSubtitleStreamCandidates(
++    candidates: List<StreamSubtitle>,
++) {
++    (this as? com.nuvio.app.features.player.AutoSyncPlayerController)
++        ?.setAutoSyncSubtitleStreamCandidates(candidates)
++}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncContracts.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncContracts.kt
 new file mode 100644
-index 000000000..a0c55557c
+index 000000000..c19f0bd9f
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncContracts.kt
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,44 @@
 +package com.nuvio.app.features.player
++
++import com.nuvio.app.features.streams.StreamSubtitle
 +
 +/**
 + * Optional AutoSync (automatic subtitle sync) capability layered beside PlayerEngineController.
@@ -30,6 +55,14 @@ index 000000000..a0c55557c
 +     * bubble is turned on.
 +     */
 +    fun setAutoSyncBubbleListener(listener: ((kind: String, message: String) -> Unit)?) {}
++
++    /**
++     * Stream-typed candidates (carrying request headers): the stream's own subtitles plus every
++     * add-on's, pushed by the player runtime. The player surface's own list only ever contains
++     * the stream's subtitles - without this push, a picked add-on subtitle cannot be matched to
++     * a candidate and AutoSync silently skips it.
++     */
++    fun setAutoSyncSubtitleStreamCandidates(candidates: List<StreamSubtitle>) {}
 +}
 +
 +/** One downloadable add-on subtitle AutoSync may analyse or swap in as a better match. */
@@ -485,10 +518,10 @@ index 7ce25ea2c..531aafaba 100644
      LaunchedEffect(controller, sourceAvailable, playWhenReady) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 new file mode 100644
-index 000000000..fc180a6aa
+index 000000000..5758da77a
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-@@ -0,0 +1,393 @@
+@@ -0,0 +1,417 @@
 +package com.nuvio.app.features.player
 +
 +import co.touchlab.kermit.Logger
@@ -539,6 +572,30 @@ index 000000000..fc180a6aa
 +) : PlayerEngineController by base, AutoSyncPlayerController {
 +
 +    private var autoSyncJob: Job? = null
++
++    /** Stream-typed candidates (stream's own + every add-on's), pushed by the player runtime. */
++    @Volatile
++    private var streamCandidates: List<StreamSubtitle> = emptyList()
++
++    override fun setAutoSyncSubtitleStreamCandidates(candidates: List<StreamSubtitle>) {
++        streamCandidates = candidates
++    }
++
++    /**
++     * The player surface's list only ever contains the STREAM's own subtitles; without the
++     * runtime-pushed add-ons, a picked add-on subtitle fails the candidate match below and
++     * AutoSync silently skips it (no bubble, no sync) - exactly the "nothing happens" report.
++     */
++    private fun allSubtitleCandidates(): List<StreamSubtitle> {
++        val pushed = streamCandidates
++        val surface = subtitleCandidates()
++        if (pushed.isEmpty()) return surface
++        val merged = ArrayList(pushed)
++        for (subtitle in surface) {
++            if (merged.none { it.url == subtitle.url }) merged += subtitle
++        }
++        return merged
++    }
 +
 +    /** What this wrapper last attached: the selected URL, the retimed copy of it, or null. */
 +    @Volatile
@@ -685,10 +742,10 @@ index 000000000..fc180a6aa
 +            setSubtitleUri(selectedUrl)
 +            return
 +        }
-+        val selectedSubtitle = subtitleCandidates().firstOrNull { it.url == selectedUrl }
++        val selectedSubtitle = allSubtitleCandidates().firstOrNull { it.url == selectedUrl }
 +        if (selectedSubtitle == null) {
 +            autoSyncLog.i {
-+                "AutoSync skipped: the picked subtitle is not among the ${subtitleCandidates().size} stream candidates - plain attach"
++                "AutoSync skipped: the picked subtitle is not among the ${allSubtitleCandidates().size} stream candidates - plain attach"
 +            }
 +            setSubtitleUri(selectedUrl)
 +            return
@@ -734,7 +791,7 @@ index 000000000..fc180a6aa
 +                notifyAutoSync(bubbleRunId, "working", "Auto Sync • Listening for dialogue…", null)
 +                autoSyncLog.i {
 +                    "speech sync start: subtitle=${shortUrl(selectedUrl)} lang=${selectedLanguage.ifBlank { "?" }} " +
-+                        "startupScope=$startupScope candidates=${subtitleCandidates().size}"
++                        "startupScope=$startupScope candidates=${allSubtitleCandidates().size}"
 +                }
 +                SyncLog.i("speech sync start for ${shortUrl(selectedUrl)}")
 +
@@ -758,7 +815,7 @@ index 000000000..fc180a6aa
 +                // A blank language still runs the sync for the picked file itself; only the
 +                // alternative search needs a language to match against.
 +                val alternatives = if (startupScope && selectedLanguage.isNotBlank()) {
-+                    subtitleCandidates()
++                    allSubtitleCandidates()
 +                        .filter { it.url != selectedUrl && it.url != sourceUrlAtStart }
 +                        .distinctBy { it.url }
 +                        .filter { SubtitleLanguageMatching.matchesLanguageCode(it.language, selectedLanguage) }
