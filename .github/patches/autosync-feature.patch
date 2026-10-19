@@ -204,10 +204,27 @@ index 000000000..c19f0bd9f
 +    val name: String? = null,
 +)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
-index 9f276d756..4257e412f 100644
+index 9f276d756..1d46ca6a5 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
-@@ -262,6 +262,9 @@ data class PlayerControlsState(
+@@ -24,6 +24,16 @@ interface PlayerEngineController {
+     fun setSubtitleUri(url: String)
+     fun clearExternalSubtitle()
+     fun clearExternalSubtitleAndSelect(trackIndex: Int)
++
++    /** Media position of the playing stream right now, when the engine knows it. */
++    fun playPositionMs(): Long? = null
++
++    /**
++     * Record the playing stream's incoming data to [path]; pass null to stop. Returns false
++     * when the engine cannot record. Used by AutoSync to sample the audio already playing
++     * instead of downloading separate windows (mobile-parity "listening live").
++     */
++    fun setStreamRecordPath(path: String?): Boolean = false
+     fun applySubtitleStyle(style: SubtitleStyleState, useLibass: Boolean = false) {}
+     fun applySubtitlePreferences(
+         preferredLanguage: String,
+@@ -262,6 +272,9 @@ data class PlayerControlsState(
      val submitIntroSuccessToken: Long = 0L,
      val notificationMessage: String = "",
      val notificationToken: Long = 0L,
@@ -217,7 +234,7 @@ index 9f276d756..4257e412f 100644
      val party: PlayerControlPartyState = PlayerControlPartyState(),
  )
  
-@@ -342,6 +345,8 @@ data class PlayerControlSubtitleOptionItem(
+@@ -342,6 +355,8 @@ data class PlayerControlSubtitleOptionItem(
      val title: String = "",
      val metadata: String = "",
      val isSelected: Boolean = false,
@@ -757,10 +774,10 @@ index 7ce25ea2c..531aafaba 100644
      LaunchedEffect(controller, sourceAvailable, playWhenReady) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 new file mode 100644
-index 000000000..b5636c936
+index 000000000..e666fd834
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-@@ -0,0 +1,489 @@
+@@ -0,0 +1,491 @@
 +package com.nuvio.app.features.player
 +
 +import co.touchlab.kermit.Logger
@@ -1095,6 +1112,8 @@ index 000000000..b5636c936
 +                                selectedHeaders = selectedHeaders,
 +                                selectedBody = body,
 +                                alternatives = alternatives,
++                                playPositionMs = { base.playPositionMs() },
++                                streamRecorder = { path -> base.setStreamRecordPath(path) },
 +                            ),
 +                            onProgress = { text ->
 +                                if (stillRelevant()) {
@@ -2664,7 +2683,7 @@ index 000000000..4edf6ee72
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 45c048b2f..65f16e25c 100644
+index 45c048b2f..3fb59ef56 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 @@ -333,6 +333,12 @@ internal class NativePlayerController(
@@ -2680,7 +2699,30 @@ index 45c048b2f..65f16e25c 100644
                      SwingUtilities.invokeLater {
                          val shouldConfigure = synchronized(lifecycleLock) {
                              when {
-@@ -800,6 +806,7 @@ internal class NativePlayerController(
+@@ -762,6 +768,22 @@ internal class NativePlayerController(
+         releaseBeforeNavigation(onReleased, onReleaseFailed = {})
+     }
+ 
++    override fun playPositionMs(): Long? {
++        val current = handle
++        if (current == 0L) return null
++        return runCatching { NativePlayerBridge.positionMs(current) }
++            .getOrNull()
++            ?.takeIf { it >= 0L }
++    }
++
++    override fun setStreamRecordPath(path: String?): Boolean {
++        val current = handle
++        if (current == 0L) return false
++        return runCatching {
++            NativePlayerBridge.command(current, arrayOf("set", "stream-record", path.orEmpty()))
++        }.getOrDefault(false)
++    }
++
+     override fun releaseBeforeNavigation(
+         onReleased: () -> Unit,
+         onReleaseFailed: (String) -> Unit,
+@@ -800,6 +822,7 @@ internal class NativePlayerController(
                      val current = if (failureMessage == null) detachPlayerHandle() else 0L
                      if (current != 0L) {
                          log.d { "pre-navigation dispose started handle=$current" }
@@ -2688,7 +2730,7 @@ index 45c048b2f..65f16e25c 100644
                          runCatching { nativeDispose(current) }
                              .onSuccess { log.d { "pre-navigation dispose completed handle=$current" } }
                              .onFailure { error ->
-@@ -964,7 +971,20 @@ internal class NativePlayerController(
+@@ -964,7 +987,20 @@ internal class NativePlayerController(
      }
  
      /** Must be called while holding [lifecycleLock]. */
@@ -2709,7 +2751,7 @@ index 45c048b2f..65f16e25c 100644
          val prior = disposeInFlight?.takeIf { it.isAlive }
          disposeInFlight = Thread(
              {
-@@ -1678,6 +1698,12 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+@@ -1678,6 +1714,12 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
          appendJsonField("notificationMessage", notificationMessage)
          append(',')
          appendJsonField("notificationToken", notificationToken)
@@ -2722,7 +2764,7 @@ index 45c048b2f..65f16e25c 100644
          append(",\"party\":")
          append(partyJson.encodeToString(PlayerControlPartyState.serializer(), party.withWebviewImages(onImageReady)))
          append('}')
-@@ -1880,6 +1906,8 @@ private fun StringBuilder.appendSubtitleOptionItemJson(item: PlayerControlSubtit
+@@ -1880,6 +1922,8 @@ private fun StringBuilder.appendSubtitleOptionItemJson(item: PlayerControlSubtit
      appendJsonField("metadata", item.metadata)
      append(',')
      appendJsonField("isSelected", item.isSelected)

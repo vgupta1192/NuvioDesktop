@@ -1,9 +1,9 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
 new file mode 100644
-index 000000000..3d08d8036
+index 000000000..07e2fab48
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
-@@ -0,0 +1,159 @@
+@@ -0,0 +1,168 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.desktop.NativePlayerBridge
@@ -115,14 +115,23 @@ index 000000000..3d08d8036
 +    }
 +
 +    private fun javaLauncher(): String? {
-+        val home = System.getProperty("java.home")?.takeIf { it.isNotBlank() } ?: return null
-+        val executable = if (System.getProperty("os.name").orEmpty().lowercase().contains("win")) {
-+            "java.exe"
-+        } else {
-+            "java"
++        val isWindows = System.getProperty("os.name").orEmpty().lowercase().contains("win")
++        val executable = if (isWindows) "java.exe" else "java"
++        val candidates = ArrayList<String>()
++        // java.home pointed at a runtime WITHOUT bin/java on some packaged launches; the
++        // runtime bundled next to the app jar is the reliable second guess (jpackage layout:
++        // <app>/app/<jar> + <app>/runtime[/Contents/Home]/bin/java).
++        System.getProperty("java.home")?.takeIf { it.isNotBlank() }?.let { home ->
++            candidates += File(home, "bin/$executable").absolutePath
 +        }
-+        val launcher = File(home, "bin/$executable")
-+        return launcher.takeIf(File::isFile)?.absolutePath
++        codeSourceClasspath()?.let { cp ->
++            val appDir = File(cp).parentFile
++            if (appDir != null) {
++                candidates += File(appDir, "../runtime/Contents/Home/bin/$executable").normalize().absolutePath
++                candidates += File(appDir, "../runtime/bin/$executable").normalize().absolutePath
++            }
++        }
++        return candidates.firstOrNull { File(it).isFile }
 +    }
 +
 +    /**
@@ -814,10 +823,10 @@ index 000000000..6b15ded72
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 new file mode 100644
-index 000000000..b26cdb83a
+index 000000000..a799f5e1d
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
-@@ -0,0 +1,394 @@
+@@ -0,0 +1,485 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.SubtitleSyncCue
@@ -828,6 +837,7 @@ index 000000000..b26cdb83a
 +import kotlin.math.roundToLong
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.delay
 +import kotlinx.coroutines.ensureActive
 +import kotlinx.coroutines.withContext
 +
@@ -892,6 +902,10 @@ index 000000000..b26cdb83a
 +        val selectedBody: String,
 +        /** Alternatives in the selected subtitle's language (selected itself excluded). */
 +        val alternatives: List<Alternative>,
++        /** Live playback position in ms, when the player exposes it. */
++        val playPositionMs: (() -> Long?)? = null,
++        /** Starts/stops recording the playing stream's data; false when unsupported. */
++        val streamRecorder: ((path: String?) -> Boolean)? = null,
 +    )
 +
 +    /** A confirmed speech alignment for [subtitleUrl] (the selected one, or a switched-to file). */
@@ -977,6 +991,35 @@ index 000000000..b26cdb83a
 +            return lines.joinToString("\n")
 +        }
 +        onProgress("Listening for dialogue…\n" + panelLines(empty = true))
++
++        // Direct (non-HLS) windows cost a full extra download each (a 45 s window of a
++        // high-bitrate file is tens of MB, and every host we see throttles that). The audio
++        // the player is ALREADY playing is free: record the stream for 45 s of media time and
++        // decode the local copy - mobile's "listening live". Seek windows stay as the fallback.
++        if (playlist == null && request.streamRecorder != null && request.playPositionMs != null) {
++            SyncLog.i("speech sync: sampling the playing audio live (no extra downloads)")
++            var liveTries = 0
++            while (spots.size < 2 && liveTries < 2) {
++                currentCoroutineContext().ensureActive()
++                liveTries++
++                onProgress("Listening to the playing audio…\n" + panelLines())
++                val live = sampleLiveWindow(request, tmpDir)
++                if (live == null) {
++                    spotsFailed++
++                    recordStats()
++                    SyncLog.w("speech sync: live spot $liveTries failed (player not advancing or recording refused)")
++                    break
++                }
++                spots += live
++                recordStats()
++                SyncLog.i(
++                    "speech sync: live spot ${spots.size} at ${live.startMs / 1_000}s ok, " +
++                        "${live.speechMs / 1_000}s of speech",
++                )
++                onProgress("Listening to the playing audio… (${spots.size} ok · $spotsFailed failed)\n" + panelLines())
++                lockedFor(request, selectedCues, selectedTrack, spots, onProgress)?.let { return it }
++            }
++        }
 +
 +        // Direct (non-HLS) links can refuse the mid-file seek the planner picks (the seek needs
 +        // the mp4 index; some hosts throttle or block the range requests that fetch it). The
@@ -1130,6 +1173,63 @@ index 000000000..b26cdb83a
 +                for (frame in startFrame until endFrame) grid[frame] = 1.0f
 +            }
 +            SpeechSegment(from, grid)
++        }
++    }
++
++    /**
++     * Samples the audio the player is CURRENTLY playing: records the incoming stream data
++     * until [SPOT_MS] of media time passed (pauses just extend the wall wait), then decodes
++     * the local recording. Zero extra network load and immune to hosts that throttle the
++     * separate downloads a headless seek-dump needs. Null when not playing or recording is
++     * unsupported.
++     */
++    private suspend fun sampleLiveWindow(
++        request: Request,
++        tmpDir: File,
++    ): HlsAudioSpotSampler.Spot? {
++        val recorder = request.streamRecorder ?: return null
++        val startPos = request.playPositionMs?.invoke() ?: return null
++        if (startPos < 0) return null
++        tmpDir.mkdirs()
++        val recording = File(tmpDir, "nuvio-live-$startPos.bin")
++        val wav = File(tmpDir, "nuvio-live-$startPos.wav")
++        try {
++            recording.delete()
++            wav.delete()
++            if (!recorder(recording.absolutePath)) return null
++            var endPos = startPos
++            val deadline = System.currentTimeMillis() + SPOT_MS * 3 + 15_000
++            while (endPos - startPos < SPOT_MS && System.currentTimeMillis() < deadline) {
++                currentCoroutineContext().ensureActive()
++                delay(250)
++                endPos = request.playPositionMs?.invoke() ?: break
++                if (endPos < startPos - 5_000) break // seeked away; the span is unusable
++            }
++            recorder(null)
++            if (endPos < startPos || endPos - startPos < 15_000) return null
++            val spanMs = endPos - startPos
++            val dumped = runCatching {
++                synchronized(NativeDumpGate) {
++                    AudioDumpProcess.dumpAudioWav(
++                        url = recording.absolutePath,
++                        headerLines = arrayOf(),
++                        outPath = wav.absolutePath,
++                        startSec = 0.0,
++                        endSec = spanMs / 1000.0,
++                        timeoutSec = 60,
++                    )
++                }
++            }.getOrDefault(false)
++            if (!dumped || !wav.exists() || wav.length() < 800L) return null
++            val pcm = HlsAudioSpotSampler.readWavPcm(wav) ?: return null
++            val intervals = RmsVad.detect(pcm).map { (a, b) -> (a + startPos) to (b + startPos) }
++            val speechMs = intervals.sumOf { (a, b) -> b - a }
++            if (speechMs <= 0) return null
++            return HlsAudioSpotSampler.Spot(startPos, intervals, speechMs, recording.length())
++        } finally {
++            runCatching { recorder(null) }
++            recording.delete()
++            wav.delete()
 +        }
 +    }
 +
