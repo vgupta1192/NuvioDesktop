@@ -77,10 +77,10 @@ index b3665232a..90d5c0737 100644
          PlayerEpisodesPanel(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
 new file mode 100644
-index 000000000..864190ea4
+index 000000000..06f840348
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
-@@ -0,0 +1,355 @@
+@@ -0,0 +1,364 @@
 +package com.nuvio.app.features.player
 +
 +import androidx.compose.runtime.compositionLocalOf
@@ -346,6 +346,15 @@ index 000000000..864190ea4
 +
 +    /** The user picked a subtitle by hand in this playback; a saved one doesn't replace it. */
 +    var userPicked: Boolean = false
++
++    /**
++     * Any saved timing (this device's key or the video-wide pull) covering [url]'s file - the
++     * subtitle lists show their Auto synced chip from this.
++     */
++    fun isSyncedRow(url: String): Boolean {
++        val current = _saved.value ?: return false
++        return current.second.values.any { sameSubtitleFile(it.subtitleUrl, url) }
++    }
 +
 +    /** The saved synced subtitle for [url] in this playback, if any. */
 +    fun savedFor(url: String): Saved? {

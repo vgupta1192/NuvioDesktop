@@ -204,7 +204,7 @@ index 000000000..c19f0bd9f
 +    val name: String? = null,
 +)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
-index 9f276d756..194b45fe2 100644
+index 9f276d756..4257e412f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
 @@ -262,6 +262,9 @@ data class PlayerControlsState(
@@ -217,6 +217,15 @@ index 9f276d756..194b45fe2 100644
      val party: PlayerControlPartyState = PlayerControlPartyState(),
  )
  
+@@ -342,6 +345,8 @@ data class PlayerControlSubtitleOptionItem(
+     val title: String = "",
+     val metadata: String = "",
+     val isSelected: Boolean = false,
++    /** The row has a saved synced timing (this sync or any device's) - shows the Auto synced chip. */
++    val autoSynced: Boolean = false,
+ )
+ 
+ data class PlayerControlSubtitleCueItem(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 index 39cac5c3e..1da51a823 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
@@ -369,7 +378,7 @@ index cdd759d66..b586b6768 100644
          }
      } else if (!preferredSubtitleSelectionApplied) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 95fb67c5d..e25b324b4 100644
+index 95fb67c5d..0be504670 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 @@ -35,6 +35,7 @@ import com.nuvio.app.features.p2p.P2pStreamingState
@@ -450,7 +459,15 @@ index 95fb67c5d..e25b324b4 100644
          }
          "subtitleDelayDelta" -> setSubtitleDelay((subtitleDelayMs + value.toInt()).coerceIn(SUBTITLE_DELAY_MIN_MS, SUBTITLE_DELAY_MAX_MS))
          "subtitleDelayReset" -> setSubtitleDelay(0)
-@@ -1793,7 +1816,9 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+@@ -1536,6 +1559,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSubtitleSelection(): PlayerCon
+                             it.isNotBlank() && it != title
+                         }.orEmpty(),
+                         isSelected = option.id == selectedOptionId,
++                        autoSynced = SyncedSubtitles.isSyncedRow(option.subtitle.url), // Nuvio fork: synced chip
+                     )
+                 }
+             }
+@@ -1793,7 +1817,9 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
              useCustomSubtitles = true
              preferredSubtitleSelectionApplied = true
              persistAddonSubtitlePreference(addon)
@@ -740,10 +757,10 @@ index 7ce25ea2c..531aafaba 100644
      LaunchedEffect(controller, sourceAvailable, playWhenReady) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 new file mode 100644
-index 000000000..e7cf5c2fa
+index 000000000..8def6bb7d
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-@@ -0,0 +1,452 @@
+@@ -0,0 +1,456 @@
 +package com.nuvio.app.features.player
 +
 +import co.touchlab.kermit.Logger
@@ -1163,6 +1180,10 @@ index 000000000..e7cf5c2fa
 +                throw cancel
 +            } catch (error: Throwable) {
 +                autoSyncLog.w { "AUTO_SYNC failed: ${error.javaClass.simpleName}: ${error.message}" }
++                // A thrown error used to reach the bubble with NO reason: record it where the
++                // bubble (and the shareable log) can see it.
++                SpeechAutoSyncEngine.lastFailure = "${error.javaClass.simpleName}: ${error.message.orEmpty()}"
++                SyncLog.w("AUTO_SYNC failed: ${error.javaClass.simpleName}: ${error.message}")
 +                if (!stillRelevant()) return@launch
 +                notifyFailure(bubbleRunId)
 +            }
@@ -2610,7 +2631,7 @@ index 000000000..4edf6ee72
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 45c048b2f..fae998ed6 100644
+index 45c048b2f..65f16e25c 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 @@ -333,6 +333,12 @@ internal class NativePlayerController(
@@ -2668,8 +2689,17 @@ index 45c048b2f..fae998ed6 100644
          append(",\"party\":")
          append(partyJson.encodeToString(PlayerControlPartyState.serializer(), party.withWebviewImages(onImageReady)))
          append('}')
+@@ -1880,6 +1906,8 @@ private fun StringBuilder.appendSubtitleOptionItemJson(item: PlayerControlSubtit
+     appendJsonField("metadata", item.metadata)
+     append(',')
+     appendJsonField("isSelected", item.isSelected)
++    append(',')
++    appendJsonField("autoSynced", item.autoSynced)
+     append('}')
+ }
+ 
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/composeApp/src/desktopMain/resources/player-ui/controls.css
-index e9227237b..c909994f8 100644
+index e9227237b..043b09257 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.css
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
 @@ -292,6 +292,139 @@ button:disabled {
@@ -2812,6 +2842,29 @@ index e9227237b..c909994f8 100644
  [hidden] {
    display: none !important;
  }
+@@ -2642,6 +2775,22 @@ button:disabled {
+   white-space: nowrap;
+ }
+ 
++.subtitle-autosync-chip {
++  align-self: flex-start;
++  padding: 2px 7px;
++  border-radius: 999px;
++  background: rgba(255, 255, 255, .1);
++  color: rgba(255, 255, 255, .88);
++  font-size: 10px;
++  line-height: 13px;
++  white-space: nowrap;
++}
++
++.subtitle-option-row.selected .subtitle-autosync-chip {
++  background: rgba(255, 255, 255, .18);
++  color: rgba(255, 255, 255, .95);
++}
++
+ .subtitle-option-row.selected .subtitle-source-chip {
+   border: 1px solid rgba(255, 255, 255, .22);
+   background: rgba(255, 255, 255, .14);
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
 index a6854130a..5b359e2c5 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.html
@@ -2837,7 +2890,7 @@ index a6854130a..5b359e2c5 100644
          <svg class="player-toast-icon" id="playerToastIcon" aria-hidden="true" hidden><use id="playerToastIconUse" href="#icon-speed"></use></svg>
          <span class="player-toast-text" id="playerToastText"></span>
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index bf6b22009..c08be48c0 100644
+index bf6b22009..4f1ccccc4 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
 @@ -356,6 +356,9 @@ let state = {
@@ -2896,7 +2949,28 @@ index bf6b22009..c08be48c0 100644
  const chromeInteractionSelector = [
    "button",
    "input",
-@@ -3225,6 +3267,7 @@ window.playerControls = nextState => {
+@@ -1173,6 +1215,7 @@ const subtitleSelectionOptions = () => normalizeItems(state.subtitleOptionItems)
+   title: String(item.title || ""),
+   metadata: String(item.metadata || ""),
+   selected: Boolean(item.isSelected),
++  autoSynced: Boolean(item.autoSynced),
+   index: Number(item.index) || 0,
+ }));
+ 
+@@ -1256,6 +1299,12 @@ const appendSubtitleOptionRow = option => {
+     metadata.textContent = option.metadata;
+     copy.appendChild(metadata);
+   }
++  if (option.autoSynced) {
++    const chip = document.createElement("span");
++    chip.className = "subtitle-autosync-chip";
++    chip.textContent = state.autoSyncedChipLabel || "Auto synced";
++    copy.appendChild(chip);
++  }
+   row.appendChild(copy);
+   row.appendChild(buildCheckIcon());
+   addonSubtitleList.appendChild(row);
+@@ -3225,6 +3274,7 @@ window.playerControls = nextState => {
    const previousCloseToken = Number(state.closeModalsToken) || 0;
    const previousSubmitIntroSuccessToken = Number(state.submitIntroSuccessToken) || 0;
    const previousNotificationToken = Number(state.notificationToken) || 0;
@@ -2904,7 +2978,7 @@ index bf6b22009..c08be48c0 100644
    const previousResizeLabel = state.resizeModeLabel || "";
    const previousSpeedLabel = state.playbackSpeedLabel || "";
    const previousEpisodeStreamsVisible = Boolean(state.episodeStreamsVisible);
-@@ -3261,6 +3304,10 @@ window.playerControls = nextState => {
+@@ -3261,6 +3311,10 @@ window.playerControls = nextState => {
    if (notificationToken !== previousNotificationToken) {
      showPlayerToast(state.notificationMessage);
    }
