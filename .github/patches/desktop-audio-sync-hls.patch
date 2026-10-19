@@ -361,10 +361,10 @@ index 000000000..a1e535f08
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
 new file mode 100644
-index 000000000..95eeb0056
+index 000000000..2e40c79a7
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
-@@ -0,0 +1,199 @@
+@@ -0,0 +1,204 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import java.io.File
@@ -386,6 +386,10 @@ index 000000000..95eeb0056
 +    private const val CONNECT_TIMEOUT_MS = 15_000
 +    private const val READ_TIMEOUT_MS = 30_000
 +    private const val MAX_SPOT_BYTES = 96L * 1024 * 1024
++
++    /** A 45 s spot decodes to ~1.4 MB at the dump's 16 kHz mono s16; this only catches a
++     *  dump that ignored its window and wrote the whole film (never read that into memory). */
++    private const val MAX_WAV_BYTES = 64L * 1024 * 1024
 +
 +    /** Speech intervals (media ms) found in one sampled window. */
 +    data class Spot(val startMs: Long, val intervals: List<Pair<Long, Long>>, val speechMs: Long)
@@ -511,6 +515,7 @@ index 000000000..95eeb0056
 +                    }
 +                }
 +                if (dataPos < 0 || dataLen <= 0) return null
++                if (dataLen > MAX_WAV_BYTES) return null
 +                val bytes = ByteArray(dataLen.coerceAtMost(length - dataPos).toInt())
 +                raf.seek(dataPos)
 +                raf.readFully(bytes)
@@ -775,10 +780,10 @@ index 000000000..6b15ded72
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 new file mode 100644
-index 000000000..545e17b96
+index 000000000..aac1b283b
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
-@@ -0,0 +1,279 @@
+@@ -0,0 +1,312 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.SubtitleSyncCue
@@ -814,6 +819,9 @@ index 000000000..545e17b96
 +    internal const val SPOT_MS = 45_000L
 +    private const val MAX_ALTERNATIVES = 6
 +    private const val MAX_SUBTITLE_BODY_BYTES = 8 * 1024 * 1024
++
++    /** Playlists are kilobytes; anything bigger is not a playlist (never read it). */
++    private const val MAX_PLAYLIST_BODY_BYTES = 8 * 1024 * 1024
 +
 +    private val log = co.touchlab.kermit.Logger.withTag("NuvioAutoSync")
 +
@@ -1052,7 +1060,37 @@ index 000000000..545e17b96
 +            connection.instanceFollowRedirects = true
 +            for ((k, v) in headers) connection.setRequestProperty(k, v)
 +            if (connection.responseCode !in 200..299) throw java.io.IOException("HTTP ${connection.responseCode}")
-+            connection.inputStream.bufferedReader().use { it.readText() }
++            // Only playlist-ish bodies belong here. A direct media file (most Stream Master
++            // links) would otherwise be downloaded WHOLE into a String - the Java-heap OOM on
++            // movie-length links. resolve() treats the throw as "not HLS" and the engine
++            // samples the stream URL directly with the mpv dump instead.
++            val contentType = (connection.contentType ?: "").substringBefore(';').trim().lowercase()
++            if (contentType.startsWith("video/") || contentType.startsWith("audio/") ||
++                contentType == "application/octet-stream"
++            ) {
++                throw java.io.IOException("binary body ($contentType) - not a playlist")
++            }
++            val declared = connection.contentLengthLong
++            if (declared > MAX_PLAYLIST_BODY_BYTES) {
++                throw java.io.IOException("playlist body too large ($declared bytes)")
++            }
++            val output = java.io.ByteArrayOutputStream(
++                (declared.takeIf { it > 0 }?.toInt() ?: 64 * 1024).coerceAtMost(MAX_PLAYLIST_BODY_BYTES),
++            )
++            connection.inputStream.use { input ->
++                val buffer = ByteArray(64 * 1024)
++                var total = 0
++                while (true) {
++                    val n = input.read(buffer)
++                    if (n < 0) break
++                    total += n
++                    if (total > MAX_PLAYLIST_BODY_BYTES) {
++                        throw java.io.IOException("playlist body exceeds ${MAX_PLAYLIST_BODY_BYTES / 1024} KiB")
++                    }
++                    output.write(buffer, 0, n)
++                }
++            }
++            output.toString("UTF-8")
 +        } finally {
 +            connection.disconnect()
 +        }
