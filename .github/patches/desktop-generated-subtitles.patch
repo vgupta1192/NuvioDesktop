@@ -1022,10 +1022,10 @@ index f40580752..ab38fb4ad 100644
              fun publishAddonGroup(group: AddonStreamGroup) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/ConnectionFitDesktopFeed.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/ConnectionFitDesktopFeed.kt
 new file mode 100644
-index 000000000..4ba7c29c1
+index 000000000..783b2453a
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/ConnectionFitDesktopFeed.kt
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,57 @@
 +package com.nuvio.app.features.player
 +
 +import com.nuvio.app.features.streams.ConnectionSpeedEstimator
@@ -1043,29 +1043,39 @@ index 000000000..4ba7c29c1
 +/**
 + * Feeds the connection-fit estimator from the native player's network read rate (mpv's
 + * cache-speed, bytes/s) while a title is playing. Passive: nothing is measured on stream load.
++ *
++ * The poll JNI must never run against a disposed player: the native side turns the handle back
++ * into the Objective-C player with no lifetime check, so a read racing [NativePlayerController]'s
++ * teardown was a guaranteed SIGABRT (this is exactly what the macOS crash reports showed). Every
++ * handle touch happens under [gate], and the controller's dispose path calls [stop] - which
++ * returns only once no read is in flight - before destroying the instance.
 + */
 +internal object ConnectionFitDesktopFeed {
++    private val gate = Any()
 +    @Volatile private var handle: Long = 0
 +    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 +    private var loop: Job? = null
 +
-+    fun start(handle: Long) {
-+        this.handle = handle
++    fun start(newHandle: Long) {
++        synchronized(gate) { handle = newHandle }
 +        loop ?: run { loop = scope.launch { pollLoop() } }
 +    }
 +
++    /** Clears the handle; when this returns, no property read is running or will start. */
 +    fun stop() {
-+        handle = 0
++        synchronized(gate) { handle = 0 }
 +    }
 +
 +    private suspend fun pollLoop() {
 +        while (scope.isActive) {
 +            delay(5_000)
-+            val current = handle
-+            if (current == 0L) continue
-+            val bytesPerSecond = runCatching {
-+                NativePlayerBridge.propGetString(current, "cache-speed")?.toDoubleOrNull()
-+            }.getOrNull() ?: continue
++            val bytesPerSecond = synchronized(gate) {
++                val current = handle
++                if (current == 0L) return@synchronized null
++                runCatching {
++                    NativePlayerBridge.propGetString(current, "cache-speed")?.toDoubleOrNull()
++                }.getOrNull()
++            } ?: continue
 +            if (bytesPerSecond > 0.0) {
 +                val kind = currentNetworkKind() ?: NetworkKind.WIFI
 +                ConnectionSpeedEstimator.record(kind, bytesPerSecond * 8.0 / 1_000_000.0)
@@ -1075,10 +1085,10 @@ index 000000000..4ba7c29c1
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/NativePlayerBridgeSubtitleFont.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/NativePlayerBridgeSubtitleFont.kt
 new file mode 100644
-index 000000000..8d879a600
+index 000000000..6a9235501
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/NativePlayerBridgeSubtitleFont.kt
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,33 @@
 +package com.nuvio.app.features.player
 +
 +import com.nuvio.app.features.player.desktop.NativePlayerBridge
@@ -1090,6 +1100,11 @@ index 000000000..8d879a600
 + */
 +internal object NativePlayerBridgeSubtitleFont {
 +    @Volatile var activeHandle: Long = 0
++
++    /** Drops [handle] if it is the live one; the controller calls this before destroying it. */
++    fun clearActiveHandle(handle: Long) {
++        if (activeHandle == handle) activeHandle = 0
++    }
 +
 +    fun applyToPlayer() {
 +        val handle = activeHandle
@@ -1468,10 +1483,10 @@ index 000000000..654b0f31a
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 new file mode 100644
-index 000000000..0fbdd101b
+index 000000000..90de7dd93
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-@@ -0,0 +1,250 @@
+@@ -0,0 +1,269 @@
 +package com.nuvio.app.features.player.generated
 +
 +import com.nuvio.app.core.storage.DesktopStorage
@@ -1556,6 +1571,7 @@ index 000000000..0fbdd101b
 +        val deeplKey = GeneratedSubtitles.deeplKey.value
 +        val key = cacheKey(contentId, spoken, online)
 +        job?.cancel()
++        synchronized(attachGate) { attachHandle = handle }
 +        running = true
 +        job = scope.launch {
 +            try {
@@ -1565,6 +1581,7 @@ index 000000000..0fbdd101b
 +            } catch (error: Throwable) {
 +                SyncLog.w("generated subtitles: failed: ${error.message}")
 +            } finally {
++                synchronized(attachGate) { attachHandle = 0 }
 +                running = false
 +            }
 +        }
@@ -1661,9 +1678,26 @@ index 000000000..0fbdd101b
 +        SyncLog.i("generated subtitles: finished ($windowsWithAudio windows)")
 +    }
 +
++    // The player can be closed mid-generation; attaching to a disposed mpv handle is a native
++    // crash (no lifetime check on the native side), so the controller invalidates the handle
++    // under this gate before its teardown thread starts, and attach refuses anything stale.
++    private val attachGate = Any()
++    @Volatile
++    private var attachHandle: Long = 0
++
++    /** Called by the player controller before the mpv instance behind [disposed] is destroyed. */
++    fun onPlayerHandleDisposed(disposed: Long) {
++        synchronized(attachGate) {
++            if (attachHandle == disposed) attachHandle = 0
++        }
++    }
++
 +    private fun attach(handle: Long, srtFile: File) {
 +        if (handle == 0L) return
-+        NativePlayerBridge.addSubtitleUrl(handle, srtFile.absolutePath)
++        synchronized(attachGate) {
++            if (attachHandle != handle) return
++            NativePlayerBridge.addSubtitleUrl(handle, srtFile.absolutePath)
++        }
 +    }
 +
 +    /** Parses the mono 16-bit PCM window the native dumper wrote into a FloatArray. */

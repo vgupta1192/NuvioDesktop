@@ -1,9 +1,9 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
 new file mode 100644
-index 000000000..59cde4ae8
+index 000000000..6b0ccbfb7
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,118 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.desktop.NativePlayerBridge
@@ -37,8 +37,16 @@ index 000000000..59cde4ae8
 +        startSec: Double,
 +        endSec: Double,
 +    ): Boolean {
-+        val java = javaLauncher() ?: return false
-+        val classpath = System.getProperty("java.class.path")?.takeIf { it.isNotBlank() } ?: return false
++        val java = javaLauncher()
++        val classpath = System.getProperty("java.class.path")?.takeIf { it.isNotBlank() }
++        if (java == null || classpath == null) {
++            // No usable child runtime (unexpected for the packaged app, possible in dev runs):
++            // dump in-process rather than losing AutoSync/generated subtitles entirely.
++            return runCatching {
++                NativePlayerBridge.ensureLoaded()
++                NativePlayerBridge.dumpAudioWav(url, headerLines, outPath, startSec, endSec)
++            }.getOrDefault(false)
++        }
 +        val command = mutableListOf(java, "-Xmx96m", "-Djava.awt.headless=true")
 +        System.getProperty("compose.application.resources.dir")?.let { command += "-Dcompose.application.resources.dir=$it" }
 +        command += listOf(
@@ -54,7 +62,10 @@ index 000000000..59cde4ae8
 +        val process = try {
 +            ProcessBuilder(command).redirectErrorStream(true).start()
 +        } catch (_: Exception) {
-+            return false
++            return runCatching {
++                NativePlayerBridge.ensureLoaded()
++                NativePlayerBridge.dumpAudioWav(url, headerLines, outPath, startSec, endSec)
++            }.getOrDefault(false)
 +        }
 +        // Drain the child's output so a chatty decoder cannot fill the pipe and stall it.
 +        val drain = Thread {

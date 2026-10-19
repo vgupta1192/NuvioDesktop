@@ -2287,7 +2287,7 @@ index 000000000..4edf6ee72
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 45c048b2f..3a18fe6be 100644
+index 45c048b2f..4ff15fa54 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 @@ -333,6 +333,12 @@ internal class NativePlayerController(
@@ -2303,7 +2303,21 @@ index 45c048b2f..3a18fe6be 100644
                      SwingUtilities.invokeLater {
                          val shouldConfigure = synchronized(lifecycleLock) {
                              when {
-@@ -1678,6 +1684,12 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+@@ -965,6 +971,13 @@ internal class NativePlayerController(
+ 
+     /** Must be called while holding [lifecycleLock]. */
+     private fun startTrackedDisposeLocked(current: Long) {
++        // Fork: background users of this handle must drop it BEFORE the teardown thread starts,
++        // and their in-flight JNI calls must have drained - the native side turns the handle
++        // back into the Objective-C player with no lifetime check, so a straggler read was a
++        // guaranteed SIGABRT (seen in the macOS crash reports).
++        com.nuvio.app.features.player.ConnectionFitDesktopFeed.stop()
++        com.nuvio.app.features.player.generated.GeneratedSubtitlesDesktop.onPlayerHandleDisposed(current)
++        com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.clearActiveHandle(current)
+         val prior = disposeInFlight?.takeIf { it.isAlive }
+         disposeInFlight = Thread(
+             {
+@@ -1678,6 +1691,12 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
          appendJsonField("notificationMessage", notificationMessage)
          append(',')
          appendJsonField("notificationToken", notificationToken)
