@@ -1,9 +1,9 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
 new file mode 100644
-index 000000000..5c57bcb4c
+index 000000000..efd5a73ef
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,136 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.desktop.NativePlayerBridge
@@ -23,7 +23,7 @@ index 000000000..5c57bcb4c
 + * could be sampled" instead of taking the player down.
 + */
 +internal object AudioDumpProcess {
-+    private const val TIMEOUT_MINUTES = 3L
++    private const val DEFAULT_TIMEOUT_SEC = 180L
 +
 +    /**
 +     * Same contract as [NativePlayerBridge.dumpAudioWav]; blocking (call off the UI thread).
@@ -36,6 +36,7 @@ index 000000000..5c57bcb4c
 +        outPath: String,
 +        startSec: Double,
 +        endSec: Double,
++        timeoutSec: Long = DEFAULT_TIMEOUT_SEC,
 +    ): Boolean {
 +        val java = javaLauncher()
 +        val classpath = System.getProperty("java.class.path")?.takeIf { it.isNotBlank() }
@@ -82,7 +83,7 @@ index 000000000..5c57bcb4c
 +            }
 +        }.apply { isDaemon = true; start() }
 +        val finished = try {
-+            val done = process.waitFor(TIMEOUT_MINUTES, TimeUnit.MINUTES)
++            val done = process.waitFor(timeoutSec, TimeUnit.SECONDS)
 +            if (!done) {
 +                process.destroyForcibly()
 +                false
@@ -361,10 +362,10 @@ index 000000000..a1e535f08
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
 new file mode 100644
-index 000000000..2e40c79a7
+index 000000000..3d5f5e47d
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
-@@ -0,0 +1,204 @@
+@@ -0,0 +1,214 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import java.io.File
@@ -391,8 +392,17 @@ index 000000000..2e40c79a7
 +     *  dump that ignored its window and wrote the whole film (never read that into memory). */
 +    private const val MAX_WAV_BYTES = 64L * 1024 * 1024
 +
-+    /** Speech intervals (media ms) found in one sampled window. */
-+    data class Spot(val startMs: Long, val intervals: List<Pair<Long, Long>>, val speechMs: Long)
++    /** One spot's dump must answer inside this budget or the spot is skipped; the engine
++     *  samples 6 spots, so a stuck stream costs 3 minutes total, not 18. */
++    internal const val SPOT_DUMP_TIMEOUT_SEC = 30L
++
++    /** Speech intervals (media ms) found in one sampled window; [bytes] = media bytes read. */
++    data class Spot(
++        val startMs: Long,
++        val intervals: List<Pair<Long, Long>>,
++        val speechMs: Long,
++        val bytes: Long,
++    )
 +
 +    fun interface SegmentDownloader {
 +        /** GET [url] with [headers], APPENDING to [out]; returns bytes written or -1 on failure. */
@@ -441,6 +451,7 @@ index 000000000..2e40c79a7
 +                        outPath = wav.absolutePath,
 +                        startSec = 0.0,
 +                        endSec = spotMs / 1000.0,
++                        timeoutSec = SPOT_DUMP_TIMEOUT_SEC,
 +                    )
 +                }
 +            }.getOrDefault(false)
@@ -451,7 +462,7 @@ index 000000000..2e40c79a7
 +            val intervals = RmsVad.detect(pcm).map { (a, b) -> (a + startMs) to (b + startMs) }
 +            val speechMs = intervals.sumOf { (a, b) -> b - a }
 +            if (speechMs <= 0) return null
-+            return Spot(startMs, intervals, speechMs)
++            return Spot(startMs, intervals, speechMs, concat.length())
 +        } finally {
 +            concat.delete()
 +            wav.delete()
@@ -780,10 +791,10 @@ index 000000000..6b15ded72
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 new file mode 100644
-index 000000000..aac1b283b
+index 000000000..be6f8e318
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
-@@ -0,0 +1,312 @@
+@@ -0,0 +1,370 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.SubtitleSyncCue
@@ -816,6 +827,21 @@ index 000000000..aac1b283b
 +    /** Why the last run returned null (bubble + log detail); cleared at each run. */
 +    @Volatile
 +    var lastFailure: String? = null
++
++    /** What the last run actually did, for the mobile-style statistics readout. */
++    data class RunStats(
++        val spotsSampled: Int,
++        val spotsPlanned: Int,
++        val listenedSec: Long,
++        val sampledBytes: Long,
++        val elapsedSec: Long,
++        val alternativesTested: Int = 0,
++        val alternativesRuledOut: Int = 0,
++    )
++
++    @Volatile
++    var lastStats: RunStats? = null
++
 +    internal const val SPOT_MS = 45_000L
 +    private const val MAX_ALTERNATIVES = 6
 +    private const val MAX_SUBTITLE_BODY_BYTES = 8 * 1024 * 1024
@@ -864,6 +890,8 @@ index 000000000..aac1b283b
 +        onProgress: (String) -> Unit = {},
 +    ): Locked? {
 +        lastFailure = null
++        lastStats = null
++        val runStartMs = System.currentTimeMillis()
 +        val selectedCues = AutoSyncSubtitleCueParser.parse(request.selectedBody, request.selectedUrl)
 +        val selectedTrack = SubtitleSpeechTrack.fromCues(
 +            selectedCues.map { Triple(it.startTimeMs, it.endTimeMs, it.text) },
@@ -887,12 +915,38 @@ index 000000000..aac1b283b
 +        log.i {
 +            "speech sync: ${selectedTrack.size} dialogue cues, ${durationMs / 1_000}s media, sampling ${windows.size} spots"
 +        }
-+        SyncLog.i("speech sync: ${selectedTrack.size} dialogue cues, $durationMs ms media, sampling ${windows.size} spots")
++        SyncLog.i(
++            "speech sync: ${selectedTrack.size} dialogue cues, ${durationMs / 1_000}s media, " +
++                "sampling ${windows.size} spots ${if (playlist != null) "(HLS)" else "(direct)"}",
++        )
 +        onProgress("Listening for dialogue…")
 +
 +        val spots = ArrayList<HlsAudioSpotSampler.Spot>()
++
++        fun recordStats(tested: Int = 0, ruledOut: Int = 0) {
++            lastStats = RunStats(
++                spotsSampled = spots.size,
++                spotsPlanned = windows.size,
++                listenedSec = spots.size * (SPOT_MS / 1000),
++                sampledBytes = spots.sumOf { it.bytes },
++                elapsedSec = (System.currentTimeMillis() - runStartMs) / 1000,
++                alternativesTested = tested,
++                alternativesRuledOut = ruledOut,
++            )
++        }
++
++        fun panelLines(tested: Int? = null): String {
++            val mb = spots.sumOf { it.bytes } / (1024L * 1024L)
++            val lines = mutableListOf(
++                "Listened ${spots.size * (SPOT_MS / 1000)}s of audio ($mb MB)",
++                "Across the film: sampled ${spots.size} of ${windows.size} dialogue spots in ${(System.currentTimeMillis() - runStartMs) / 1000}s",
++            )
++            if (tested != null) lines += "Other subtitles: testing $tested"
++            return lines.joinToString("\n")
++        }
 +        for (window in windows) {
 +            currentCoroutineContext().ensureActive()
++            val spotStartMs = System.currentTimeMillis()
 +            val spot = withContext(Dispatchers.IO) {
 +                if (playlist != null) {
 +                    HlsAudioSpotSampler.sampleOne(playlist, window, SPOT_MS, request.streamHeaders, tmpDir)
@@ -900,17 +954,26 @@ index 000000000..aac1b283b
 +                    sampleDirectWindow(request.streamUrl, request.streamHeaders, window, tmpDir)
 +                }
 +            }
++            val spotSecs = (System.currentTimeMillis() - spotStartMs) / 1000.0
 +            if (spot == null) {
 +                log.w { "speech sync: spot at ${window / 1_000}s failed to sample" }
++                SyncLog.w("speech sync: spot ${spots.size + 1}/${windows.size} at ${window / 1_000}s failed after ${spotSecs}s")
 +            } else {
 +                spots += spot
 +                log.i { "speech sync: spot at ${window / 1_000}s sampled, ${spot.speechMs / 1_000}s of speech" }
++                SyncLog.i(
++                    "speech sync: spot ${spots.size}/${windows.size} at ${window / 1_000}s ok, " +
++                        "${spot.speechMs / 1_000}s of speech (${spotSecs}s)",
++                )
++                onProgress("Listening for dialogue… (${spots.size}/${windows.size})\n" + panelLines())
 +            }
 +            if (spots.size >= 2) {
++                recordStats()
 +                lockedFor(request, selectedCues, selectedTrack, spots, onProgress)?.let { return it }
 +            }
 +        }
 +        if (spots.isEmpty()) {
++            recordStats()
 +            lastFailure = "no audio could be sampled from this stream"
 +            log.w { "speech sync: no audio could be sampled (HLS playlist=${playlist != null})" }
 +            SyncLog.w("speech sync: no audio could be sampled")
@@ -921,7 +984,8 @@ index 000000000..aac1b283b
 +        // same evidence.
 +        val alternatives = request.alternatives.take(MAX_ALTERNATIVES)
 +        if (alternatives.isNotEmpty()) {
-+            onProgress("Testing ${alternatives.size} other subtitles…")
++            recordStats(alternatives.size)
++            onProgress("Testing ${alternatives.size} other subtitles…\n" + panelLines(alternatives.size))
 +            SyncLog.i("speech sync: selected subtitle never locked; testing ${alternatives.size} alternatives")
 +            log.i { "speech sync: selected subtitle never locked on ${spots.size} spots; testing ${alternatives.size} alternatives" }
 +            val segments = buildSegments(spots)
@@ -946,6 +1010,7 @@ index 000000000..aac1b283b
 +            }
 +            if (prepared != null && candidates.isNotEmpty()) {
 +                val winner = SubtitleSpeechCandidates.pickBest(prepared, segments, candidates, durationMs)
++                recordStats(alternatives.size, if (winner == null) candidates.size else candidates.size - 1)
 +                if (winner != null) {
 +                    SyncLog.i(
 +                        "SWITCHING subtitle ${request.selectedUrl} -> ${winner.url} via speech detection: " +
@@ -963,6 +1028,7 @@ index 000000000..aac1b283b
 +                }
 +            }
 +        }
++        recordStats(alternatives.size, alternatives.size)
 +        lastFailure = "no confident match on ${spots.size} sampled spots"
 +        SyncLog.w("speech sync: no subtitle matched the audio (spots=${spots.size})")
 +            log.w { "speech sync: no subtitle matched the audio (spots=${spots.size})" }
@@ -1038,15 +1104,18 @@ index 000000000..aac1b283b
 +                        outPath = wav.absolutePath,
 +                        startSec = startMs / 1000.0,
 +                        endSec = (startMs + SPOT_MS) / 1000.0,
++                        timeoutSec = HlsAudioSpotSampler.SPOT_DUMP_TIMEOUT_SEC,
 +                    )
 +                }
 +            }.getOrDefault(false)
 +            if (!dumped || !wav.exists() || wav.length() < 800L) return null
-+            val pcm = HlsAudioSpotSampler.readWavPcm(wav) ?: return null
++            val full = readWavPcm(wav) ?: return null
++            val trimSamples = (leadInMs * RmsVad.SAMPLE_RATE / 1000L).toInt()
++            val pcm = if (trimSamples in 1 until full.size) full.copyOfRange(trimSamples, full.size) else full
 +            val intervals = RmsVad.detect(pcm).map { (a, b) -> (a + startMs) to (b + startMs) }
 +            val speechMs = intervals.sumOf { (a, b) -> b - a }
 +            if (speechMs <= 0) return null
-+            return HlsAudioSpotSampler.Spot(startMs, intervals, speechMs)
++            return HlsAudioSpotSampler.Spot(startMs, intervals, speechMs, wav.length())
 +        } finally {
 +            wav.delete()
 +        }

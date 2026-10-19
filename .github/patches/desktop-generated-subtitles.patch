@@ -1368,10 +1368,10 @@ index 000000000..6436bef50
 +}.getOrNull()
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt
 new file mode 100644
-index 000000000..71db77740
+index 000000000..e761dedd1
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,72 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.core.storage.DesktopStorage
@@ -1411,9 +1411,11 @@ index 000000000..71db77740
 +        AutoSyncDesktopHooksBridge.install()
 +    }
 +
-+    /** The shareable report: a header plus the recent lines. */
++    /** The shareable report: a header plus the recent lines. The app version rides in the
++     *  header so a pasted log proves which build produced it. */
 +    fun text(): String {
-+        val header = "Nuvio AutoSync log · desktop"
++        val version = com.nuvio.app.core.build.AppVersionPolicy.displayVersionName.ifBlank { "dev" }
++        val header = "Nuvio AutoSync log · desktop · $version"
 +        return synchronized(lines) { (listOf(header) + lines).joinToString("\n") }
 +    }
 +

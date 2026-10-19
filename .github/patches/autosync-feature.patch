@@ -757,10 +757,10 @@ index 7ce25ea2c..531aafaba 100644
      LaunchedEffect(controller, sourceAvailable, playWhenReady) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 new file mode 100644
-index 000000000..8def6bb7d
+index 000000000..b5636c936
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-@@ -0,0 +1,456 @@
+@@ -0,0 +1,489 @@
 +package com.nuvio.app.features.player
 +
 +import co.touchlab.kermit.Logger
@@ -789,7 +789,8 @@ index 000000000..8def6bb7d
 +private const val SUBTITLE_BODY_MAX_BYTES = 8 * 1024 * 1024
 +
 +/** A stuck run must still end: sampling six spots normally finishes well inside this. */
-+private const val SYNC_RUN_TIMEOUT_MS = 120_000L
++// 5 min: 6 spots x 30 s per-dump cap is 3 min on a slow link, plus the alternatives phase.
++private const val SYNC_RUN_TIMEOUT_MS = 300_000L
 +
 +private fun isHttpUrl(url: String): Boolean =
 +    url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)
@@ -1097,17 +1098,26 @@ index 000000000..8def6bb7d
 +                            ),
 +                            onProgress = { text ->
 +                                if (stillRelevant()) {
-+                                    notifyAutoSync(bubbleRunId, "working", "Auto Sync • $text", null)
++                                    // Stats-off keeps the old single-line bubble.
++                                    val shown = if (AutoSyncPreferencesRepository.showStatistics.value) {
++                                        text
++                                    } else {
++                                        text.substringBefore('\n')
++                                    }
++                                    notifyAutoSync(bubbleRunId, "working", "Auto Sync • $shown", null)
 +                                }
 +                            },
 +                        )
 +                    }
 +                } catch (timeout: TimeoutCancellationException) {
-+                    SpeechAutoSyncEngine.lastFailure = "timed out after 2 minutes"
++                    SpeechAutoSyncEngine.lastFailure = "timed out after 5 minutes"
 +                    null
 +                }
 +
-+                if (!stillRelevant()) return@launch
++                if (!stillRelevant()) {
++                    SyncLog.i("speech sync finished but was discarded (subtitle or stream changed mid-run)")
++                    return@launch
++                }
 +                if (result == null) {
 +                    autoSyncLog.w { "speech sync finished with no confident match" }
 +                    notifyFailure(bubbleRunId)
@@ -1158,21 +1168,35 @@ index 000000000..8def6bb7d
 +                        SyncedSubtitles.save(chosenUrl, srt, method = "autosync", nowMs = System.currentTimeMillis())
 +                    }
 +                }
-+                val statistics = if (AutoSyncPreferencesRepository.showStatistics.value) {
-+                    " • " + when {
-+                        withinToleranceMs != null -> "within tolerance"
-+                        else -> "shift ${timeline.maxAlignmentShiftMs().roundToLong()} ms · confidence %.2f".format(result.peak)
++                // Mobile-style readout: "Subtitles synced (+0.3s) · speech detection in 7s"
++                // plus the statistics panel lines when Show AudioSync statistics is on.
++                val stats = SpeechAutoSyncEngine.lastStats
++                val offsetSec = result.shiftMs / 1000.0
++                val headlineTail = " (${if (offsetSec < 0) "-" else "+"}%.1f".format(kotlin.math.abs(offsetSec)) + "s)" +
++                    (stats?.let { " · speech detection in ${it.elapsedSec}s" } ?: "")
++                val panel = if (AutoSyncPreferencesRepository.showStatistics.value) {
++                    stats?.let { s ->
++                        "\n" + buildList {
++                            add("Listened ${s.listenedSec}s of audio (${s.sampledBytes / (1024 * 1024)} MB)")
++                            add("Across the film: sampled ${s.spotsSampled} of ${s.spotsPlanned} dialogue spots in ${s.elapsedSec}s")
++                            if (s.alternativesTested > 0) {
++                                add("Other subtitles: testing ${s.alternativesTested} · ${s.alternativesRuledOut} ruled out")
++                            }
++                            if (withinToleranceMs != null) {
++                                add("Already within the sync tolerance - original timing kept")
++                            }
++                        }.joinToString("\n")
 +                    }
 +                } else {
-+                    ""
++                    null
 +                }
 +                notifyAutoSync(
 +                    bubbleRunId,
 +                    "success",
 +                    when {
-+                        withinToleranceMs != null -> "Auto Sync • Subtitles already in sync$statistics"
-+                        result.switched -> "Auto Sync • Switched to a subtitle that matches the audio$statistics"
-+                        else -> "Auto Sync • Subtitles synced$statistics"
++                        withinToleranceMs != null -> "Auto Sync • Subtitles already in sync$headlineTail$panel"
++                        result.switched -> "Auto Sync • Switched to a subtitle that matches the audio$headlineTail$panel"
++                        else -> "Auto Sync • Subtitles synced$headlineTail$panel"
 +                    },
 +                    null,
 +                )
@@ -1204,15 +1228,24 @@ index 000000000..8def6bb7d
 +    /** The plain failure outcome: the unsynced subtitle attached at the start stays as it is. */
 +    private fun notifyFailure(bubbleRunId: Long) {
 +        val reason = SpeechAutoSyncEngine.lastFailure
-+        val detail = if (AutoSyncPreferencesRepository.showStatistics.value && !reason.isNullOrBlank()) {
-+            " • $reason"
++        val detail = if (!reason.isNullOrBlank()) " • $reason" else ""
++        val panel = if (AutoSyncPreferencesRepository.showStatistics.value) {
++            SpeechAutoSyncEngine.lastStats?.let { s ->
++                "\n" + buildList {
++                    add("Listened ${s.listenedSec}s of audio (${s.sampledBytes / (1024 * 1024)} MB)")
++                    add("Across the film: sampled ${s.spotsSampled} of ${s.spotsPlanned} dialogue spots in ${s.elapsedSec}s")
++                    if (s.alternativesTested > 0) {
++                        add("Other subtitles: testing ${s.alternativesTested} · ${s.alternativesRuledOut} ruled out")
++                    }
++                }.joinToString("\n")
++            }
 +        } else {
-+            ""
++            null
 +        }
 +        notifyAutoSync(
 +            bubbleRunId,
 +            "failure",
-+            "Auto Sync • Sync failed • subtitle timing not changed$detail",
++            "Auto Sync • Sync failed • subtitle timing not changed$detail$panel",
 +            "Sync failed: Auto Sync couldn't match this subtitle to the audio.$detail",
 +        )
 +    }
@@ -2699,10 +2732,10 @@ index 45c048b2f..65f16e25c 100644
  }
  
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/composeApp/src/desktopMain/resources/player-ui/controls.css
-index e9227237b..043b09257 100644
+index e9227237b..3893ab088 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.css
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
-@@ -292,6 +292,139 @@ button:disabled {
+@@ -292,6 +292,138 @@ button:disabled {
    pointer-events: none;
  }
  
@@ -2819,9 +2852,8 @@ index e9227237b..043b09257 100644
 +.autosync-detail {
 +  font-size: 12px;
 +  color: rgba(255, 255, 255, .62);
-+  overflow: hidden;
-+  text-overflow: ellipsis;
-+  white-space: nowrap;
++  white-space: pre-line;
++  line-height: 1.45;
 +}
 +
 +@keyframes autosync-spin {
@@ -2842,7 +2874,7 @@ index e9227237b..043b09257 100644
  [hidden] {
    display: none !important;
  }
-@@ -2642,6 +2775,22 @@ button:disabled {
+@@ -2642,6 +2774,22 @@ button:disabled {
    white-space: nowrap;
  }
  
@@ -2890,7 +2922,7 @@ index a6854130a..5b359e2c5 100644
          <svg class="player-toast-icon" id="playerToastIcon" aria-hidden="true" hidden><use id="playerToastIconUse" href="#icon-speed"></use></svg>
          <span class="player-toast-text" id="playerToastText"></span>
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index bf6b22009..4f1ccccc4 100644
+index bf6b22009..d3ff6ca0e 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
 @@ -356,6 +356,9 @@ let state = {
@@ -2903,7 +2935,7 @@ index bf6b22009..4f1ccccc4 100644
  };
  let isScrubbing = false;
  let scrubPositionMs = 0;
-@@ -468,6 +471,45 @@ const chromeActivityThrottleMs = 300;
+@@ -468,6 +471,52 @@ const chromeActivityThrottleMs = 300;
  const hiddenCursorHideDelayMs = 3000;
  const cursorActivityThrottleMs = 100;
  const playerToastDurationMs = 1400;
@@ -2914,7 +2946,7 @@ index bf6b22009..4f1ccccc4 100644
 +const autoSyncBubble = document.getElementById("autoSyncBubble");
 +const autoSyncBubbleHeadline = document.getElementById("autoSyncBubbleHeadline");
 +const autoSyncBubbleDetail = document.getElementById("autoSyncBubbleDetail");
-+const autoSyncBubbleDurations = { working: 90000, success: 3200, failure: 5200 };
++const autoSyncBubbleDurations = { working: 600000, success: 9000, failure: 9000 };
 +let autoSyncBubbleTimer = 0;
 +
 +const hideAutoSyncBubble = () => {
@@ -2930,11 +2962,18 @@ index bf6b22009..4f1ccccc4 100644
 +    hideAutoSyncBubble();
 +    return;
 +  }
-+  const parts = String(message || "").split(" • ").map(part => part.trim()).filter(Boolean);
++  // The first line carries "Auto Sync • headline"; lines after a newline are the statistics
++  // panel (mobile-style readout), rendered pre-line in the detail slot.
++  const raw = String(message || "");
++  const newlineAt = raw.indexOf("\n");
++  const headPart = newlineAt >= 0 ? raw.slice(0, newlineAt) : raw;
++  const statsBlock = newlineAt >= 0 ? raw.slice(newlineAt + 1).trim() : "";
++  const parts = headPart.split(" • ").map(part => part.trim()).filter(Boolean);
 +  const body = parts.length > 1 ? parts.slice(1) : parts;
 +  const capitalized = text => text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
 +  const headline = kind === "working" ? body[body.length - 1] || "" : body[0] || "";
-+  const detail = kind === "working" ? "" : body.slice(1).join(" · ");
++  const baseDetail = kind === "working" ? "" : body.slice(1).join(" · ");
++  const detail = [baseDetail, statsBlock].filter(Boolean).join("\n");
 +  autoSyncBubbleHeadline.textContent = capitalized(headline);
 +  autoSyncBubbleDetail.textContent = capitalized(detail);
 +  autoSyncBubbleDetail.hidden = !detail;
@@ -2949,7 +2988,7 @@ index bf6b22009..4f1ccccc4 100644
  const chromeInteractionSelector = [
    "button",
    "input",
-@@ -1173,6 +1215,7 @@ const subtitleSelectionOptions = () => normalizeItems(state.subtitleOptionItems)
+@@ -1173,6 +1222,7 @@ const subtitleSelectionOptions = () => normalizeItems(state.subtitleOptionItems)
    title: String(item.title || ""),
    metadata: String(item.metadata || ""),
    selected: Boolean(item.isSelected),
@@ -2957,7 +2996,7 @@ index bf6b22009..4f1ccccc4 100644
    index: Number(item.index) || 0,
  }));
  
-@@ -1256,6 +1299,12 @@ const appendSubtitleOptionRow = option => {
+@@ -1256,6 +1306,12 @@ const appendSubtitleOptionRow = option => {
      metadata.textContent = option.metadata;
      copy.appendChild(metadata);
    }
@@ -2970,7 +3009,7 @@ index bf6b22009..4f1ccccc4 100644
    row.appendChild(copy);
    row.appendChild(buildCheckIcon());
    addonSubtitleList.appendChild(row);
-@@ -3225,6 +3274,7 @@ window.playerControls = nextState => {
+@@ -3225,6 +3281,7 @@ window.playerControls = nextState => {
    const previousCloseToken = Number(state.closeModalsToken) || 0;
    const previousSubmitIntroSuccessToken = Number(state.submitIntroSuccessToken) || 0;
    const previousNotificationToken = Number(state.notificationToken) || 0;
@@ -2978,7 +3017,7 @@ index bf6b22009..4f1ccccc4 100644
    const previousResizeLabel = state.resizeModeLabel || "";
    const previousSpeedLabel = state.playbackSpeedLabel || "";
    const previousEpisodeStreamsVisible = Boolean(state.episodeStreamsVisible);
-@@ -3261,6 +3311,10 @@ window.playerControls = nextState => {
+@@ -3261,6 +3318,10 @@ window.playerControls = nextState => {
    if (notificationToken !== previousNotificationToken) {
      showPlayerToast(state.notificationMessage);
    }
