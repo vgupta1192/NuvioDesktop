@@ -1,9 +1,9 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
 new file mode 100644
-index 000000000..9c6ed5666
+index 000000000..09427f674
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
-@@ -0,0 +1,216 @@
+@@ -0,0 +1,227 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.desktop.NativePlayerBridge
@@ -48,30 +48,7 @@ index 000000000..9c6ed5666
 +                "audio dump: IN-PROCESS fallback (${if (java == null) "no bundled java" else "no classpath"}), " +
 +                    "bounded at ${timeoutSec + 10}s per dump",
 +            )
-+            // No usable child runtime (packaged apps can launch with java.class.path unset):
-+            // dump in-process rather than losing AutoSync/generated subtitles entirely, but on
-+            // a watched thread so a stuck native call cannot outlive its budget. The abandoned
-+            // thread leaks until mpv itself gives up - rare, and better than a hung run.
-+            val result = AtomicBoolean(false)
-+            val worker = Thread {
-+                result.set(
-+                    runCatching {
-+                        NativePlayerBridge.ensureLoaded()
-+                        NativePlayerBridge.dumpAudioWav(url, headerLines, outPath, startSec, endSec, realtime)
-+                    }.getOrDefault(false),
-+                )
-+            }.apply { isDaemon = true; name = "nuvio-audio-dump"; start() }
-+            val joined = try {
-+                worker.join((timeoutSec + 10) * 1000)
-+                true
-+            } catch (_: InterruptedException) {
-+                false
-+            }
-+            if (!joined || worker.isAlive) {
-+                SyncLog.w("audio dump: abandoned a stuck in-process dump after ${timeoutSec + 10}s")
-+                return false
-+            }
-+            return result.get()
++            return boundedInProcessDump(url, headerLines, outPath, startSec, endSec, realtime, timeoutSec)
 +        }
 +        logModeOnce("audio dump: child jvm (timeout=${timeoutSec}s)")
 +        val command = mutableListOf(java, "-Xmx96m", "-Djava.awt.headless=true")
@@ -90,10 +67,7 @@ index 000000000..9c6ed5666
 +        val process = try {
 +            ProcessBuilder(command).redirectErrorStream(true).start()
 +        } catch (_: Exception) {
-+            return runCatching {
-+                NativePlayerBridge.ensureLoaded()
-+                NativePlayerBridge.dumpAudioWav(url, headerLines, outPath, startSec, endSec)
-+            }.getOrDefault(false)
++            return boundedInProcessDump(url, headerLines, outPath, startSec, endSec, realtime, timeoutSec)
 +        }
 +        // Drain the child's output so a chatty decoder cannot fill the pipe and stall it, and
 +        // keep the tail: on failure it carries the mpv log (why no wav was produced).
@@ -131,6 +105,43 @@ index 000000000..9c6ed5666
 +            File("$outPath.log").delete()
 +        }
 +        return ok
++    }
++
++    /**
++     * In-process dump on a watched thread: no usable child runtime (packaged apps can launch
++     * with java.class.path unset), so run the native dump here rather than losing AutoSync -
++     * but bounded, so a stuck native call cannot outlive its budget. An abandoned thread
++     * leaks until mpv gives up - rare, and better than a hung run.
++     */
++    private fun boundedInProcessDump(
++        url: String,
++        headerLines: Array<String>,
++        outPath: String,
++        startSec: Double,
++        endSec: Double,
++        realtime: Boolean,
++        timeoutSec: Long,
++    ): Boolean {
++        val result = AtomicBoolean(false)
++        val worker = Thread {
++            result.set(
++                runCatching {
++                    NativePlayerBridge.ensureLoaded()
++                    NativePlayerBridge.dumpAudioWav(url, headerLines, outPath, startSec, endSec, realtime)
++                }.getOrDefault(false),
++            )
++        }.apply { isDaemon = true; name = "nuvio-audio-dump"; start() }
++        val joined = try {
++            worker.join((timeoutSec + 10) * 1000)
++            true
++        } catch (_: InterruptedException) {
++            false
++        }
++        if (!joined || worker.isAlive) {
++            SyncLog.w("audio dump: abandoned a stuck in-process dump after ${timeoutSec + 10}s")
++            return false
++        }
++        return result.get()
 +    }
 +
 +    /** The why-no-wav evidence: the child's output tail, else the native tail file. */
