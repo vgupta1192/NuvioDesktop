@@ -1445,10 +1445,10 @@ index 000000000..e761dedd1
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
-index 66a2513f5..3b1a26e0b 100644
+index 66a2513f5..63a2ef611 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
-@@ -144,6 +144,17 @@ internal object NativePlayerBridge {
+@@ -144,6 +144,18 @@ internal object NativePlayerBridge {
      external fun propSetString(handle: Long, name: String, value: String): Boolean
      external fun command(handle: Long, args: Array<String>): Boolean
  
@@ -1461,6 +1461,7 @@ index 66a2513f5..3b1a26e0b 100644
 +        outPath: String,
 +        startSec: Double,
 +        endSec: Double,
++        realtime: Boolean,
 +    ): Boolean
 +
      val controlsPageUrl: String by lazy {
@@ -1998,7 +1999,7 @@ index 000000000..e06676724
 +    actual fun saveEnabled(enabled: Boolean) = store.putBoolean("enabled", enabled)
 +}
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-index b7d15ba1f..28ef33d8d 100644
+index b7d15ba1f..7532a474e 100644
 --- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 @@ -2191,5 +2191,89 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
@@ -2008,7 +2009,7 @@ index b7d15ba1f..28ef33d8d 100644
 +// Generated subtitles: dump [startSec, endSec) of url's audio as 16 kHz mono s16 WAV with a
 +// headless mpv instance (ao=pcm + untimed decodes as fast as the demuxer allows). Blocking on
 +// the calling thread - Kotlin dispatches it to IO.
-+JNIEXPORT jboolean JNICALL NP(dumpAudioWav)(JNIEnv *env, jobject, jstring jurl, jobjectArray jheaders, jstring jout, jdouble startSec, jdouble endSec) {
++JNIEXPORT jboolean JNICALL NP(dumpAudioWav)(JNIEnv *env, jobject, jstring jurl, jobjectArray jheaders, jstring jout, jdouble startSec, jdouble endSec, jboolean jrealtime) {
 +    if (!jurl || !jout) return JNI_FALSE;
 +    std::string url = jstringToUtf8(env, jurl);
 +    std::string outPath = jstringToUtf8(env, jout);
@@ -2020,7 +2021,7 @@ index b7d15ba1f..28ef33d8d 100644
 +    mpv_set_option_string(mpv, "audio-samplerate", "16000");
 +    mpv_set_option_string(mpv, "audio-channels", "mono");
 +    mpv_set_option_string(mpv, "audio-format", "s16");
-+    mpv_set_option_string(mpv, "untimed", "yes");
++    if (!jrealtime) mpv_set_option_string(mpv, "untimed", "yes");
 +    mpv_set_option_string(mpv, "video", "no");
 +    mpv_set_option_string(mpv, "terminal", "no");
 +    mpv_request_log_messages(mpv, "info"); // tail is printed to stderr on failure: why no wav
@@ -2092,10 +2093,10 @@ index b7d15ba1f..28ef33d8d 100644
  #undef NP
  } // extern "C"
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index 4730c231f..14d8ddd1a 100644
+index 4730c231f..daf80b9ec 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-@@ -3915,3 +3915,112 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
+@@ -3915,3 +3915,125 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
                                          stripSdh:stripSdh == JNI_TRUE];
      });
  }
@@ -2111,7 +2112,8 @@ index 4730c231f..14d8ddd1a 100644
 +    jobjectArray jheaders,
 +    jstring jout,
 +    jdouble startSec,
-+    jdouble endSec
++    jdouble endSec,
++    jboolean jrealtime
 +) {
 +    if (!jurl || !jout) return JNI_FALSE;
 +    const char *url = env->GetStringUTFChars(jurl, nullptr);
@@ -2133,7 +2135,9 @@ index 4730c231f..14d8ddd1a 100644
 +    mpv_set_option_string(mpv, "audio-samplerate", "16000");
 +    mpv_set_option_string(mpv, "audio-channels", "mono");
 +    mpv_set_option_string(mpv, "audio-format", "s16");
-+    mpv_set_option_string(mpv, "untimed", "yes");
++    // Realtime (untimed off) downloads at playback rate - the rate hosts already serve to the
++    // player. Untimed full-speed bursts are what remote CDNs stall for ~50 s.
++    if (!jrealtime) mpv_set_option_string(mpv, "untimed", "yes");
 +    mpv_set_option_string(mpv, "video", "no");
 +    mpv_set_option_string(mpv, "terminal", "no");
 +    mpv_request_log_messages(mpv, "info"); // tail is printed to stderr on failure: why no wav
@@ -2195,6 +2199,16 @@ index 4730c231f..14d8ddd1a 100644
 +            fprintf(stderr, "nuvio-dump produced no wav; mpv log tail:\n");
 +            for (int i = 0; i < logCount && i < 16; i++) fprintf(stderr, "  %s", logTail[i]);
 +            fflush(stderr);
++            // The in-process path has no capturable stderr; the tail rides a file instead.
++            char logPath[4096];
++            if (snprintf(logPath, sizeof(logPath), "%s.log", outPath) < (int)sizeof(logPath)) {
++                FILE *tailFile = fopen(logPath, "w");
++                if (tailFile) {
++                    int first = logCount > 16 ? logCount - 16 : 0;
++                    for (int i = first; i < logCount; i++) fprintf(tailFile, "%s", logTail[i % 16]);
++                    fclose(tailFile);
++                }
++            }
 +        }
 +    } else {
 +        mpv_terminate_destroy(mpv);
