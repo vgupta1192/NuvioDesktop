@@ -1,9 +1,9 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
 new file mode 100644
-index 000000000..6b0ccbfb7
+index 000000000..5c57bcb4c
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,135 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.desktop.NativePlayerBridge
@@ -67,26 +67,43 @@ index 000000000..6b0ccbfb7
 +                NativePlayerBridge.dumpAudioWav(url, headerLines, outPath, startSec, endSec)
 +            }.getOrDefault(false)
 +        }
-+        // Drain the child's output so a chatty decoder cannot fill the pipe and stall it.
++        // Drain the child's output so a chatty decoder cannot fill the pipe and stall it, and
++        // keep the tail: on failure it carries the mpv log (why no wav was produced).
++        val outputTail = ArrayDeque<String>()
 +        val drain = Thread {
 +            try {
-+                process.inputStream.bufferedReader().forEachLine { /* discarded */ }
++                process.inputStream.bufferedReader().forEachLine { line ->
++                    synchronized(outputTail) {
++                        outputTail.addLast(line)
++                        while (outputTail.size > 40) outputTail.removeFirst()
++                    }
++                }
 +            } catch (_: Exception) {
 +            }
 +        }.apply { isDaemon = true; start() }
-+        try {
-+            val finished = process.waitFor(TIMEOUT_MINUTES, TimeUnit.MINUTES)
-+            if (!finished) {
++        val finished = try {
++            val done = process.waitFor(TIMEOUT_MINUTES, TimeUnit.MINUTES)
++            if (!done) {
 +                process.destroyForcibly()
-+                return false
++                false
++            } else {
++                true
 +            }
 +        } catch (_: InterruptedException) {
 +            process.destroyForcibly()
-+            return false
++            false
 +        } finally {
 +            drain.join(1_000)
 +        }
-+        return process.exitValue() == 0 && File(outPath).let { it.isFile && it.length() > 44L }
++        val ok = finished && process.exitValue() == 0 &&
++            File(outPath).let { it.isFile && it.length() > 44L }
++        if (!ok) {
++            val tail = synchronized(outputTail) { outputTail.toList() }
++            if (tail.isNotEmpty()) {
++                SyncLog.w("audio dump failed; child said: " + tail.takeLast(12).joinToString(" | ").take(600))
++            }
++        }
++        return ok
 +    }
 +
 +    private fun javaLauncher(): String? {
@@ -758,10 +775,10 @@ index 000000000..6b15ded72
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 new file mode 100644
-index 000000000..8d3ee60fd
+index 000000000..cf76dc042
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
-@@ -0,0 +1,269 @@
+@@ -0,0 +1,280 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.SubtitleSyncCue
@@ -790,6 +807,11 @@ index 000000000..8d3ee60fd
 + */
 +internal object SpeechAutoSyncEngine {
 +    private const val SPOT_COUNT = 6
++
++    /** Why the last run returned null (bubble + log detail); cleared at each run. */
++    @Volatile
++    var lastFailure: String? = null
++        private set
 +    internal const val SPOT_MS = 45_000L
 +    private const val MAX_ALTERNATIVES = 6
 +    private const val MAX_SUBTITLE_BODY_BYTES = 8 * 1024 * 1024
@@ -834,11 +856,15 @@ index 000000000..8d3ee60fd
 +        request: Request,
 +        onProgress: (String) -> Unit = {},
 +    ): Locked? {
++        lastFailure = null
 +        val selectedCues = AutoSyncSubtitleCueParser.parse(request.selectedBody, request.selectedUrl)
 +        val selectedTrack = SubtitleSpeechTrack.fromCues(
 +            selectedCues.map { Triple(it.startTimeMs, it.endTimeMs, it.text) },
 +        )
-+        if (selectedTrack.size == 0) return null
++        if (selectedTrack.size == 0) {
++            lastFailure = "the subtitle has no usable cues"
++            return null
++        }
 +
 +        val tmpDir = File(System.getProperty("java.io.tmpdir"), "nuvio-audiosync")
 +        val playlist = withContext(Dispatchers.IO) {
@@ -878,6 +904,7 @@ index 000000000..8d3ee60fd
 +            }
 +        }
 +        if (spots.isEmpty()) {
++            lastFailure = "no audio could be sampled from this stream"
 +            log.w { "speech sync: no audio could be sampled (HLS playlist=${playlist != null})" }
 +            SyncLog.w("speech sync: no audio could be sampled")
 +            return null
@@ -929,6 +956,7 @@ index 000000000..8d3ee60fd
 +                }
 +            }
 +        }
++        lastFailure = "no confident match on ${spots.size} sampled spots"
 +        SyncLog.w("speech sync: no subtitle matched the audio (spots=${spots.size})")
 +            log.w { "speech sync: no subtitle matched the audio (spots=${spots.size})" }
 +        return null

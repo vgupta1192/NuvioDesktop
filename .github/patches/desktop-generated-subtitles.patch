@@ -1368,20 +1368,79 @@ index 000000000..6436bef50
 +}.getOrNull()
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt
 new file mode 100644
-index 000000000..e1981af33
+index 000000000..29712f02a
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt
-@@ -0,0 +1,11 @@
+@@ -0,0 +1,70 @@
 +package com.nuvio.app.features.player.audiosync
 +
++import com.nuvio.app.core.storage.DesktopStorage
++import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
++import java.awt.Toolkit
++import java.awt.datatransfer.StringSelection
++import java.nio.file.Files
++import java.time.LocalTime
++import java.time.format.DateTimeFormatter
++
 +/**
-+ * Desktop stub of the Android subtitle-sync log: the generated-subtitle clients only use the
-+ * warning channel. Lines go to stdout so they land in the launcher/console logs.
++ * The desktop AutoSync log, as on the phone: written to stdout and kept in memory (latest lines
++ * only, URLs reduced to their host - timings and decisions, never audio or text) so Settings can
++ * share it when a sync goes wrong. Verbose lines are recorded only with the debug-log toggle on.
 + */
 +internal object SyncLog {
-+    fun i(message: String) = println("[nuvio sync] $message")
-+    fun w(message: String) = println("[nuvio sync] WARN $message")
-+    fun d(message: String) = println("[nuvio sync] $message")
++    private const val MAX_LINES = 1_500
++    private val lines = ArrayDeque<String>()
++    private val time = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
++    private val url = Regex("""https?://([^/\s?#]+)[^\s]*""")
++
++    fun i(message: String) = add('I', message)
++
++    fun w(message: String) = add('W', message)
++
++    fun d(message: String) {
++        if (AutoSyncPreferencesRepository.debugLogsEnabled.value) add('D', message)
++    }
++
++    private fun add(level: Char, message: String) {
++        val redacted = url.replace(message) { "<${it.groupValues[1]}>" }
++        synchronized(lines) {
++            lines.addLast("${time.format(LocalTime.now())} $level $redacted")
++            while (lines.size > MAX_LINES) lines.removeFirst()
++        }
++        println("[nuvio sync] $level $redacted")
++        AutoSyncDesktopHooksBridge.install()
++    }
++
++    /** The shareable report: a header plus the recent lines. */
++    fun text(): String {
++        val header = "Nuvio AutoSync log · desktop"
++        return synchronized(lines) { (listOf(header) + lines).joinToString("\n") }
++    }
++
++    /** Copies the report to the clipboard and saves it next to the app's other data. */
++    fun share() {
++        val text = text()
++        runCatching {
++            Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
++        }
++        val file = runCatching {
++            val dir = DesktopStorage.rootDir.resolve("logs")
++            Files.createDirectories(dir)
++            dir.resolve("autosync-log.txt").also { Files.writeString(it, text) }
++        }.getOrNull()
++        println("[nuvio sync] log copied to the clipboard${file?.let { " and saved to $it" } ?: ""}")
++    }
++}
++
++/** Late binding so the shared settings UI can reach the desktop log without a dependency cycle. */
++private object AutoSyncDesktopHooksBridge {
++    @Volatile private var installed = false
++
++    fun install() {
++        if (installed) return
++        installed = true
++        com.nuvio.app.features.autosync.AutoSyncDesktopHooks.shareLog = { share() }
++    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
 index 66a2513f5..3b1a26e0b 100644
@@ -1937,10 +1996,10 @@ index 000000000..e06676724
 +    actual fun saveEnabled(enabled: Boolean) = store.putBoolean("enabled", enabled)
 +}
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-index b7d15ba1f..311758d31 100644
+index b7d15ba1f..28ef33d8d 100644
 --- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-@@ -2191,5 +2191,66 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
+@@ -2191,5 +2191,89 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
  JNIEXPORT void JNICALL NP(layoutNativeSubviews)(JNIEnv *, jobject, jlong) {}
  JNIEXPORT void JNICALL NP(reparentSurfaceNative)(JNIEnv *, jobject, jlong, jlong) {}
  
@@ -1962,6 +2021,7 @@ index b7d15ba1f..311758d31 100644
 +    mpv_set_option_string(mpv, "untimed", "yes");
 +    mpv_set_option_string(mpv, "video", "no");
 +    mpv_set_option_string(mpv, "terminal", "no");
++    mpv_request_log_messages(mpv, "info"); // tail is printed to stderr on failure: why no wav
 +    if (startSec > 0) mpv_set_option_string(mpv, "start", std::to_string(startSec).c_str());
 +    if (endSec > 0) mpv_set_option_string(mpv, "end", std::to_string(endSec).c_str());
 +    if (jheaders) {
@@ -1980,10 +2040,20 @@ index b7d15ba1f..311758d31 100644
 +    if (ok) {
 +        const char *loadfile[] = {"loadfile", url.c_str(), nullptr};
 +        mpv_command(mpv, loadfile);
++        char logTail[16][192] = {};
++        int logCount = 0;
 +        bool done = false;
 +        while (!done) {
 +            mpv_event *event = mpv_wait_event(mpv, 30.0);
 +            switch (event->event_id) {
++                case MPV_EVENT_LOG_MESSAGE: {
++                    mpv_event_log_message *message = (mpv_event_log_message *)event->data;
++                    if (message->text && message->text[0]) {
++                        snprintf(logTail[logCount % 16], sizeof(logTail[0]), "%s", message->text);
++                        logCount++;
++                    }
++                    break;
++                }
 +                case MPV_EVENT_END_FILE:
 +                case MPV_EVENT_IDLE:
 +                case MPV_EVENT_SHUTDOWN:
@@ -1994,6 +2064,18 @@ index b7d15ba1f..311758d31 100644
 +            }
 +        }
 +        mpv_terminate_destroy(mpv); // finalises the WAV header
++        FILE *wavCheckEarly = fopen(outPath.c_str(), "rb");
++        long wavSizeEarly = 0;
++        if (wavCheckEarly) {
++            fseek(wavCheckEarly, 0, SEEK_END);
++            wavSizeEarly = ftell(wavCheckEarly);
++            fclose(wavCheckEarly);
++        }
++        if (wavSizeEarly <= 44) {
++            fprintf(stderr, "nuvio-dump produced no wav; mpv log tail:\n");
++            for (int i = 0; i < logCount && i < 16; i++) fprintf(stderr, "  %s", logTail[i]);
++            fflush(stderr);
++        }
 +    } else {
 +        mpv_terminate_destroy(mpv);
 +    }
@@ -2008,10 +2090,10 @@ index b7d15ba1f..311758d31 100644
  #undef NP
  } // extern "C"
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index 4730c231f..e2c6bb8d7 100644
+index 4730c231f..51830de72 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-@@ -3915,3 +3915,86 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
+@@ -3915,3 +3915,109 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
                                          stripSdh:stripSdh == JNI_TRUE];
      });
  }
@@ -2052,6 +2134,7 @@ index 4730c231f..e2c6bb8d7 100644
 +    mpv_set_option_string(mpv, "untimed", "yes");
 +    mpv_set_option_string(mpv, "video", "no");
 +    mpv_set_option_string(mpv, "terminal", "no");
++    mpv_request_log_messages(mpv, "info"); // tail is printed to stderr on failure: why no wav
 +    if (startSec > 0) mpv_set_option_string(mpv, "start", std::to_string(startSec).c_str());
 +    if (endSec > 0) mpv_set_option_string(mpv, "end", std::to_string(endSec).c_str());
 +    if (jheaders) {
@@ -2072,10 +2155,20 @@ index 4730c231f..e2c6bb8d7 100644
 +    if (ok) {
 +        const char *loadfile[] = {"loadfile", url, nullptr};
 +        mpv_command(mpv, loadfile);
++        char logTail[16][192] = {};
++        int logCount = 0;
 +        bool done = false;
 +        while (!done) {
 +            mpv_event *event = mpv_wait_event(mpv, 30.0);
 +            switch (event->event_id) {
++                case MPV_EVENT_LOG_MESSAGE: {
++                    mpv_event_log_message *message = (mpv_event_log_message *)event->data;
++                    if (message->text && message->text[0]) {
++                        strlcpy(logTail[logCount % 16], message->text, sizeof(logTail[0]));
++                        logCount++;
++                    }
++                    break;
++                }
 +                case MPV_EVENT_END_FILE:
 +                case MPV_EVENT_IDLE:
 +                case MPV_EVENT_SHUTDOWN:
@@ -2086,6 +2179,18 @@ index 4730c231f..e2c6bb8d7 100644
 +            }
 +        }
 +        mpv_terminate_destroy(mpv); // finalises the WAV header
++        FILE *wavCheckEarly = fopen(outPath, "rb");
++        long wavSizeEarly = 0;
++        if (wavCheckEarly) {
++            fseek(wavCheckEarly, 0, SEEK_END);
++            wavSizeEarly = ftell(wavCheckEarly);
++            fclose(wavCheckEarly);
++        }
++        if (wavSizeEarly <= 44) {
++            fprintf(stderr, "nuvio-dump produced no wav; mpv log tail:\n");
++            for (int i = 0; i < logCount && i < 16; i++) fprintf(stderr, "  %s", logTail[i]);
++            fflush(stderr);
++        }
 +    } else {
 +        mpv_terminate_destroy(mpv);
 +    }

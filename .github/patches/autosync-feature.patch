@@ -1,3 +1,135 @@
+diff --git a/composeApp/src/commonMain/composeResources/values/autosync_strings.xml b/composeApp/src/commonMain/composeResources/values/autosync_strings.xml
+index 31739af9a..6cbbd5e69 100644
+--- a/composeApp/src/commonMain/composeResources/values/autosync_strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/autosync_strings.xml
+@@ -10,4 +10,12 @@
+     <string name="settings_playback_auto_sync_tolerance_description">Keep the original subtitle timing when the sync would move it by no more than this. Tap to change.</string>
+     <string name="settings_playback_auto_sync_tolerance_off">Off</string>
+     <string name="settings_playback_auto_sync_tolerance_value">%1$d ms</string>
++    <string name="settings_playback_auto_sync_debug_logs">Auto Sync Debug Log</string>
++    <string name="settings_playback_auto_sync_debug_logs_description">Record every AutoSync decision (spots, speech, confidence) in the shareable sync log.</string>
++    <string name="settings_playback_audio_sync_fallback">Audio Sync Fallback</string>
++    <string name="settings_playback_audio_sync_fallback_description">Samples the stream's audio and matches it against the subtitle when a sync is needed. This is what performs the sync.</string>
++    <string name="settings_playback_audio_sync_show_statistics">Show Auto Sync Statistics</string>
++    <string name="settings_playback_audio_sync_show_statistics_description">Show what a sync did - the applied shift and confidence, or why it failed - in its bubble.</string>
++    <string name="settings_playback_audio_sync_share_log">Share Auto Sync Log</string>
++    <string name="settings_playback_audio_sync_share_log_description">Copy the recent AutoSync report (timings and decisions, never audio or text) to the clipboard.</string>
+ </resources>
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopHooks.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopHooks.kt
+new file mode 100644
+index 000000000..5c3828805
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopHooks.kt
+@@ -0,0 +1,9 @@
++package com.nuvio.app.features.autosync
++
++/**
++ * Platform-provided AutoSync conveniences the shared settings UI can call. The desktop sets
++ * [shareLog] (clipboard + file); platforms without a log leave it null and the row hides.
++ */
++internal object AutoSyncDesktopHooks {
++    var shareLog: (() -> Unit)? = null
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPreferencesRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPreferencesRepository.kt
+index 5ece5c860..3b1e674a6 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPreferencesRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPreferencesRepository.kt
+@@ -25,6 +25,18 @@ internal object AutoSyncPreferencesRepository {
+     private val _syncToleranceMs = MutableStateFlow(0)
+     val syncToleranceMs: StateFlow<Int> = _syncToleranceMs.asStateFlow()
+ 
++    /** Verbose decision lines in the sync log (the shareable AutoSync report). */
++    private val _debugLogsEnabled = MutableStateFlow(false)
++    val debugLogsEnabled: StateFlow<Boolean> = _debugLogsEnabled.asStateFlow()
++
++    /** The audio-sampling fallback (the speech engine); off = subtitles attach unsynced. */
++    private val _audioFallbackEnabled = MutableStateFlow(true)
++    val audioFallbackEnabled: StateFlow<Boolean> = _audioFallbackEnabled.asStateFlow()
++
++    /** Show what a sync did (shift, confidence, failure reason) in its bubble. */
++    private val _showStatistics = MutableStateFlow(true)
++    val showStatistics: StateFlow<Boolean> = _showStatistics.asStateFlow()
++
+     private var loadedProfileId: Int? = null
+     private var loadPersistedValue: (() -> Boolean?)? = null
+     private var savePersistedValue: ((Boolean) -> Unit)? = null
+@@ -32,6 +44,12 @@ internal object AutoSyncPreferencesRepository {
+     private var saveAggressiveModePersistedValue: ((Boolean) -> Unit)? = null
+     private var loadSyncTolerancePersistedValue: (() -> Int?)? = null
+     private var saveSyncTolerancePersistedValue: ((Int) -> Unit)? = null
++    private var loadDebugLogsPersistedValue: (() -> Boolean?)? = null
++    private var saveDebugLogsPersistedValue: ((Boolean) -> Unit)? = null
++    private var loadAudioFallbackPersistedValue: (() -> Boolean?)? = null
++    private var saveAudioFallbackPersistedValue: ((Boolean) -> Unit)? = null
++    private var loadShowStatisticsPersistedValue: (() -> Boolean?)? = null
++    private var saveShowStatisticsPersistedValue: ((Boolean) -> Unit)? = null
+     private var lastStartupSessionKey: Int? = null
+     private var lastStartupPlaybackKey: String? = null
+ 
+@@ -42,6 +60,12 @@ internal object AutoSyncPreferencesRepository {
+         saveAggressiveMode: (Boolean) -> Unit = {},
+         loadSyncToleranceMs: () -> Int? = { null },
+         saveSyncToleranceMs: (Int) -> Unit = {},
++        loadDebugLogs: () -> Boolean? = { null },
++        saveDebugLogs: (Boolean) -> Unit = {},
++        loadAudioFallback: () -> Boolean? = { null },
++        saveAudioFallback: (Boolean) -> Unit = {},
++        loadShowStatistics: () -> Boolean? = { null },
++        saveShowStatistics: (Boolean) -> Unit = {},
+     ) {
+         loadPersistedValue = load
+         savePersistedValue = save
+@@ -49,6 +73,12 @@ internal object AutoSyncPreferencesRepository {
+         saveAggressiveModePersistedValue = saveAggressiveMode
+         loadSyncTolerancePersistedValue = loadSyncToleranceMs
+         saveSyncTolerancePersistedValue = saveSyncToleranceMs
++        loadDebugLogsPersistedValue = loadDebugLogs
++        saveDebugLogsPersistedValue = saveDebugLogs
++        loadAudioFallbackPersistedValue = loadAudioFallback
++        saveAudioFallbackPersistedValue = saveAudioFallback
++        loadShowStatisticsPersistedValue = loadShowStatistics
++        saveShowStatisticsPersistedValue = saveShowStatistics
+         loadedProfileId = null
+     }
+ 
+@@ -60,6 +90,9 @@ internal object AutoSyncPreferencesRepository {
+         _aggressiveMode.value = loadAggressiveModePersistedValue?.invoke() ?: true
+         _syncToleranceMs.value = loadSyncTolerancePersistedValue?.invoke()
+             ?.takeIf { it in syncToleranceOptionsMs } ?: 0
++        _debugLogsEnabled.value = loadDebugLogsPersistedValue?.invoke() ?: false
++        _audioFallbackEnabled.value = loadAudioFallbackPersistedValue?.invoke() ?: true
++        _showStatistics.value = loadShowStatisticsPersistedValue?.invoke() ?: true
+         loadedProfileId = profileId
+         lastStartupSessionKey = null
+         lastStartupPlaybackKey = null
+@@ -86,6 +119,27 @@ internal object AutoSyncPreferencesRepository {
+         saveSyncTolerancePersistedValue?.invoke(toleranceMs)
+     }
+ 
++    fun setDebugLogsEnabled(enabled: Boolean) {
++        ensureLoaded()
++        if (_debugLogsEnabled.value == enabled) return
++        _debugLogsEnabled.value = enabled
++        saveDebugLogsPersistedValue?.invoke(enabled)
++    }
++
++    fun setAudioFallbackEnabled(enabled: Boolean) {
++        ensureLoaded()
++        if (_audioFallbackEnabled.value == enabled) return
++        _audioFallbackEnabled.value = enabled
++        saveAudioFallbackPersistedValue?.invoke(enabled)
++    }
++
++    fun setShowStatistics(enabled: Boolean) {
++        ensureLoaded()
++        if (_showStatistics.value == enabled) return
++        _showStatistics.value = enabled
++        saveShowStatisticsPersistedValue?.invoke(enabled)
++    }
++
+     fun claimStartupRun(sessionKey: Int, playbackKey: String): Boolean {
+         ensureLoaded()
+         if (!_preferredSubtitleAutoSyncOnStart.value) return false
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
 index 211fe93b9..138adb598 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
@@ -329,6 +461,81 @@ index 95fb67c5d..e25b324b4 100644
              if (hasBurnedInServerSubtitle) clearServerSubtitleTrack()
          },
          onFetchAddonSubtitles = { fetchAddonSubtitlesForActiveItem() },
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt
+index 228e2dd09..b4d979dc3 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt
+@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.remember
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.autosync.AutoSyncDesktopHooks
+ import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
+ import com.nuvio.app.features.player.SubtitleLanguageOption
+ import com.nuvio.app.isIos
+@@ -38,6 +39,18 @@ internal fun AutoSyncPlaybackSettingsRows(
+         AutoSyncPreferencesRepository.ensureLoaded()
+         AutoSyncPreferencesRepository.syncToleranceMs
+     }.collectAsStateWithLifecycle()
++    val debugLogsEnabled by remember {
++        AutoSyncPreferencesRepository.ensureLoaded()
++        AutoSyncPreferencesRepository.debugLogsEnabled
++    }.collectAsStateWithLifecycle()
++    val audioFallbackEnabled by remember {
++        AutoSyncPreferencesRepository.ensureLoaded()
++        AutoSyncPreferencesRepository.audioFallbackEnabled
++    }.collectAsStateWithLifecycle()
++    val showStatistics by remember {
++        AutoSyncPreferencesRepository.ensureLoaded()
++        AutoSyncPreferencesRepository.showStatistics
++    }.collectAsStateWithLifecycle()
+     if (isIos) return
+ 
+     val preferredLanguageAvailable =
+@@ -98,4 +111,43 @@ internal fun AutoSyncPlaybackSettingsRows(
+             AutoSyncPreferencesRepository.setSyncToleranceMs(next)
+         },
+     )
++    // Desktop parity with the phone's Auto Sync rows: debug log, the audio fallback itself,
++    // its statistics in the bubble, and the shareable sync report.
++    SettingsGroupDivider(isTablet = isTablet)
++    SettingsSwitchRow(
++        title = stringResource(Res.string.settings_playback_auto_sync_debug_logs),
++        description = stringResource(Res.string.settings_playback_auto_sync_debug_logs_description),
++        checked = debugLogsEnabled,
++        enabled = enabled,
++        isTablet = isTablet,
++        onCheckedChange = AutoSyncPreferencesRepository::setDebugLogsEnabled,
++    )
++    SettingsGroupDivider(isTablet = isTablet)
++    SettingsSwitchRow(
++        title = stringResource(Res.string.settings_playback_audio_sync_fallback),
++        description = stringResource(Res.string.settings_playback_audio_sync_fallback_description),
++        checked = audioFallbackEnabled,
++        enabled = enabled && preferredSubtitleAutoSyncOnStart,
++        isTablet = isTablet,
++        onCheckedChange = AutoSyncPreferencesRepository::setAudioFallbackEnabled,
++    )
++    SettingsGroupDivider(isTablet = isTablet)
++    SettingsSwitchRow(
++        title = stringResource(Res.string.settings_playback_audio_sync_show_statistics),
++        description = stringResource(Res.string.settings_playback_audio_sync_show_statistics_description),
++        checked = showStatistics,
++        enabled = enabled && preferredSubtitleAutoSyncOnStart && audioFallbackEnabled,
++        isTablet = isTablet,
++        onCheckedChange = AutoSyncPreferencesRepository::setShowStatistics,
++    )
++    AutoSyncDesktopHooks.shareLog?.let { shareLog ->
++        SettingsGroupDivider(isTablet = isTablet)
++        SettingsNavigationRow(
++            title = stringResource(Res.string.settings_playback_audio_sync_share_log),
++            description = stringResource(Res.string.settings_playback_audio_sync_share_log_description),
++            enabled = enabled,
++            isTablet = isTablet,
++            onClick = { shareLog() },
++        )
++    }
+ }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
 index c8d3188db..ea7b67407 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
@@ -518,10 +725,10 @@ index 7ce25ea2c..531aafaba 100644
      LaunchedEffect(controller, sourceAvailable, playWhenReady) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 new file mode 100644
-index 000000000..5758da77a
+index 000000000..d8728430a
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-@@ -0,0 +1,417 @@
+@@ -0,0 +1,440 @@
 +package com.nuvio.app.features.player
 +
 +import co.touchlab.kermit.Logger
@@ -750,6 +957,14 @@ index 000000000..5758da77a
 +            setSubtitleUri(selectedUrl)
 +            return
 +        }
++        // The audio fallback IS the sync; with it off (mobile-parity toggle) subtitles attach
++        // unsynced and the claim is not consumed.
++        if (!AutoSyncPreferencesRepository.audioFallbackEnabled.value) {
++            autoSyncLog.i { "audio sync fallback is off - plain attach" }
++            setSubtitleUri(selectedUrl)
++            return
++        }
++
 +        if (
 +            startupScope &&
 +            !AutoSyncPreferencesRepository.claimStartupRun(playerInstanceKey, streamUrlAtCall)
@@ -807,6 +1022,7 @@ index 000000000..5758da77a
 +                    if (!stillRelevant()) return@launch
 +                    autoSyncLog.w { "speech sync: subtitle download failed or empty" }
 +                    SyncLog.w("speech sync: subtitle download failed")
++                    SpeechAutoSyncEngine.lastFailure = "the subtitle could not be downloaded"
 +                    notifyFailure(bubbleRunId)
 +                    return@launch
 +                }
@@ -898,13 +1114,21 @@ index 000000000..5758da77a
 +                        SyncedSubtitles.save(chosenUrl, srt, method = "autosync", nowMs = System.currentTimeMillis())
 +                    }
 +                }
++                val statistics = if (AutoSyncPreferencesRepository.showStatistics.value) {
++                    " • " + when {
++                        withinToleranceMs != null -> "within tolerance"
++                        else -> "shift ${timeline.maxAlignmentShiftMs().roundToLong()} ms · confidence %.2f".format(result.peak)
++                    }
++                } else {
++                    ""
++                }
 +                notifyAutoSync(
 +                    bubbleRunId,
 +                    "success",
 +                    when {
-+                        withinToleranceMs != null -> "Auto Sync • Subtitles already in sync"
-+                        result.switched -> "Auto Sync • Switched to a subtitle that matches the audio"
-+                        else -> "Auto Sync • Subtitles synced"
++                        withinToleranceMs != null -> "Auto Sync • Subtitles already in sync$statistics"
++                        result.switched -> "Auto Sync • Switched to a subtitle that matches the audio$statistics"
++                        else -> "Auto Sync • Subtitles synced$statistics"
 +                    },
 +                    null,
 +                )
@@ -931,11 +1155,17 @@ index 000000000..5758da77a
 +
 +    /** The plain failure outcome: the unsynced subtitle attached at the start stays as it is. */
 +    private fun notifyFailure(bubbleRunId: Long) {
++        val reason = SpeechAutoSyncEngine.lastFailure
++        val detail = if (AutoSyncPreferencesRepository.showStatistics.value && !reason.isNullOrBlank()) {
++            " • $reason"
++        } else {
++            ""
++        }
 +        notifyAutoSync(
 +            bubbleRunId,
 +            "failure",
-+            "Auto Sync • Sync failed • subtitle timing not changed",
-+            "Sync failed: Auto Sync couldn't match this subtitle to the audio.",
++            "Auto Sync • Sync failed • subtitle timing not changed$detail",
++            "Sync failed: Auto Sync couldn't match this subtitle to the audio.$detail",
 +        )
 +    }
 +}
@@ -991,10 +1221,10 @@ index 000000000..79cad8c3c
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferencesPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferencesPlatform.desktop.kt
 new file mode 100644
-index 000000000..487e3fd55
+index 000000000..2985e7861
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/autosync/AutoSyncPreferencesPlatform.desktop.kt
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,70 @@
 +package com.nuvio.app.features.player.autosync
 +
 +import com.nuvio.app.core.storage.DesktopStorage
@@ -1015,6 +1245,9 @@ index 000000000..487e3fd55
 +    private const val AUTO_SYNC_ON_START_KEY = "preferred_subtitle_auto_sync_on_start"
 +    private const val AGGRESSIVE_MODE_KEY = "auto_sync_aggressive_mode"
 +    private const val SYNC_TOLERANCE_MS_KEY = "auto_sync_tolerance_ms"
++    private const val DEBUG_LOGS_KEY = "auto_sync_debug_logs"
++    private const val AUDIO_FALLBACK_KEY = "auto_sync_audio_fallback"
++    private const val SHOW_STATISTICS_KEY = "auto_sync_show_statistics"
 +
 +    private const val LEGACY_STORE_NAME = "nuvio_autosync"
 +    private const val LEGACY_ENABLED_KEY = "automatic_subtitle_sync_enabled"
@@ -1034,6 +1267,12 @@ index 000000000..487e3fd55
 +                saveAggressiveMode = { enabled -> store.putBoolean(ProfileScopedKey.of(AGGRESSIVE_MODE_KEY), enabled) },
 +                loadSyncToleranceMs = { store.getInt(ProfileScopedKey.of(SYNC_TOLERANCE_MS_KEY)) },
 +                saveSyncToleranceMs = { toleranceMs -> store.putInt(ProfileScopedKey.of(SYNC_TOLERANCE_MS_KEY), toleranceMs) },
++                loadDebugLogs = { store.getBoolean(ProfileScopedKey.of(DEBUG_LOGS_KEY)) },
++                saveDebugLogs = { enabled -> store.putBoolean(ProfileScopedKey.of(DEBUG_LOGS_KEY), enabled) },
++                loadAudioFallback = { store.getBoolean(ProfileScopedKey.of(AUDIO_FALLBACK_KEY)) },
++                saveAudioFallback = { enabled -> store.putBoolean(ProfileScopedKey.of(AUDIO_FALLBACK_KEY), enabled) },
++                loadShowStatistics = { store.getBoolean(ProfileScopedKey.of(SHOW_STATISTICS_KEY)) },
++                saveShowStatistics = { enabled -> store.putBoolean(ProfileScopedKey.of(SHOW_STATISTICS_KEY), enabled) },
 +            )
 +            // One-time migration: the old cue-reference engine's enable toggle becomes the
 +            // mobile-style auto-sync-at-start toggle when the new keys were never written.
