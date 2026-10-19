@@ -791,10 +791,10 @@ index 000000000..6b15ded72
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 new file mode 100644
-index 000000000..be6f8e318
+index 000000000..5934bcf48
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
-@@ -0,0 +1,370 @@
+@@ -0,0 +1,368 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.SubtitleSyncCue
@@ -1109,9 +1109,7 @@ index 000000000..be6f8e318
 +                }
 +            }.getOrDefault(false)
 +            if (!dumped || !wav.exists() || wav.length() < 800L) return null
-+            val full = readWavPcm(wav) ?: return null
-+            val trimSamples = (leadInMs * RmsVad.SAMPLE_RATE / 1000L).toInt()
-+            val pcm = if (trimSamples in 1 until full.size) full.copyOfRange(trimSamples, full.size) else full
++            val pcm = HlsAudioSpotSampler.readWavPcm(wav) ?: return null
 +            val intervals = RmsVad.detect(pcm).map { (a, b) -> (a + startMs) to (b + startMs) }
 +            val speechMs = intervals.sumOf { (a, b) -> b - a }
 +            if (speechMs <= 0) return null
