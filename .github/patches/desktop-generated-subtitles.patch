@@ -1999,10 +1999,10 @@ index 000000000..e06676724
 +    actual fun saveEnabled(enabled: Boolean) = store.putBoolean("enabled", enabled)
 +}
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-index b7d15ba1f..7532a474e 100644
+index b7d15ba1f..7392c9e6e 100644
 --- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-@@ -2191,5 +2191,89 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
+@@ -2191,5 +2191,92 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
  JNIEXPORT void JNICALL NP(layoutNativeSubviews)(JNIEnv *, jobject, jlong) {}
  JNIEXPORT void JNICALL NP(reparentSurfaceNative)(JNIEnv *, jobject, jlong, jlong) {}
  
@@ -2016,7 +2016,10 @@ index b7d15ba1f..7532a474e 100644
 +    mpv_handle *mpv = mpv_create();
 +    if (!mpv) return JNI_FALSE;
 +    mpv_set_option_string(mpv, "vo", "null");
-+    mpv_set_option_string(mpv, "ao", ("pcm:file=" + outPath).c_str());
++    // mpv removed the legacy "pcm:file=<path>" sub-option syntax (option parse failure =
++    // silent no-wav dumps). Modern form: ao=pcm with o=<path>.
++    mpv_set_option_string(mpv, "ao", "pcm");
++    mpv_set_option_string(mpv, "o", outPath);
 +    mpv_set_option_string(mpv, "mute", "yes"); // never audible, even if ao=pcm is missing and mpv falls back
 +    mpv_set_option_string(mpv, "audio-samplerate", "16000");
 +    mpv_set_option_string(mpv, "audio-channels", "mono");
@@ -2093,10 +2096,10 @@ index b7d15ba1f..7532a474e 100644
  #undef NP
  } // extern "C"
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index 4730c231f..daf80b9ec 100644
+index 4730c231f..11bca70fd 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-@@ -3915,3 +3915,125 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
+@@ -3915,3 +3915,128 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
                                          stripSdh:stripSdh == JNI_TRUE];
      });
  }
@@ -2130,7 +2133,10 @@ index 4730c231f..daf80b9ec 100644
 +        return JNI_FALSE;
 +    }
 +    mpv_set_option_string(mpv, "vo", "null");
-+    mpv_set_option_string(mpv, "ao", ("pcm:file=" + std::string(outPath)).c_str());
++    // mpv removed the legacy "pcm:file=<path>" sub-option syntax - it fails option parsing
++    // and every dump silently wrote nothing. The modern form is ao=pcm with o=<path>.
++    mpv_set_option_string(mpv, "ao", "pcm");
++    mpv_set_option_string(mpv, "o", outPath);
 +    mpv_set_option_string(mpv, "mute", "yes"); // never audible, even if ao=pcm is missing and mpv falls back
 +    mpv_set_option_string(mpv, "audio-samplerate", "16000");
 +    mpv_set_option_string(mpv, "audio-channels", "mono");

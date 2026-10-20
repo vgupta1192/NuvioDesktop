@@ -1,9 +1,9 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
 new file mode 100644
-index 000000000..09427f674
+index 000000000..ed3932566
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
-@@ -0,0 +1,227 @@
+@@ -0,0 +1,229 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.desktop.NativePlayerBridge
@@ -141,7 +141,9 @@ index 000000000..09427f674
 +            SyncLog.w("audio dump: abandoned a stuck in-process dump after ${timeoutSec + 10}s")
 +            return false
 +        }
-+        return result.get()
++        val ok = result.get()
++        if (!ok) reportFailure(outPath, emptyList())
++        return ok
 +    }
 +
 +    /** The why-no-wav evidence: the child's output tail, else the native tail file. */
@@ -882,10 +884,10 @@ index 000000000..6b15ded72
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 new file mode 100644
-index 000000000..eaa832f16
+index 000000000..a2496cd6c
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
-@@ -0,0 +1,401 @@
+@@ -0,0 +1,395 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.SubtitleSyncCue
@@ -937,7 +939,7 @@ index 000000000..eaa832f16
 +
 +    internal const val SPOT_MS = 45_000L
 +
-+    /** A realtime direct spot downloads its window at playback rate: 45 s media + margin. */
++    /** An untimed direct dump of a 45 s window takes seconds when healthy; 90 s catches pathologies. */
 +    private const val DIRECT_SPOT_DUMP_TIMEOUT_SEC = 90L
 +    private const val MAX_ALTERNATIVES = 6
 +    private const val MAX_SUBTITLE_BODY_BYTES = 8 * 1024 * 1024
@@ -1054,11 +1056,9 @@ index 000000000..eaa832f16
 +        }
 +        onProgress("Listening for dialogue…\n" + panelLines(empty = true))
 +
-+        // Direct (non-HLS) windows are sampled in REAL TIME (playback-rate downloads, the
-+        // rate every host already serves to the player; untimed full-speed bursts stall on
-+        // remote CDNs). A realtime spot costs ~SPOT_MS of wall time, so direct runs sample at
-+        // most 3 windows inside the run budget.
-+        val queue = ArrayDeque(if (playlist != null) windows else windows.take(3))
++        // With the ao=pcm dump fixed, an untimed direct dump finishes a whole window in
++        // seconds (measured 2.2 s for 45 s of audio), so all planned windows are affordable.
++        val queue = ArrayDeque(windows)
 +        while (queue.isNotEmpty()) {
 +            currentCoroutineContext().ensureActive()
 +            val window = queue.removeFirst()
@@ -1215,9 +1215,6 @@ index 000000000..eaa832f16
 +        try {
 +            wav.delete()
 +            val headerLines = headers.map { (k, v) -> "$k: $v" }.toTypedArray()
-+            // Realtime: the dump plays the window at playback rate (mute, untimed off), so it
-+            // finishes after ~SPOT_MS wall seconds instead of bursting the whole window's
-+            // bytes at full speed - the burst is what remote CDNs stall for ~50 s.
 +            val dumped = runCatching {
 +                synchronized(NativeDumpGate) {
 +                    AudioDumpProcess.dumpAudioWav(
@@ -1227,7 +1224,6 @@ index 000000000..eaa832f16
 +                        startSec = startMs / 1000.0,
 +                        endSec = (startMs + SPOT_MS) / 1000.0,
 +                        timeoutSec = DIRECT_SPOT_DUMP_TIMEOUT_SEC,
-+                        realtime = true,
 +                    )
 +                }
 +            }.getOrDefault(false)
