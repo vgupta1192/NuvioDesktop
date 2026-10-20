@@ -1,9 +1,9 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
 new file mode 100644
-index 000000000..ed3932566
+index 000000000..e9ccd051a
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
-@@ -0,0 +1,229 @@
+@@ -0,0 +1,231 @@
 +package com.nuvio.app.features.player.audiosync
 +
 +import com.nuvio.app.features.player.desktop.NativePlayerBridge
@@ -156,6 +156,8 @@ index 000000000..ed3932566
 +        val nativeTail = runCatching { if (logFile.isFile) logFile.readText() else null }.getOrNull()
 +        if (!nativeTail.isNullOrBlank()) {
 +            SyncLog.w("audio dump failed; mpv said: " + nativeTail.replace('\n', ' ').take(600))
++        } else {
++            SyncLog.w("audio dump failed; mpv wrote no log (init-time failure)")
 +        }
 +        logFile.delete()
 +    }

@@ -1999,10 +1999,10 @@ index 000000000..e06676724
 +    actual fun saveEnabled(enabled: Boolean) = store.putBoolean("enabled", enabled)
 +}
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-index b7d15ba1f..f18b259ed 100644
+index b7d15ba1f..4fdf7bac8 100644
 --- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-@@ -2191,5 +2191,92 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
+@@ -2191,5 +2191,112 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
  JNIEXPORT void JNICALL NP(layoutNativeSubviews)(JNIEnv *, jobject, jlong) {}
  JNIEXPORT void JNICALL NP(reparentSurfaceNative)(JNIEnv *, jobject, jlong, jlong) {}
  
@@ -2015,15 +2015,22 @@ index b7d15ba1f..f18b259ed 100644
 +    std::string outPath = jstringToUtf8(env, jout);
 +    mpv_handle *mpv = mpv_create();
 +    if (!mpv) return JNI_FALSE;
++    char optFail[512] = {};
++    auto setOpt = [&](const char *name, const char *value) {
++        if (mpv_set_option_string(mpv, name, value) < 0) {
++            size_t n = strlen(optFail);
++            snprintf(optFail + n, sizeof(optFail) - n, "%s ", name);
++        }
++    };
 +    mpv_set_option_string(mpv, "vo", "null");
 +    // mpv removed the legacy "pcm:file=<path>" sub-option syntax (option parse failure =
 +    // silent no-wav dumps). Modern form: ao=pcm with o=<path>.
-+    mpv_set_option_string(mpv, "ao", "pcm");
-+    mpv_set_option_string(mpv, "o", outPath.c_str());
-+    mpv_set_option_string(mpv, "mute", "yes"); // never audible, even if ao=pcm is missing and mpv falls back
-+    mpv_set_option_string(mpv, "audio-samplerate", "16000");
-+    mpv_set_option_string(mpv, "audio-channels", "mono");
-+    mpv_set_option_string(mpv, "audio-format", "s16");
++    setOpt("ao", "pcm");
++    setOpt("o", outPath.c_str());
++    setOpt("mute", "yes");
++    setOpt("audio-samplerate", "16000");
++    setOpt("audio-channels", "mono");
++    setOpt("audio-format", "s16");
 +    if (!jrealtime) mpv_set_option_string(mpv, "untimed", "yes");
 +    mpv_set_option_string(mpv, "video", "no");
 +    mpv_set_option_string(mpv, "terminal", "no");
@@ -2043,6 +2050,19 @@ index b7d15ba1f..f18b259ed 100644
 +        if (!joined.empty()) mpv_set_option_string(mpv, "http-header-fields", joined.c_str());
 +    }
 +    bool ok = mpv_initialize(mpv) >= 0;
++    if (!ok) {
++        char logPath[4096];
++        if (snprintf(logPath, sizeof(logPath), "%s.log", outPath.c_str()) < (int)sizeof(logPath)) {
++            FILE *tailFile = fopen(logPath, "w");
++            if (tailFile) {
++                const char *ver = mpv_get_property_string(mpv, "mpv-version");
++                fprintf(tailFile, "mpv-version: %s\n", ver ? ver : "unknown");
++                if (optFail[0]) fprintf(tailFile, "rejected options: %s\n", optFail);
++                fclose(tailFile);
++            }
++        }
++        return JNI_FALSE;
++    }
 +    if (ok) {
 +        const char *loadfile[] = {"loadfile", url.c_str(), nullptr};
 +        mpv_command(mpv, loadfile);
@@ -2096,10 +2116,10 @@ index b7d15ba1f..f18b259ed 100644
  #undef NP
  } // extern "C"
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index 4730c231f..11bca70fd 100644
+index 4730c231f..e04b1fdc7 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-@@ -3915,3 +3915,128 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
+@@ -3915,3 +3915,155 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
                                          stripSdh:stripSdh == JNI_TRUE];
      });
  }
@@ -2132,15 +2152,24 @@ index 4730c231f..11bca70fd 100644
 +        env->ReleaseStringUTFChars(jout, outPath);
 +        return JNI_FALSE;
 +    }
++    // Self-reporting dump: every rejected option and an init failure land in <out>.log so
++    // the app's shared log can name them even when nothing else runs.
++    char optFail[512] = {};
++    auto setOpt = [&](const char *name, const char *value) {
++        if (mpv_set_option_string(mpv, name, value) < 0) {
++            strlcat(optFail, name, sizeof(optFail));
++            strlcat(optFail, " ", sizeof(optFail));
++        }
++    };
 +    mpv_set_option_string(mpv, "vo", "null");
 +    // mpv removed the legacy "pcm:file=<path>" sub-option syntax - it fails option parsing
 +    // and every dump silently wrote nothing. The modern form is ao=pcm with o=<path>.
-+    mpv_set_option_string(mpv, "ao", "pcm");
-+    mpv_set_option_string(mpv, "o", outPath);
-+    mpv_set_option_string(mpv, "mute", "yes"); // never audible, even if ao=pcm is missing and mpv falls back
-+    mpv_set_option_string(mpv, "audio-samplerate", "16000");
-+    mpv_set_option_string(mpv, "audio-channels", "mono");
-+    mpv_set_option_string(mpv, "audio-format", "s16");
++    setOpt("ao", "pcm");
++    setOpt("o", outPath);
++    setOpt("mute", "yes");
++    setOpt("audio-samplerate", "16000");
++    setOpt("audio-channels", "mono");
++    setOpt("audio-format", "s16");
 +    // Realtime (untimed off) downloads at playback rate - the rate hosts already serve to the
 +    // player. Untimed full-speed bursts are what remote CDNs stall for ~50 s.
 +    if (!jrealtime) mpv_set_option_string(mpv, "untimed", "yes");
@@ -2163,7 +2192,25 @@ index 4730c231f..11bca70fd 100644
 +        }
 +        if (!joined.empty()) mpv_set_option_string(mpv, "http-header-fields", joined.c_str());
 +    }
-+    bool ok = mpv_initialize(mpv) >= 0;
++    int initErr = mpv_initialize(mpv);
++    bool ok = initErr >= 0;
++    if (!ok) {
++        char logPath[4096];
++        if (snprintf(logPath, sizeof(logPath), "%s.log", outPath) < (int)sizeof(logPath)) {
++            FILE *tailFile = fopen(logPath, "w");
++            if (tailFile) {
++                const char *ver = mpv_get_property_string(mpv, "mpv-version");
++                fprintf(tailFile, "mpv-version: %s\n", ver ? ver : "unknown");
++                if (optFail[0]) fprintf(tailFile, "rejected options: %s\n", optFail);
++                fprintf(tailFile, "mpv_initialize FAILED (err=%d)\n", initErr);
++                fclose(tailFile);
++            }
++        }
++        mpv_terminate_destroy(mpv);
++        env->ReleaseStringUTFChars(jurl, url);
++        env->ReleaseStringUTFChars(jout, outPath);
++        return JNI_FALSE;
++    }
 +    if (ok) {
 +        const char *loadfile[] = {"loadfile", url, nullptr};
 +        mpv_command(mpv, loadfile);
