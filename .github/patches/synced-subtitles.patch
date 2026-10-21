@@ -521,25 +521,24 @@ diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/Str
 index 743752f22..55e9365b2 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
-@@ -80,6 +80,7 @@ internal fun StreamCard(
-     val highlightLabel = if (isCurrent) null else LocalStreamHighlight.current(stream)
-     val marked = isCurrent || highlightLabel != null
-     val markedLabel = if (isCurrent) currentLabel else highlightLabel
+@@ -81,4 +81,5 @@ internal fun StreamCard(
+     val partyLabel = if (isCurrent) null else LocalStreamHighlight.current(stream)
 +    val hasSyncedSubtitles = rememberSyncedSubtitlesMark(stream) // Nuvio fork: synced subtitles
      val cardShape = RoundedCornerShape(12.dp)
      val badgeImages = stream.badges.filter { it.imageURL.isNotBlank() }
      val hasBadges = badgeImages.isNotEmpty() || (showFileSizeBadges && stream.behaviorHints.videoSize != null)
-@@ -155,6 +156,10 @@ internal fun StreamCard(
+@@ -153,7 +154,11 @@ internal fun StreamCard(
+                 if (isCurrent && !currentLabel.isNullOrBlank()) {
                      Spacer(modifier = Modifier.width(8.dp))
-                     CurrentStreamBadge(label = markedLabel)
+                     CurrentStreamBadge(label = currentLabel)
                  }
 +                if (hasSyncedSubtitles) { // Nuvio fork: synced subtitles
 +                    Spacer(modifier = Modifier.width(8.dp))
 +                    SyncedSubtitlesBadge()
 +                }
-             }
- 
-             val subtitle = stream.streamSubtitle
+                 if (partyLabel != null) {
+                     Spacer(modifier = Modifier.width(8.dp))
+                     Text(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 index 06a740985..a4244774e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
