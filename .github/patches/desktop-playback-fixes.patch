@@ -844,7 +844,7 @@ index a2496cd6..d8c332a3 100644
          } finally {
              wav.delete()
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index e4146272..c9ebe07f 100644
+index e4146272..a4023da9 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 @@ -623,7 +623,7 @@ internal class NativePlayerController(
@@ -856,6 +856,27 @@ index e4146272..c9ebe07f 100644
              "enh.pic.brightness", "enh.pic.contrast", "enh.pic.saturation", "enh.pic.gamma",
              "enh.pic.hue", "enh.pic.deband", "enh.audio.gain", "enh.audio.norm", "enh.audio.eq" ->
                  com.nuvio.app.features.player.DesktopPlayerEnhance.handleEvent(type, value)
+@@ -1159,6 +1159,20 @@ internal class NativePlayerController(
+     override fun setSubtitleUri(url: String) {
+         log.d { "setSubtitleUri ${url.toPlaybackLogKey()} handle=$handle" }
+         handle.takeIf { it != 0L }?.let { current ->
++            // Fork: "Generated" subtitle entries are pseudo URLs - hand them to the generator
++            // (audio dump + Groq) instead of mpv, which cannot open them. Any real subtitle
++            // pick ends a running generation.
++            val source = pendingSource
++            if (com.nuvio.app.features.player.generated.GeneratedSubtitlesDesktop.maybeGenerate(
++                    current,
++                    source?.sourceUrl,
++                    source?.headerLines.orEmpty().toHeaderMap(),
++                    url,
++                )
++            ) {
++                return
++            }
++            com.nuvio.app.features.player.generated.GeneratedSubtitlesDesktop.stopGeneration()
+             NativePlayerBridge.clearExternalSubtitles(current)
+             NativePlayerBridge.addSubtitleUrl(current, url)
+         }
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
 index ca4a9478..5e071fcd 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
