@@ -1,5 +1,6 @@
 name: Build NuvioDesktop Jellyfin+LiveTV (upstream release sync)
 # sync-pulse: 0.1.32-alpha 2026-10-22T21:30:11Z
+# sync-pulse: forced 2026-10-22T21:47:55Z
 
 on:
   push:
