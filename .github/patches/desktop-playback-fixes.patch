@@ -1,7 +1,16 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
-index 2d0026de..6bbda8f0 100644
+index 2d0026de..e796dbd6 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
+@@ -445,7 +445,7 @@ class BlackBarTracker {
+      * [notePeek].
+      */
+     val shouldPeek: Boolean
+-        get() = lastViaCrop && sinceFullView >= PEEK_AFTER_SAMPLES &&
++        get() = PEEK_ENABLED && lastViaCrop && sinceFullView >= PEEK_AFTER_SAMPLES &&
+             committed?.let { !it.isCloseTo(VideoContentRect.Full) } == true
+ 
+     fun notePeek() {
 @@ -485,6 +485,9 @@ class BlackBarTracker {
              if (staticRepeats < STATIC_CONFIRM_REPEATS) return null
              staticRepeats = 0
@@ -12,7 +21,19 @@ index 2d0026de..6bbda8f0 100644
          samples++
          val measured = sample.thickness
          for (edge in 0 until 4) {
-@@ -537,6 +540,8 @@ class BlackBarTracker {
+@@ -512,8 +515,9 @@ class BlackBarTracker {
+             return null
+         }
+         stableChecks = 0
+-        if (previous != null && !rect.covers(previous)) {
+-            // Less picture than now: wait for the same answer on the next check.
++        if (previous != null) {
++            // Any change of the picture area (more or less picture) waits for the same answer on
++            // the next check, so one odd frame cannot flash the black bars or a crop.
+             val waiting = pending
+             if (waiting != null && waiting.isCloseTo(rect)) pendingCount++ else {
+                 pending = rect
+@@ -537,6 +541,8 @@ class BlackBarTracker {
          const val MAX_CALIBRATION_POLLS = 30
          const val STATIC_CONFIRM_REPEATS = 2
          const val SECOND_AXIS_MIN_BAR = 0.03f
@@ -21,22 +42,87 @@ index 2d0026de..6bbda8f0 100644
          const val CALIBRATION_INTERVAL_MS = 1_200L
          /** Checks continue at this pace until the title ends. */
          const val STEADY_INTERVAL_MS = 3_000L
-@@ -549,8 +554,8 @@ class BlackBarTracker {
+@@ -549,8 +555,13 @@ class BlackBarTracker {
          /** A seeded mpv stream is checked against the whole frame after this many cropped samples. */
          const val SEEDED_PEEK_AFTER = 3
          const val FIRST_SAMPLE_DELAY_MS = 800L
 -        /** mpv only: show the whole frame for one sample after this many cropped samples (about 40 s). */
 -        const val PEEK_AFTER_SAMPLES = 13
++        /**
++         * Looking at the whole frame means un-cropping it for a moment, which shows as a flash of
++         * black bars. Off: the crop only ever follows what the cropped frame itself shows.
++         */
++        const val PEEK_ENABLED = false
 +        /** mpv only: show the whole frame for one sample after this many cropped samples (about 20 s). */
 +        const val PEEK_AFTER_SAMPLES = 6
          const val PEEK_SETTLE_MS = 220L
  
          /** Longest side of the sampled frame. Enough to place bar edges within ~0.3%. */
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
-index 3b147ac3..55693240 100644
+index 3b147ac3..b87149d3 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
-@@ -192,6 +192,13 @@ internal object DesktopPlayerEnhance {
+@@ -23,6 +23,8 @@ internal object DesktopPlayerEnhance {
+         private set
+ 
+     private var sourceUrl: String = ""
++    /** Smart Enhance: a mild contrast, colour and gamma lift on top of the picture sliders. */
++    @Volatile private var smartEnhance: Boolean = false
+     private var qualityId: Int = AUTO
+     private var qualityOptions: List<QualityOption> = emptyList()
+ 
+@@ -37,6 +39,7 @@ internal object DesktopPlayerEnhance {
+ 
+     /** Loads the saved values and makes Settings > Playback show the Picture & sound section. */
+     fun install() {
++        smartEnhance = runCatching { store.getBoolean(SMART_KEY) }.getOrNull() == true
+         PlayerEnhancePrefs.install(object : PlayerEnhancePrefs.Storage {
+             override fun getInt(key: String) = store.getInt(key)
+             override fun putInt(key: String, value: Int) = store.putInt(key, value)
+@@ -106,7 +109,16 @@ internal object DesktopPlayerEnhance {
+             if (handle == 0L) return true
+             when {
+                 key == "open" -> refreshQualityLocked()
+-                key == "reset" -> PlayerEnhancePrefs.reset()
++                key == "reset" -> {
++                    smartEnhance = false
++                    store.putBoolean(SMART_KEY, false)
++                    PlayerEnhancePrefs.reset()
++                }
++                key == "smart" -> {
++                    smartEnhance = level != 0
++                    store.putBoolean(SMART_KEY, smartEnhance)
++                    applyPictureLocked()
++                }
+                 key.startsWith("pic.") -> {
+                     val name = key.removePrefix("pic.")
+                     PlayerEnhancePrefs.update {
+@@ -135,7 +147,7 @@ internal object DesktopPlayerEnhance {
+     fun panelJson(): String = synchronized(gate) {
+         val v = PlayerEnhancePrefs.values.value
+         buildString {
+-            append("{\"picture\":{")
++            append("{\"smart\":$smartEnhance,\"picture\":{")
+             append("\"brightness\":${v.brightness},\"contrast\":${v.contrast},\"saturation\":${v.saturation}")
+             append(",\"gamma\":${v.gamma},\"hue\":${v.hue},\"deband\":${v.deband}},\"audio\":{")
+             append("\"gainDb\":${v.gainDb},\"normalize\":${v.normalize},\"eq\":${v.eq},\"eqNames\":[")
+@@ -170,10 +182,11 @@ internal object DesktopPlayerEnhance {
+ 
+     private fun applyPictureLocked() {
+         val v = PlayerEnhancePrefs.values.value
+-        setLocked("brightness", v.brightness.toString())
+-        setLocked("contrast", v.contrast.toString())
+-        setLocked("saturation", v.saturation.toString())
+-        setLocked("gamma", v.gamma.toString())
++        val lift = smartEnhance
++        setLocked("brightness", (v.brightness + if (lift) SMART_BRIGHTNESS else 0).coerceIn(-100, 100).toString())
++        setLocked("contrast", (v.contrast + if (lift) SMART_CONTRAST else 0).coerceIn(-100, 100).toString())
++        setLocked("saturation", (v.saturation + if (lift) SMART_SATURATION else 0).coerceIn(-100, 100).toString())
++        setLocked("gamma", (v.gamma + if (lift) SMART_GAMMA else 0).coerceIn(-100, 100).toString())
+         setLocked("hue", v.hue.toString())
+         setLocked("deband", if (v.deband) "yes" else "no")
+     }
+@@ -192,6 +205,13 @@ internal object DesktopPlayerEnhance {
      private fun refreshQualityLocked() {
          val current = handle
          if (current == 0L) return
@@ -50,7 +136,7 @@ index 3b147ac3..55693240 100644
          runCatching {
              val count = NativePlayerBridge.propGetString(current, "track-list/count")?.toIntOrNull() ?: 0
              val found = mutableListOf<QualityOption>()
-@@ -225,6 +232,12 @@ internal object DesktopPlayerEnhance {
+@@ -225,6 +245,12 @@ internal object DesktopPlayerEnhance {
  
      private fun selectQualityLocked(id: Int) {
          qualityId = id
@@ -63,7 +149,7 @@ index 3b147ac3..55693240 100644
          when {
              id != AUTO -> setLocked("vid", id.toString())
              hlsBitrateCapFor(sourceUrl) != null && pinWithinCapLocked() -> Unit
-@@ -232,6 +245,21 @@ internal object DesktopPlayerEnhance {
+@@ -232,6 +258,26 @@ internal object DesktopPlayerEnhance {
          }
      }
  
@@ -82,6 +168,11 @@ index 3b147ac3..55693240 100644
 +        }
 +    }
 +
++    private const val SMART_KEY = "smart_enhance"
++    private const val SMART_BRIGHTNESS = 2
++    private const val SMART_CONTRAST = 8
++    private const val SMART_SATURATION = 14
++    private const val SMART_GAMMA = 6
      private const val AUTO = -1
      private const val YOUTUBE_HLS_CAP_BPS = 2_500_000
  }
@@ -509,8 +600,69 @@ index 54d90c76..c4f45bfa 100644
              sourceHeaders = playbackHeaders,
              playWhenReady = playWhenReady,
              initialPositionMs = initialPositionMs,
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
+index 3d5f5e47..1fe50862 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
+@@ -157,9 +157,23 @@ internal object HlsAudioSpotSampler {
+                         else -> raf.seek(raf.filePointer + size + (size % 2))
+                     }
+                 }
+-                if (dataPos < 0 || dataLen <= 0) return null
+-                if (dataLen > MAX_WAV_BYTES) return null
+-                val bytes = ByteArray(dataLen.coerceAtMost(length - dataPos).toInt())
++                if (dataPos < 0) {
++                    // Header not parseable: the dump asks mpv for 16 kHz mono s16, so treat
++                    // everything after a canonical 44-byte header as that.
++                    dataPos = 44
++                    dataLen = length - 44
++                    format = 1
++                    bits = 16
++                    channels = 1
++                }
++                // ao=pcm leaves 0 or a streaming placeholder in the data size when the header
++                // is not rewritten at close; the file length is the truth.
++                val available = length - dataPos
++                if (dataLen <= 0 || dataLen > available) dataLen = available
++                if (dataLen <= 0 || dataLen > MAX_WAV_BYTES) return null
++                // WAVE_FORMAT_EXTENSIBLE (0xFFFE) carries the real format in a sub-format tag.
++                if (format != 1 && format != 3) format = if (bits == 32) 3 else 1
++                val bytes = ByteArray(dataLen.toInt())
+                 raf.seek(dataPos)
+                 raf.readFully(bytes)
+                 when {
+@@ -170,10 +184,10 @@ internal object HlsAudioSpotSampler {
+                         for (f in 0 until frames) {
+                             var acc = 0
+                             for (c in 0 until channels) {
+-                                acc += le16(bytes, i)
++                                acc += le16(bytes, i).toShort().toInt()
+                                 i += 2
+                             }
+-                            out[f] = (acc / channels - 32768) / 32768f
++                            out[f] = (acc / channels) / 32768f
+                         }
+                         out
+                     }
+@@ -210,5 +224,16 @@ internal object HlsAudioSpotSampler {
+             ((b[i + 2].toInt() and 0xFF) shl 16) or
+             ((b[i + 3].toInt() and 0xFF) shl 24)
+ 
++    /** First bytes of [file] as hex, for logs when a wav cannot be read. */
++    fun headerHex(file: File): String = try {
++        file.inputStream().use { input ->
++            val head = ByteArray(48)
++            val n = input.read(head).coerceAtLeast(0)
++            head.take(n).joinToString("") { "%02x".format(it) }
++        }
++    } catch (_: Exception) {
++        "unreadable"
++    }
++
+     private fun le16(b: ByteArray, i: Int): Int = (b[i].toInt() and 0xFF) or ((b[i + 1].toInt() and 0xFF) shl 8)
+ }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
-index a2496cd6..835a57d6 100644
+index a2496cd6..d8c332a3 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 @@ -337,11 +337,23 @@ internal object SpeechAutoSyncEngine {
@@ -525,7 +677,7 @@ index a2496cd6..835a57d6 100644
 +            }
 +            val pcm = HlsAudioSpotSampler.readWavPcm(wav)
 +            if (pcm == null) {
-+                SyncLog.w("spot at ${startMs / 1000}s: wav unreadable (${wav.length()} bytes)")
++                SyncLog.w("spot at ${startMs / 1000}s: wav unreadable (${wav.length()} bytes, head=${HlsAudioSpotSampler.headerHex(wav)})")
 +                return null
 +            }
              val intervals = RmsVad.detect(pcm).map { (a, b) -> (a + startMs) to (b + startMs) }
@@ -540,6 +692,19 @@ index a2496cd6..835a57d6 100644
              return HlsAudioSpotSampler.Spot(startMs, intervals, speechMs, wav.length())
          } finally {
              wav.delete()
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index e4146272..c9ebe07f 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -623,7 +623,7 @@ internal class NativePlayerController(
+             }
+             "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
+             "autoSyncRetry" -> com.nuvio.app.features.player.DesktopAutoSyncRetry.retry()
+-            "enh.open", "enh.reset", "enh.quality",
++            "enh.open", "enh.reset", "enh.quality", "enh.smart",
+             "enh.pic.brightness", "enh.pic.contrast", "enh.pic.saturation", "enh.pic.gamma",
+             "enh.pic.hue", "enh.pic.deband", "enh.audio.gain", "enh.audio.norm", "enh.audio.eq" ->
+                 com.nuvio.app.features.player.DesktopPlayerEnhance.handleEvent(type, value)
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
 index ca4a9478..5e071fcd 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
@@ -832,3 +997,83 @@ index ca4a9478..5e071fcd 100644
 -    return (size > 44) ? JNI_TRUE : JNI_FALSE;
 +    return ok ? JNI_TRUE : JNI_FALSE;
  }
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/composeApp/src/desktopMain/resources/player-ui/controls.css
+index af50c214..926077f1 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.css
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
+@@ -3631,3 +3631,12 @@ svg {
+ .enhance-row input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: #fff; }
+ .enhance-value { font-variant-numeric: tabular-nums; opacity: .7; }
+ .enhance-note { padding: 4px 16px 8px; opacity: .6; font-size: 13px; }
++
++.action.is-active {
++  background: rgba(255, 255, 255, .18);
++}
++
++.action.is-active svg {
++  color: #ffd766;
++  fill: #ffd766;
++}
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
+index 67b2042a..6a9e6957 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.html
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.html
+@@ -26,6 +26,9 @@
+     <symbol id="icon-skip-next" viewBox="0 0 24 24">
+       <path d="M5 4.9c0-.78.86-1.26 1.53-.84L15 9.36V5a1 1 0 1 1 2 0v14a1 1 0 1 1-2 0v-4.36l-8.47 5.3A1 1 0 0 1 5 19.1V4.9Z"/>
+     </symbol>
++    <symbol id="icon-sparkle" viewBox="0 0 24 24">
++      <path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2Zm7 11l.95 2.55L22.5 16.5l-2.55.95L19 20l-.95-2.55L15.5 16.5l2.55-.95L19 13ZM5 14l.7 1.8L7.5 16.5l-1.8.7L5 19l-.7-1.8L2.5 16.5l1.8-.7L5 14Z"/>
++    </symbol>
+     <symbol id="icon-build" viewBox="0 0 24 24">
+       <path d="M22 19.59 12.41 10 14 8.41l1.17 1.17 2.83-2.83-1.17-1.17L19.66 2.75A6 6 0 0 0 12.2 10.2L2.3 20.1a1 1 0 0 0 0 1.41l.19.19a1 1 0 0 0 1.41 0l9.9-9.9A6 6 0 0 0 21.25 4.34l-2.83 2.83 1.17 1.17-2.83 2.83L15.59 10 14 11.59 20.41 18 22 19.59Z"/>
+     </symbol>
+@@ -255,6 +258,7 @@
+             <button class="action" data-command="speed"><svg><use href="#icon-speed"></use></svg><span id="speedLabel">1x</span></button>
+             <button class="action" data-command="subtitles"><svg><use href="#icon-subs"></use></svg><span id="subtitlesLabel">Subs</span></button>
+             <button class="action" data-command="audio"><svg><use href="#icon-audio"></use></svg><span id="audioLabel">Audio</span></button>
++            <button class="action" id="smartEnhanceButton" data-command="smartEnhance" aria-pressed="false" title="Smart Enhance: richer contrast and colour"><svg><use href="#icon-sparkle"></use></svg><span id="smartEnhanceLabel">Enhance</span></button>
+             <button class="action" id="enhanceButton" data-command="enhance"><svg><use href="#icon-build"></use></svg><span id="enhanceLabel">Video</span></button>
+             <button class="action optional" id="sourcesButton" data-command="sources"><svg><use href="#icon-source"></use></svg><span id="sourcesLabel">Sources</span></button>
+             <button class="action optional" id="episodesButton" data-command="episodes"><svg><use href="#icon-episodes"></use></svg><span id="episodesLabel">Episodes</span></button>
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
+index a7478a15..25ca5a50 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.js
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
+@@ -35,6 +35,7 @@ const streamTitle = document.getElementById("streamTitle");
+ const providerName = document.getElementById("providerName");
+ const playerBadges = document.getElementById("playerBadges");
+ const resizeLabel = document.getElementById("resizeLabel");
++const smartEnhanceButton = document.getElementById("smartEnhanceButton");
+ const speedLabel = document.getElementById("speedLabel");
+ const subtitlesLabel = document.getElementById("subtitlesLabel");
+ const audioLabel = document.getElementById("audioLabel");
+@@ -1289,6 +1290,7 @@ const renderEnhanceModal = () => {
+   }
+ 
+   enhanceSection("Picture");
++  enhanceToggle("Smart Enhance (richer contrast and colour)", Boolean(enhance.smart), on => send("enh.smart", on ? 1 : 0));
+   enhanceSliders.forEach(slider => {
+     enhanceSlider(slider.label, Number(picture[slider.key]) || 0, slider.min, slider.max, "", value => send(slider.event, value));
+   });
+@@ -2648,6 +2650,9 @@ const renderChrome = () => {
+   setText(streamTitle, state.streamTitle);
+   setText(providerName, state.providerName);
+   renderPlayerBadges();
++  const smartEnhanceOn = Boolean(state.enhance && state.enhance.smart);
++  smartEnhanceButton.classList.toggle("is-active", smartEnhanceOn);
++  smartEnhanceButton.setAttribute("aria-pressed", smartEnhanceOn ? "true" : "false");
+   resizeLabel.textContent = state.resizeModeLabel || "Fit";
+   speedLabel.textContent = state.playbackSpeedLabel || "1x";
+   subtitlesLabel.textContent = state.subtitlesLabel || "Subs";
+@@ -3077,6 +3082,10 @@ document.querySelectorAll("[data-command]").forEach(button => {
+       openPlayerModal("speed");
+       return;
+     }
++    if (command === "smartEnhance") {
++      send("enh.smart", (state.enhance && state.enhance.smart) ? 0 : 1);
++      return;
++    }
+     if (command === "enhance") {
+       send("enh.open", 0);
+       openPlayerModal("enhance");
