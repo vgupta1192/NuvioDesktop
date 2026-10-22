@@ -1,5 +1,5 @@
 name: Build NuvioDesktop Jellyfin+LiveTV (upstream release sync)
-# sync-pulse: forced 2026-10-22T12:32:42Z
+# sync-pulse: forced 2026-10-22T12:57:23Z
 
 on:
   push:
@@ -184,7 +184,7 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           # optional-desktop-late
-          for P in desktop-youtube-livetv desktop-player-enhance desktop-autosync-parity; do
+          for P in desktop-youtube-livetv desktop-player-enhance desktop-autosync-parity desktop-playback-fixes; do
             if git apply "fork-src/.github/patches/$P.patch"; then
               echo "applied $P.patch"
             else

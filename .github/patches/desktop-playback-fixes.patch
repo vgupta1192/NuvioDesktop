@@ -1,0 +1,485 @@
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeDiag.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeDiag.kt
+index e6fb99ea..15afb8ec 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeDiag.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeDiag.kt
+@@ -19,7 +19,7 @@ internal object DesktopYouTubeDiag {
+     @Volatile private var resolved = false
+     @Volatile private var stallSent = false
+ 
+-    fun begin(mediaUrl: String) {
++    fun begin(mediaUrl: String, rewrite: String = "") {
+         if (!YouTubeStreamResolver.isYouTubeMedia(mediaUrl)) {
+             url = ""
+             return
+@@ -29,7 +29,7 @@ internal object DesktopYouTubeDiag {
+         resolved = false
+         stallSent = false
+         val snapshotUrl = mediaUrl
+-        post("prepare", snapshotUrl) { probe(snapshotUrl) }
++        post("prepare", snapshotUrl) { probe(snapshotUrl) + ",\"rewrite\":${rewrite.toJsonString()}" }
+     }
+ 
+     fun onSnapshot(snapshot: PlayerPlaybackSnapshot) {
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeHls.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeHls.kt
+new file mode 100644
+index 00000000..3763d263
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeHls.kt
+@@ -0,0 +1,138 @@
++package com.nuvio.app.features.player
++
++import com.nuvio.app.features.streams.YouTubeStreamResolver
++import com.sun.net.httpserver.HttpServer
++import java.net.HttpURLConnection
++import java.net.InetAddress
++import java.net.InetSocketAddress
++import java.net.URI
++import java.util.UUID
++import java.util.concurrent.ConcurrentHashMap
++import java.util.concurrent.Executors
++
++/**
++ * Makes YouTube's HLS master playable by mpv.
++ *
++ * The master lists around 17 variants plus several audio renditions. ffmpeg's HLS demuxer opens
++ * every playlist of the master and probes each of them before the first frame, and mpv cannot
++ * adapt afterwards, so the video sits on "buffering" for minutes (nothing plays within 15 s on
++ * Desktop while the same stream starts in seconds on Mobile, whose player only loads what it
++ * plays). This rewrites the master to one H.264 variant at or under [MaxBandwidth] and its
++ * default audio, serves that page from a loopback server, and hands mpv the loopback address.
++ * The playlists and segments are still fetched from YouTube.
++ */
++internal object DesktopYouTubeHls {
++    private const val MaxBandwidth = 2_800_000L
++    private const val MaxHeight = 720
++
++    class Rewrite(val url: String, val summary: String)
++
++    private val pages = ConcurrentHashMap<String, String>()
++    @Volatile private var server: HttpServer? = null
++
++    /** Blocking (network); call off the UI thread. Null leaves the original address in use. */
++    fun rewrite(masterUrl: String): Rewrite? {
++        if (!YouTubeStreamResolver.isYouTubeMedia(masterUrl)) return null
++        if (!masterUrl.contains("hls_variant") && !masterUrl.substringBefore('?').endsWith(".m3u8")) return null
++        return runCatching {
++            val body = fetch(masterUrl)
++            val page = buildPage(masterUrl, body) ?: return null
++            val id = UUID.randomUUID().toString().replace("-", "")
++            pages[id] = page.first
++            if (pages.size > 8) pages.keys.firstOrNull { it != id }?.let(pages::remove)
++            val port = ensureServer().address.port
++            Rewrite("http://127.0.0.1:$port/m/$id.m3u8", page.second)
++        }.getOrNull()
++    }
++
++    private fun fetch(url: String): String {
++        val connection = URI(url).toURL().openConnection() as HttpURLConnection
++        connection.connectTimeout = 10_000
++        connection.readTimeout = 10_000
++        return connection.inputStream.use { it.readNBytes(1024 * 1024) }.decodeToString()
++    }
++
++    private class Variant(val info: String, val uri: String, val bandwidth: Long, val height: Int, val avc: Boolean, val audio: String?)
++
++    private val attribute = Regex("""([A-Z0-9-]+)=("[^"]*"|[^,]*)""")
++
++    private fun attributes(line: String): Map<String, String> =
++        attribute.findAll(line.substringAfter(':')).associate { it.groupValues[1] to it.groupValues[2].trim('"') }
++
++    private fun buildPage(masterUrl: String, body: String): Pair<String, String>? {
++        val base = URI(masterUrl)
++        val lines = body.lines().map { it.trim() }
++        val variants = mutableListOf<Variant>()
++        val media = mutableListOf<String>()
++        val header = mutableListOf<String>()
++        var index = 0
++        while (index < lines.size) {
++            val line = lines[index]
++            when {
++                line.startsWith("#EXT-X-STREAM-INF") -> {
++                    val uri = lines.drop(index + 1).firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
++                    if (uri != null) {
++                        val attrs = attributes(line)
++                        variants += Variant(
++                            info = line,
++                            uri = base.resolve(uri).toString(),
++                            bandwidth = attrs["BANDWIDTH"]?.toLongOrNull() ?: Long.MAX_VALUE,
++                            height = attrs["RESOLUTION"]?.substringAfter('x')?.toIntOrNull() ?: 0,
++                            avc = attrs["CODECS"].orEmpty().contains("avc1"),
++                            audio = attrs["AUDIO"],
++                        )
++                    }
++                }
++                line.startsWith("#EXT-X-MEDIA") -> media += line
++                line.startsWith("#EXT-X-VERSION") || line.startsWith("#EXT-X-INDEPENDENT-SEGMENTS") -> header += line
++            }
++            index++
++        }
++        if (variants.isEmpty()) return null
++        val h264 = variants.filter { it.avc }.ifEmpty { variants }
++        val capped = h264.filter { it.bandwidth <= MaxBandwidth && (it.height == 0 || it.height <= MaxHeight) }
++        val chosen = capped.maxByOrNull { it.bandwidth } ?: h264.minBy { it.bandwidth }
++        val audioLine = chosen.audio?.let { group ->
++            val ofGroup = media.filter { attributes(it)["TYPE"] == "AUDIO" && attributes(it)["GROUP-ID"] == group }
++            ofGroup.firstOrNull { attributes(it)["DEFAULT"] == "YES" } ?: ofGroup.firstOrNull()
++        }
++        val page = buildString {
++            append("#EXTM3U\n")
++            header.forEach { append(it).append('\n') }
++            if (audioLine != null) {
++                append(Regex("""URI="([^"]*)"""").replace(audioLine) { match ->
++                    "URI=\"" + base.resolve(match.groupValues[1]) + "\""
++                }).append('\n')
++            }
++            append(chosen.info.replace(Regex(""",SUBTITLES="[^"]*""""), "")).append('\n')
++            append(chosen.uri).append('\n')
++        }
++        val summary = "variants=${variants.size} chose=${chosen.height}p ${chosen.bandwidth / 1000}kbps avc=${chosen.avc} audio=${audioLine != null}"
++        return page to summary
++    }
++
++    @Synchronized
++    private fun ensureServer(): HttpServer {
++        server?.let { return it }
++        val created = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0)
++        created.createContext("/m/") { exchange ->
++            val id = exchange.requestURI.path.substringAfterLast('/').removeSuffix(".m3u8")
++            val page = pages[id]
++            if (page == null) {
++                exchange.sendResponseHeaders(404, -1)
++            } else {
++                val bytes = page.toByteArray()
++                exchange.responseHeaders.add("Content-Type", "application/vnd.apple.mpegurl")
++                exchange.sendResponseHeaders(200, bytes.size.toLong())
++                exchange.responseBody.use { it.write(bytes) }
++            }
++            exchange.close()
++        }
++        created.executor = Executors.newSingleThreadExecutor { runnable ->
++            Thread(runnable, "youtube-hls-local").apply { isDaemon = true }
++        }
++        created.start()
++        server = created
++        return created
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
+index 54d90c76..c4f45bfa 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
+@@ -1,5 +1,6 @@
+ package com.nuvio.app.features.player
+ 
++import com.nuvio.app.features.streams.YouTubeStreamResolver
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Box
+@@ -229,9 +230,14 @@ private fun NativePlayerSurface(
+             return@LaunchedEffect
+         }
+         delay(16L)
+-        DesktopYouTubeDiag.begin(sourceUrl)
++        val youTubeRewrite = if (YouTubeStreamResolver.isYouTubeMedia(sourceUrl)) {
++            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { DesktopYouTubeHls.rewrite(sourceUrl) }
++        } else {
++            null
++        }
++        DesktopYouTubeDiag.begin(sourceUrl, youTubeRewrite?.summary ?: "no rewrite")
+         controller.attach(
+-            sourceUrl = sourceUrl,
++            sourceUrl = youTubeRewrite?.url ?: sourceUrl,
+             sourceHeaders = playbackHeaders,
+             playWhenReady = playWhenReady,
+             initialPositionMs = initialPositionMs,
+diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
+index ca4a9478..62148036 100644
+--- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
++++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
+@@ -3956,33 +3956,24 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
+ // Generated subtitles: dump [startSec, endSec) of url's audio as 16 kHz mono s16 WAV with a
+ // headless mpv instance (ao=pcm + untimed decodes as fast as the demuxer allows). Blocking on
+ // the calling thread - Kotlin dispatches it to IO.
+-extern "C" JNIEXPORT jboolean JNICALL
+-Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_dumpAudioWav(
+-    JNIEnv *env,
+-    jobject /* bridge */,
+-    jstring jurl,
+-    jobjectArray jheaders,
+-    jstring jout,
+-    jdouble startSec,
+-    jdouble endSec,
+-    jboolean jrealtime
++// One headless dump attempt. mode 0 = ao=pcm writing through ao-pcm-file; mode 1 = encode mode
++// (o=<path>, muxer picked from the extension). Appends why it failed to [report].
++static bool nuvioDumpOnce(
++    const std::string &url,
++    const std::string &headers,
++    const char *outPath,
++    double startSec,
++    double endSec,
++    bool realtime,
++    int mode,
++    std::string &report
+ ) {
+-    if (!jurl || !jout) return JNI_FALSE;
+-    const char *url = env->GetStringUTFChars(jurl, nullptr);
+-    const char *outPath = env->GetStringUTFChars(jout, nullptr);
+-    if (!url || !outPath) {
+-        if (url) env->ReleaseStringUTFChars(jurl, url);
+-        if (outPath) env->ReleaseStringUTFChars(jout, outPath);
+-        return JNI_FALSE;
+-    }
++    remove(outPath);
+     mpv_handle *mpv = mpv_create();
+     if (!mpv) {
+-        env->ReleaseStringUTFChars(jurl, url);
+-        env->ReleaseStringUTFChars(jout, outPath);
+-        return JNI_FALSE;
++        report += "mpv_create failed\n";
++        return false;
+     }
+-    // Self-reporting dump: every rejected option and an init failure land in <out>.log so
+-    // the app's shared log can name them even when nothing else runs.
+     char optFail[512] = {};
+     auto setOpt = [&](const char *name, const char *value) {
+         if (mpv_set_option_string(mpv, name, value) < 0) {
+@@ -3990,117 +3981,142 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_dumpAudioWav(
+             strlcat(optFail, " ", sizeof(optFail));
+         }
+     };
+-    mpv_set_option_string(mpv, "vo", "null");
+-    // mpv removed the legacy "pcm:file=<path>" sub-option syntax - it fails option parsing
+-    // and every dump silently wrote nothing. The modern form is ao=pcm with o=<path>.
+-    setOpt("ao", "pcm");
+-    setOpt("o", outPath);
++    setOpt("vo", "null");
++    setOpt("video", "no");
++    setOpt("terminal", "no");
+     setOpt("mute", "yes");
+     setOpt("audio-samplerate", "16000");
+     setOpt("audio-channels", "mono");
+     setOpt("audio-format", "s16");
++    if (mode == 0) {
++        setOpt("ao", "pcm");
++        setOpt("ao-pcm-file", outPath);
++        setOpt("ao-pcm-waveheader", "yes");
++    } else {
++        setOpt("ao", "pcm");
++        setOpt("o", outPath);
++    }
+     // Realtime (untimed off) downloads at playback rate - the rate hosts already serve to the
+     // player. Untimed full-speed bursts are what remote CDNs stall for ~50 s.
+-    if (!jrealtime) mpv_set_option_string(mpv, "untimed", "yes");
+-    mpv_set_option_string(mpv, "video", "no");
+-    mpv_set_option_string(mpv, "terminal", "no");
+-    mpv_request_log_messages(mpv, "info"); // tail is printed to stderr on failure: why no wav
+-    if (startSec > 0) mpv_set_option_string(mpv, "start", std::to_string(startSec).c_str());
+-    if (endSec > 0) mpv_set_option_string(mpv, "end", std::to_string(endSec).c_str());
++    if (!realtime) setOpt("untimed", "yes");
++    setOpt("network-timeout", "20");
++    if (startSec > 0) setOpt("start", std::to_string(startSec).c_str());
++    if (endSec > 0) setOpt("end", std::to_string(endSec).c_str());
++    if (!headers.empty()) setOpt("http-header-fields", headers.c_str());
++    mpv_request_log_messages(mpv, "v");
++    int initErr = mpv_initialize(mpv);
++    if (initErr < 0) {
++        char line[160];
++        snprintf(line, sizeof(line), "mode %d: mpv_initialize FAILED (err=%d) rejected: %s\n", mode, initErr, optFail);
++        report += line;
++        mpv_terminate_destroy(mpv);
++        return false;
++    }
++    const char *loadfile[] = {"loadfile", url.c_str(), nullptr};
++    int loadErr = mpv_command(mpv, loadfile);
++    char logTail[20][192] = {};
++    int logCount = 0;
++    int endReason = -1;
++    int endError = 0;
++    bool started = false;
++    bool done = false;
++    double waited = 0;
++    // MPV_EVENT_IDLE is NOT an end condition: mpv reports idle right after init, before the
++    // queued loadfile starts, which used to end the loop at once and tear the load down
++    // (no wav, no log, ~5 s inside terminate_destroy).
++    while (!done && waited < 175.0) {
++        mpv_event *event = mpv_wait_event(mpv, 1.0);
++        switch (event->event_id) {
++            case MPV_EVENT_NONE:
++                waited += 1.0;
++                break;
++            case MPV_EVENT_LOG_MESSAGE: {
++                mpv_event_log_message *message = (mpv_event_log_message *)event->data;
++                if (message->text && message->text[0]) {
++                    strlcpy(logTail[logCount % 20], message->text, sizeof(logTail[0]));
++                    logCount++;
++                }
++                break;
++            }
++            case MPV_EVENT_START_FILE:
++                started = true;
++                break;
++            case MPV_EVENT_END_FILE: {
++                mpv_event_end_file *end = (mpv_event_end_file *)event->data;
++                if (end) {
++                    endReason = (int)end->reason;
++                    endError = end->error;
++                }
++                done = true;
++                break;
++            }
++            case MPV_EVENT_SHUTDOWN:
++                done = true;
++                break;
++            default:
++                break;
++        }
++    }
++    mpv_terminate_destroy(mpv); // finalises the WAV header
++    long size = 0;
++    if (FILE *check = fopen(outPath, "rb")) {
++        fseek(check, 0, SEEK_END);
++        size = ftell(check);
++        fclose(check);
++    }
++    if (size > 44) return true;
++    char summary[256];
++    snprintf(summary, sizeof(summary),
++             "mode %d: no wav (size=%ld load=%d started=%d end=%d err=%d logs=%d waited=%.0fs) rejected: %s\n",
++             mode, size, loadErr, started ? 1 : 0, endReason, endError, logCount, waited, optFail);
++    report += summary;
++    int first = logCount > 20 ? logCount - 20 : 0;
++    for (int i = first; i < logCount; i++) report += logTail[i % 20];
++    return false;
++}
++
++// Generated subtitles / speech sync: dump [startSec, endSec) of url's audio as 16 kHz mono s16
++// WAV with a headless mpv instance. Blocking on the calling thread - Kotlin dispatches it to IO.
++// The failure report rides <out>.log so the app's shared log can name the cause.
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_dumpAudioWav(
++    JNIEnv *env,
++    jobject /* bridge */,
++    jstring jurl,
++    jobjectArray jheaders,
++    jstring jout,
++    jdouble startSec,
++    jdouble endSec,
++    jboolean jrealtime
++) {
++    if (!jurl || !jout) return JNI_FALSE;
++    std::string url = jstringToString(env, jurl);
++    std::string out = jstringToString(env, jout);
++    if (url.empty() || out.empty()) return JNI_FALSE;
++    std::string joined;
+     if (jheaders) {
+         jsize count = env->GetArrayLength(jheaders);
+-        std::string joined;
+         for (jsize i = 0; i < count; ++i) {
+             jstring jheader = (jstring)env->GetObjectArrayElement(jheaders, i);
+             if (!jheader) continue;
+-            const char *header = env->GetStringUTFChars(jheader, nullptr);
+-            if (i > 0) joined += ",";
+-            joined += header;
+-            env->ReleaseStringUTFChars(jheader, header);
++            std::string header = jstringToString(env, jheader);
+             env->DeleteLocalRef(jheader);
++            if (header.empty()) continue;
++            if (!joined.empty()) joined += ",";
++            joined += header;
+         }
+-        if (!joined.empty()) mpv_set_option_string(mpv, "http-header-fields", joined.c_str());
+     }
+-    int initErr = mpv_initialize(mpv);
+-    bool ok = initErr >= 0;
++    std::string report;
++    bool ok = false;
++    for (int mode = 0; mode < 2 && !ok; ++mode) {
++        ok = nuvioDumpOnce(url, joined, out.c_str(), startSec, endSec, jrealtime == JNI_TRUE, mode, report);
++    }
+     if (!ok) {
+-        char logPath[4096];
+-        if (snprintf(logPath, sizeof(logPath), "%s.log", outPath) < (int)sizeof(logPath)) {
+-            FILE *tailFile = fopen(logPath, "w");
+-            if (tailFile) {
+-                const char *ver = mpv_get_property_string(mpv, "mpv-version");
+-                fprintf(tailFile, "mpv-version: %s\n", ver ? ver : "unknown");
+-                if (optFail[0]) fprintf(tailFile, "rejected options: %s\n", optFail);
+-                fprintf(tailFile, "mpv_initialize FAILED (err=%d)\n", initErr);
+-                fclose(tailFile);
+-            }
++        std::string logPath = out + ".log";
++        if (FILE *tailFile = fopen(logPath.c_str(), "w")) {
++            fputs(report.c_str(), tailFile);
++            fclose(tailFile);
+         }
+-        mpv_terminate_destroy(mpv);
+-        env->ReleaseStringUTFChars(jurl, url);
+-        env->ReleaseStringUTFChars(jout, outPath);
+-        return JNI_FALSE;
+-    }
+-    if (ok) {
+-        const char *loadfile[] = {"loadfile", url, nullptr};
+-        mpv_command(mpv, loadfile);
+-        char logTail[16][192] = {};
+-        int logCount = 0;
+-        bool done = false;
+-        while (!done) {
+-            mpv_event *event = mpv_wait_event(mpv, 30.0);
+-            switch (event->event_id) {
+-                case MPV_EVENT_LOG_MESSAGE: {
+-                    mpv_event_log_message *message = (mpv_event_log_message *)event->data;
+-                    if (message->text && message->text[0]) {
+-                        // Live: the parent's output-tail capture sees why a dump stalls even
+-                        // when this process is killed before the summary print runs.
+-                        fprintf(stderr, "nuvio-dump: %s", message->text);
+-                        strlcpy(logTail[logCount % 16], message->text, sizeof(logTail[0]));
+-                        logCount++;
+-                    }
+-                    break;
+-                }
+-                case MPV_EVENT_END_FILE:
+-                case MPV_EVENT_IDLE:
+-                case MPV_EVENT_SHUTDOWN:
+-                    done = true;
+-                    break;
+-                default:
+-                    break;
+-            }
+-        }
+-        mpv_terminate_destroy(mpv); // finalises the WAV header
+-        FILE *wavCheckEarly = fopen(outPath, "rb");
+-        long wavSizeEarly = 0;
+-        if (wavCheckEarly) {
+-            fseek(wavCheckEarly, 0, SEEK_END);
+-            wavSizeEarly = ftell(wavCheckEarly);
+-            fclose(wavCheckEarly);
+-        }
+-        if (wavSizeEarly <= 44) {
+-            fprintf(stderr, "nuvio-dump produced no wav; mpv log tail:\n");
+-            for (int i = 0; i < logCount && i < 16; i++) fprintf(stderr, "  %s", logTail[i]);
+-            fflush(stderr);
+-            // The in-process path has no capturable stderr; the tail rides a file instead.
+-            char logPath[4096];
+-            if (snprintf(logPath, sizeof(logPath), "%s.log", outPath) < (int)sizeof(logPath)) {
+-                FILE *tailFile = fopen(logPath, "w");
+-                if (tailFile) {
+-                    int first = logCount > 16 ? logCount - 16 : 0;
+-                    for (int i = first; i < logCount; i++) fprintf(tailFile, "%s", logTail[i % 16]);
+-                    fclose(tailFile);
+-                }
+-            }
+-        }
+-    } else {
+-        mpv_terminate_destroy(mpv);
+     }
+-    env->ReleaseStringUTFChars(jurl, url);
+-    env->ReleaseStringUTFChars(jout, outPath);
+-    FILE *check = fopen(outPath, "rb");
+-    if (!check) return JNI_FALSE;
+-    fseek(check, 0, SEEK_END);
+-    long size = ftell(check);
+-    fclose(check);
+-    return (size > 44) ? JNI_TRUE : JNI_FALSE;
++    return ok ? JNI_TRUE : JNI_FALSE;
+ }
