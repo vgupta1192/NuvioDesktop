@@ -1,0 +1,158 @@
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
+index e666fd83..4934af0c 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
+@@ -55,6 +55,11 @@ internal class AutoSyncNativePlayerController(
+ 
+     private var autoSyncJob: Job? = null
+ 
++    /** Subtitles the speech sync already ran for on this stream, so "try another" moves on. */
++    private val triedSubtitleUrls = LinkedHashSet<String>()
++    private var lastSelectedLanguage: String = ""
++    private var triedForStream: String = ""
++
+     /** Stream-typed candidates (stream's own + every add-on's), pushed by the player runtime. */
+     @Volatile
+     private var streamCandidates: List<StreamSubtitle> = emptyList()
+@@ -113,6 +118,33 @@ internal class AutoSyncNativePlayerController(
+         SyncedSubtitlesDesktop.ensureStore() // Nuvio fork: synced subtitles
+         AutoSyncPreferences.ensureLoaded()
+         AutoSyncPreferencesPlatform.install() // Nuvio fork: mobile-style AutoSync rows persist (+ legacy toggle migration)
++        DesktopAutoSyncRetry.active = this
++    }
++
++    /**
++     * "Try another subtitle" (Mobile's retry action): runs the speech sync for the next subtitle
++     * in the language of the last one that has not been tried on this stream, with the same
++     * bubble states as a normal run.
++     */
++    fun retryWithAnotherSubtitle() {
++        val streamUrl = sourceUrl()
++        val language = lastSelectedLanguage
++        val next = allSubtitleCandidates()
++            .filter { it.url.isNotBlank() && it.url !in triedSubtitleUrls }
++            .filter { language.isBlank() || SubtitleLanguageMatching.matchesLanguageCode(it.language, language) }
++            .firstOrNull()
++        if (next == null || streamUrl.isBlank()) {
++            val runId = ++bubbleRun
++            notifyAutoSync(
++                runId,
++                "failure",
++                "Auto Sync • No other subtitle to try • current subtitle kept",
++                "No other subtitle to try.",
++            )
++            return
++        }
++        autoSyncLog.i { "AutoSync retry: trying ${shortUrl(next.url)}" }
++        runSpeechSync(next.url, startupScope = false)
+     }
+ 
+     override fun setAutoSyncAppliedListener(
+@@ -189,6 +221,7 @@ internal class AutoSyncNativePlayerController(
+ 
+     /** Called when the player surface is disposed so a running analysis cannot linger. */
+     fun dispose() {
++        if (DesktopAutoSyncRetry.active === this) DesktopAutoSyncRetry.active = null
+         cancelAutoSync()
+         appliedListener = null
+         messageListener = null
+@@ -212,6 +245,23 @@ internal class AutoSyncNativePlayerController(
+     ) {
+         AutoSyncPreferencesRepository.ensureLoaded()
+         val streamUrlAtCall = sourceUrl()
++        if (triedForStream != streamUrlAtCall) {
++            triedForStream = streamUrlAtCall
++            triedSubtitleUrls.clear()
++        }
++        triedSubtitleUrls += selectedUrl
++        if (com.nuvio.app.features.autosync.AutoSyncLiveSources.isLive(streamUrlAtCall)) {
++            // A live channel has no stable audio timeline to align against.
++            autoSyncLog.i { "AutoSync skipped: live channel - plain attach" }
++            setSubtitleUri(selectedUrl)
++            return
++        }
++        if (com.nuvio.app.features.streams.YouTubeStreamResolver.isYouTubeMedia(streamUrlAtCall)) {
++            // A second reader on a YouTube stream stalls the video that is playing.
++            autoSyncLog.i { "AutoSync skipped: YouTube stream - plain attach" }
++            setSubtitleUri(selectedUrl)
++            return
++        }
+         if (
+             !isHttpUrl(selectedUrl) ||
+             !isHttpUrl(streamUrlAtCall) ||
+@@ -261,6 +311,7 @@ internal class AutoSyncNativePlayerController(
+         val sourceHeadersAtStart = sourceHeaders()
+         val selectedHeaders = selectedSubtitle.headers.orEmpty()
+         val selectedLanguage = selectedSubtitle.language
++        lastSelectedLanguage = selectedLanguage
+         val selectedName = selectedSubtitle.name.orEmpty()
+ 
+         // The subtitle is attached unsynced right away so the user reads it while the engine
+@@ -489,3 +540,12 @@ internal class AutoSyncNativePlayerController(
+         )
+     }
+ }
++
++/** The Desktop AutoSync controller of the player on screen, so the overlay's retry button reaches it. */
++internal object DesktopAutoSyncRetry {
++    @Volatile var active: AutoSyncNativePlayerController? = null
++
++    fun retry() {
++        active?.retryWithAnotherSubtitle()
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index 53519d66..e4146272 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -622,6 +622,7 @@ internal class NativePlayerController(
+                 }
+             }
+             "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
++            "autoSyncRetry" -> com.nuvio.app.features.player.DesktopAutoSyncRetry.retry()
+             "enh.open", "enh.reset", "enh.quality",
+             "enh.pic.brightness", "enh.pic.contrast", "enh.pic.saturation", "enh.pic.gamma",
+             "enh.pic.hue", "enh.pic.deband", "enh.audio.gain", "enh.audio.norm", "enh.audio.eq" ->
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
+index 215a478d..67b2042a 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.html
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.html
+@@ -381,6 +381,7 @@
+                     <div class="style-control-row">
+                       <button class="panel-button" id="autoSyncReload" type="button">Reload</button>
+                       <button class="panel-button" id="autoSyncCapture" type="button">Capture</button>
++                      <button class="panel-button" id="autoSyncRetry" type="button">Try another</button>
+                     </div>
+                     <div class="stream-subtitle" id="autoSyncStatus"></div>
+                     <div id="autoSyncCueList"></div>
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
+index 2d903955..a7478a15 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.js
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
+@@ -102,6 +102,7 @@ const subtitleDelayReset = document.getElementById("subtitleDelayReset");
+ const autoSyncLabel = document.getElementById("autoSyncLabel");
+ const autoSyncReload = document.getElementById("autoSyncReload");
+ const autoSyncCapture = document.getElementById("autoSyncCapture");
++const autoSyncRetry = document.getElementById("autoSyncRetry");
+ const autoSyncStatus = document.getElementById("autoSyncStatus");
+ const autoSyncCueList = document.getElementById("autoSyncCueList");
+ const fontSizeLabel = document.getElementById("fontSizeLabel");
+@@ -1577,6 +1578,7 @@ const renderAutoSyncCues = () => {
+   autoSyncCueList.textContent = "";
+   autoSyncReload.disabled = !state.hasSelectedAddonSubtitle;
+   autoSyncCapture.disabled = !state.hasSelectedAddonSubtitle;
++  autoSyncRetry.disabled = !state.hasSelectedAddonSubtitle;
+   if (!state.hasSelectedAddonSubtitle) {
+     autoSyncStatus.textContent = state.selectAddonSubtitleFirstLabel || "Select an addon subtitle first";
+     return;
+@@ -3145,6 +3147,10 @@ autoSyncReload.addEventListener("click", event => {
+   event.stopPropagation();
+   send("subtitleAutoSyncReload", 0);
+ });
++autoSyncRetry.addEventListener("click", event => {
++  event.stopPropagation();
++  send("autoSyncRetry", 0);
++});
+ autoSyncCapture.addEventListener("click", event => {
+   event.stopPropagation();
+   send("subtitleAutoSyncCapture", 0);

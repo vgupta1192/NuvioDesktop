@@ -1,0 +1,736 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEnhancePrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEnhancePrefs.kt
+new file mode 100644
+index 00000000..ddeabeb8
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEnhancePrefs.kt
+@@ -0,0 +1,93 @@
++package com.nuvio.app.features.player
++
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++
++/**
++ * Picture, sound and quality-cap preferences of the Desktop player (Nuvio fork). The overlay
++ * panel and the Settings > Playback section both edit this one holder; the desktop engine
++ * installs [Storage] and a change listener, other platforms leave [available] false and the
++ * settings section stays hidden.
++ */
++object PlayerEnhancePrefs {
++    interface Storage {
++        fun getInt(key: String): Int?
++        fun putInt(key: String, value: Int)
++        fun getBoolean(key: String): Boolean?
++        fun putBoolean(key: String, value: Boolean)
++    }
++
++    data class Values(
++        val brightness: Int = 0,
++        val contrast: Int = 0,
++        val saturation: Int = 0,
++        val gamma: Int = 0,
++        val hue: Int = 0,
++        val deband: Boolean = false,
++        val gainDb: Int = 0,
++        val normalize: Boolean = false,
++        val eq: Int = 0,
++    )
++
++    val eqNames: List<String> = listOf("Flat", "Bass boost", "Voice clarity", "Treble boost")
++
++    private val _values = MutableStateFlow(Values())
++    val values: StateFlow<Values> = _values.asStateFlow()
++
++    private var storage: Storage? = null
++
++    /** Called after a change so the live player can apply it. */
++    var onChanged: ((Values) -> Unit)? = null
++
++    var available: Boolean = false
++        private set
++
++    fun install(storage: Storage) {
++        this.storage = storage
++        available = true
++        _values.value = Values(
++            brightness = storage.getInt("pic_brightness").clampPercent(),
++            contrast = storage.getInt("pic_contrast").clampPercent(),
++            saturation = storage.getInt("pic_saturation").clampPercent(),
++            gamma = storage.getInt("pic_gamma").clampPercent(),
++            hue = storage.getInt("pic_hue").clampPercent(),
++            deband = storage.getBoolean("deband") ?: false,
++            gainDb = (storage.getInt("gain_db") ?: 0).coerceIn(0, 20),
++            normalize = storage.getBoolean("normalize") ?: false,
++            eq = (storage.getInt("eq") ?: 0).coerceIn(0, eqNames.lastIndex),
++        )
++    }
++
++    fun update(transform: (Values) -> Values) {
++        val next = transform(_values.value).let {
++            it.copy(
++                brightness = it.brightness.coerceIn(-100, 100),
++                contrast = it.contrast.coerceIn(-100, 100),
++                saturation = it.saturation.coerceIn(-100, 100),
++                gamma = it.gamma.coerceIn(-100, 100),
++                hue = it.hue.coerceIn(-100, 100),
++                gainDb = it.gainDb.coerceIn(0, 20),
++                eq = it.eq.coerceIn(0, eqNames.lastIndex),
++            )
++        }
++        if (next == _values.value) return
++        _values.value = next
++        storage?.run {
++            putInt("pic_brightness", next.brightness)
++            putInt("pic_contrast", next.contrast)
++            putInt("pic_saturation", next.saturation)
++            putInt("pic_gamma", next.gamma)
++            putInt("pic_hue", next.hue)
++            putBoolean("deband", next.deband)
++            putInt("gain_db", next.gainDb)
++            putBoolean("normalize", next.normalize)
++            putInt("eq", next.eq)
++        }
++        onChanged?.invoke(next)
++    }
++
++    fun reset() = update { Values() }
++
++    private fun Int?.clampPercent(): Int = (this ?: 0).coerceIn(-100, 100)
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+index ea7b6740..ea0d9231 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+@@ -146,6 +146,9 @@ internal fun LazyListScope.playbackSettingsContent(
+             libassRenderType = libassRenderType,
+         )
+     }
++    item {
++        PlayerEnhanceSettingsSection(isTablet = isTablet) // Nuvio fork: desktop picture & sound
++    }
+ }
+ 
+ private fun formatStep(value: Float): String {
+@@ -227,7 +230,7 @@ fun ValueBox(
+ }
+ 
+ @Composable
+-private fun SettingsSliderRow(
++internal fun SettingsSliderRow(
+     title: String,
+     value: Int,
+     valueText: @Composable (Int) -> String,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlayerEnhanceSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlayerEnhanceSettings.kt
+new file mode 100644
+index 00000000..8ed43fb6
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlayerEnhanceSettings.kt
+@@ -0,0 +1,76 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.player.PlayerEnhancePrefs
++
++/**
++ * Nuvio fork: "Picture & sound" for the Desktop player, the same controls as the in-player
++ * Video & sound panel (and as Mobile/TV): picture adjustments, volume boost, night mode and an
++ * equalizer preset. Hidden on platforms that do not install [PlayerEnhancePrefs].
++ */
++@Composable
++internal fun PlayerEnhanceSettingsSection(isTablet: Boolean) {
++    if (!PlayerEnhancePrefs.available) return
++    val values by PlayerEnhancePrefs.values.collectAsStateWithLifecycle()
++    SettingsSection(title = "Picture & sound", isTablet = isTablet) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsSliderRow("Brightness", values.brightness, { it.toString() }, -100..100, 1, isTablet) { v ->
++                PlayerEnhancePrefs.update { it.copy(brightness = v) }
++            }
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSliderRow("Contrast", values.contrast, { it.toString() }, -100..100, 1, isTablet) { v ->
++                PlayerEnhancePrefs.update { it.copy(contrast = v) }
++            }
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSliderRow("Saturation", values.saturation, { it.toString() }, -100..100, 1, isTablet) { v ->
++                PlayerEnhancePrefs.update { it.copy(saturation = v) }
++            }
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSliderRow("Gamma", values.gamma, { it.toString() }, -100..100, 1, isTablet) { v ->
++                PlayerEnhancePrefs.update { it.copy(gamma = v) }
++            }
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSliderRow("Hue", values.hue, { it.toString() }, -100..100, 1, isTablet) { v ->
++                PlayerEnhancePrefs.update { it.copy(hue = v) }
++            }
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSwitchRow(
++                title = "Deband",
++                description = "Smooth colour gradients and remove banding.",
++                checked = values.deband,
++                isTablet = isTablet,
++                onCheckedChange = { on -> PlayerEnhancePrefs.update { it.copy(deband = on) } },
++            )
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSliderRow("Volume boost", values.gainDb, { "+$it dB" }, 0..20, 1, isTablet) { v ->
++                PlayerEnhancePrefs.update { it.copy(gainDb = v) }
++            }
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSwitchRow(
++                title = "Night mode",
++                description = "Even out loud and quiet parts so dialogue stays clear at low volume.",
++                checked = values.normalize,
++                isTablet = isTablet,
++                onCheckedChange = { on -> PlayerEnhancePrefs.update { it.copy(normalize = on) } },
++            )
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsNavigationRow(
++                title = "Equalizer",
++                description = PlayerEnhancePrefs.eqNames[values.eq.coerceIn(0, PlayerEnhancePrefs.eqNames.lastIndex)],
++                isTablet = isTablet,
++                onClick = {
++                    PlayerEnhancePrefs.update { it.copy(eq = (it.eq + 1) % PlayerEnhancePrefs.eqNames.size) }
++                },
++            )
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsNavigationRow(
++                title = "Reset picture and sound",
++                description = null,
++                isTablet = isTablet,
++                onClick = { PlayerEnhancePrefs.reset() },
++            )
++        }
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
+index c636b7f7..eada93ae 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
+@@ -60,6 +60,7 @@ fun main(args: Array<String>) {
+     applyDesktopRendererPreference()
+     SentryInitializer.start()
+     com.nuvio.app.features.player.autosync.AutoSyncPreferencesPlatform.install() // AutoSync hook: mobile-style rows persist on desktop
++    com.nuvio.app.features.player.DesktopPlayerEnhance.install() // Nuvio fork: picture & sound prefs
+     configureDesktopQuickJsLibrary()
+     installSeekrDesktopPreferences()
+     configureDesktopChrome()
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
+new file mode 100644
+index 00000000..3b147ac3
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
+@@ -0,0 +1,237 @@
++package com.nuvio.app.features.player
++
++import com.nuvio.app.core.storage.DesktopStorage
++import com.nuvio.app.features.player.desktop.NativePlayerBridge
++import com.nuvio.app.features.streams.YouTubeStreamResolver
++
++/**
++ * Picture, sound and video-quality controls for the native (mpv) player, matching the
++ * Picture & Sound / Volume boost / quality chooser that Mobile and TV have.
++ *
++ * Every mpv property touch happens under [gate]; [stop] is called by the controller before the
++ * native instance is destroyed and returns only once no call is in flight (a property call on a
++ * disposed player aborts the process, see ConnectionFitDesktopFeed).
++ *
++ * The overlay talks to this object with `enh.*` events (name, number) and reads the panel state
++ * from [panelJson], which the controller embeds in the controls JSON as `enhance`.
++ */
++internal object DesktopPlayerEnhance {
++    private val gate = Any()
++    private val store = DesktopStorage.store("nuvio_player_enhance")
++    @Volatile private var handle: Long = 0
++    @Volatile var version: Int = 0
++        private set
++
++    private var sourceUrl: String = ""
++    private var qualityId: Int = AUTO
++    private var qualityOptions: List<QualityOption> = emptyList()
++
++    private data class QualityOption(val id: Int, val label: String, val height: Int, val bitrate: Long)
++
++    private val eqPresets = listOf(
++        PlayerEnhancePrefs.eqNames[0] to "",
++        PlayerEnhancePrefs.eqNames[1] to "equalizer=f=80:t=q:w=1:g=5,equalizer=f=200:t=q:w=1:g=3",
++        PlayerEnhancePrefs.eqNames[2] to "equalizer=f=300:t=q:w=1:g=-2,equalizer=f=2500:t=q:w=1:g=4,equalizer=f=4000:t=q:w=1:g=2",
++        PlayerEnhancePrefs.eqNames[3] to "equalizer=f=6000:t=q:w=1:g=4,equalizer=f=10000:t=q:w=1:g=4",
++    )
++
++    /** Loads the saved values and makes Settings > Playback show the Picture & sound section. */
++    fun install() {
++        PlayerEnhancePrefs.install(object : PlayerEnhancePrefs.Storage {
++            override fun getInt(key: String) = store.getInt(key)
++            override fun putInt(key: String, value: Int) = store.putInt(key, value)
++            override fun getBoolean(key: String) = store.getBoolean(key)
++            override fun putBoolean(key: String, value: Boolean) = store.putBoolean(key, value)
++        })
++        PlayerEnhancePrefs.onChanged = {
++            synchronized(gate) {
++                applyPictureLocked()
++                applyAudioLocked()
++            }
++            bump()
++        }
++    }
++
++    /** Called once the native player exists: reapplies saved settings and caps YouTube HLS. */
++    fun start(newHandle: Long, url: String) {
++        synchronized(gate) {
++            handle = newHandle
++            sourceUrl = url
++            qualityId = AUTO
++            qualityOptions = emptyList()
++            applyAllLocked()
++        }
++        if (hlsBitrateCapFor(url) != null) pinYouTubeVariantAsync(newHandle)
++        bump()
++    }
++
++    /**
++     * hls-bitrate is read when the stream opens, which is before this object gets the handle, so
++     * pick the variant by track id once the track list has appeared.
++     */
++    private fun pinYouTubeVariantAsync(forHandle: Long) {
++        Thread({
++            repeat(40) {
++                Thread.sleep(500)
++                val done = synchronized(gate) {
++                    if (handle != forHandle || qualityId != AUTO) return@Thread
++                    refreshQualityLocked()
++                    pinWithinCapLocked()
++                }
++                if (done) {
++                    bump()
++                    return@Thread
++                }
++            }
++        }, "enhance-pin-variant").apply { isDaemon = true }.start()
++    }
++
++    fun stop() {
++        synchronized(gate) { handle = 0 }
++    }
++
++    /**
++     * mpv never adapts between HLS variants, it plays the highest one. YouTube's master lists
++     * 1080p near 4.4 Mbps, which stalls on most links; cap at about 720p unless the viewer
++     * picks a variant by hand.
++     */
++    fun hlsBitrateCapFor(url: String): String? =
++        if (YouTubeStreamResolver.isYouTubeMedia(url)) YOUTUBE_HLS_CAP_BPS.toString() else null
++
++    fun handleEvent(type: String, value: Double): Boolean {
++        if (!type.startsWith("enh.")) return false
++        val key = type.removePrefix("enh.")
++        val level = value.toInt()
++        synchronized(gate) {
++            if (handle == 0L) return true
++            when {
++                key == "open" -> refreshQualityLocked()
++                key == "reset" -> PlayerEnhancePrefs.reset()
++                key.startsWith("pic.") -> {
++                    val name = key.removePrefix("pic.")
++                    PlayerEnhancePrefs.update {
++                        when (name) {
++                            "brightness" -> it.copy(brightness = level)
++                            "contrast" -> it.copy(contrast = level)
++                            "saturation" -> it.copy(saturation = level)
++                            "gamma" -> it.copy(gamma = level)
++                            "hue" -> it.copy(hue = level)
++                            "deband" -> it.copy(deband = level != 0)
++                            else -> it
++                        }
++                    }
++                }
++                key == "audio.gain" -> PlayerEnhancePrefs.update { it.copy(gainDb = level) }
++                key == "audio.norm" -> PlayerEnhancePrefs.update { it.copy(normalize = level != 0) }
++                key == "audio.eq" -> PlayerEnhancePrefs.update { it.copy(eq = level) }
++                key == "quality" -> selectQualityLocked(level)
++                else -> return true
++            }
++        }
++        bump()
++        return true
++    }
++
++    fun panelJson(): String = synchronized(gate) {
++        val v = PlayerEnhancePrefs.values.value
++        buildString {
++            append("{\"picture\":{")
++            append("\"brightness\":${v.brightness},\"contrast\":${v.contrast},\"saturation\":${v.saturation}")
++            append(",\"gamma\":${v.gamma},\"hue\":${v.hue},\"deband\":${v.deband}},\"audio\":{")
++            append("\"gainDb\":${v.gainDb},\"normalize\":${v.normalize},\"eq\":${v.eq},\"eqNames\":[")
++            PlayerEnhancePrefs.eqNames.joinTo(this, ",") { "\"$it\"" }
++            append("]},\"quality\":{\"selected\":").append(qualityId).append(",\"options\":[")
++            qualityOptions.joinTo(this, ",") {
++                "{\"id\":${it.id},\"label\":\"${it.label}\",\"height\":${it.height},\"bitrate\":${it.bitrate}}"
++            }
++            append("]}}")
++        }
++    }
++
++    private fun bump() {
++        version += 1
++        onChanged?.invoke()
++    }
++
++    /** Set by the controller; asks it to resend the controls JSON. */
++    @Volatile var onChanged: (() -> Unit)? = null
++
++    private fun setLocked(name: String, value: String) {
++        val current = handle
++        if (current == 0L) return
++        runCatching { NativePlayerBridge.propSetString(current, name, value) }
++    }
++
++    private fun applyAllLocked() {
++        hlsBitrateCapFor(sourceUrl)?.let { setLocked("hls-bitrate", it) }
++        applyPictureLocked()
++        applyAudioLocked()
++    }
++
++    private fun applyPictureLocked() {
++        val v = PlayerEnhancePrefs.values.value
++        setLocked("brightness", v.brightness.toString())
++        setLocked("contrast", v.contrast.toString())
++        setLocked("saturation", v.saturation.toString())
++        setLocked("gamma", v.gamma.toString())
++        setLocked("hue", v.hue.toString())
++        setLocked("deband", if (v.deband) "yes" else "no")
++    }
++
++    private fun applyAudioLocked() {
++        val v = PlayerEnhancePrefs.values.value
++        val filters = buildList {
++            if (v.gainDb > 0) add("volume=${v.gainDb}dB")
++            if (v.normalize) add("dynaudnorm=f=250:g=15")
++            eqPresets[v.eq.coerceIn(0, eqPresets.lastIndex)].second.takeIf { it.isNotEmpty() }?.let { add(it) }
++            if (v.gainDb > 0) add("alimiter=limit=0.95")
++        }
++        setLocked("af", if (filters.isEmpty()) "" else "lavfi=[${filters.joinToString(",")}]")
++    }
++
++    private fun refreshQualityLocked() {
++        val current = handle
++        if (current == 0L) return
++        runCatching {
++            val count = NativePlayerBridge.propGetString(current, "track-list/count")?.toIntOrNull() ?: 0
++            val found = mutableListOf<QualityOption>()
++            for (index in 0 until count) {
++                val base = "track-list/$index"
++                if (NativePlayerBridge.propGetString(current, "$base/type") != "video") continue
++                val id = NativePlayerBridge.propGetString(current, "$base/id")?.toIntOrNull() ?: continue
++                val height = NativePlayerBridge.propGetString(current, "$base/demux-h")?.toIntOrNull() ?: 0
++                val bitrate = NativePlayerBridge.propGetString(current, "$base/hls-bitrate")?.toLongOrNull() ?: 0L
++                val codec = NativePlayerBridge.propGetString(current, "$base/codec").orEmpty()
++                val label = buildString {
++                    append(if (height > 0) "${height}p" else "Video $id")
++                    if (bitrate > 0) append(" · ").append(String.format("%.1f", bitrate / 1_000_000.0)).append(" Mbps")
++                    if (codec.isNotEmpty()) append(" · ").append(codec.uppercase().filter { it.isLetterOrDigit() })
++                }
++                found += QualityOption(id, label, height, bitrate)
++            }
++            qualityOptions = found.sortedWith(compareByDescending<QualityOption> { it.height }.thenByDescending { it.bitrate })
++        }
++    }
++
++    /** Picks the best variant under the YouTube cap; false while no variant list exists yet. */
++    private fun pinWithinCapLocked(): Boolean {
++        val pick = qualityOptions
++            .filter { it.bitrate in 1..YOUTUBE_HLS_CAP_BPS }
++            .maxByOrNull { it.bitrate }
++            ?: return false
++        setLocked("vid", pick.id.toString())
++        return true
++    }
++
++    private fun selectQualityLocked(id: Int) {
++        qualityId = id
++        when {
++            id != AUTO -> setLocked("vid", id.toString())
++            hlsBitrateCapFor(sourceUrl) != null && pinWithinCapLocked() -> Unit
++            else -> setLocked("vid", "auto")
++        }
++    }
++
++    private const val AUTO = -1
++    private const val YOUTUBE_HLS_CAP_BPS = 2_500_000
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index 02fe85bd..53519d66 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -341,6 +341,8 @@ internal class NativePlayerController(
+                     com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.activeHandle = created
+                     com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.applyToPlayer()
+                     com.nuvio.app.features.player.ConnectionFitDesktopFeed.start(created)
++                    com.nuvio.app.features.player.DesktopPlayerEnhance.onChanged = { refreshControlsForEnhance() }
++                    com.nuvio.app.features.player.DesktopPlayerEnhance.start(created, resolvedSource)
+                     SwingUtilities.invokeLater {
+                         val shouldConfigure = synchronized(lifecycleLock) {
+                             when {
+@@ -620,6 +622,10 @@ internal class NativePlayerController(
+                 }
+             }
+             "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
++            "enh.open", "enh.reset", "enh.quality",
++            "enh.pic.brightness", "enh.pic.contrast", "enh.pic.saturation", "enh.pic.gamma",
++            "enh.pic.hue", "enh.pic.deband", "enh.audio.gain", "enh.audio.norm", "enh.audio.eq" ->
++                com.nuvio.app.features.player.DesktopPlayerEnhance.handleEvent(type, value)
+             "volumeChange" -> setFallbackVolume(value.toFloat())
+             "volumeChangeTemporary" -> setTemporaryVolume(value.toFloat())
+             "setPlaybackSpeed" -> {
+@@ -643,6 +649,13 @@ internal class NativePlayerController(
+         }
+     }
+ 
++    private fun refreshControlsForEnhance() {
++        SwingUtilities.invokeLater {
++            lastSentControlsStructureKey = null
++            updateControls(controlsState)
++        }
++    }
++
+     @Synchronized
+     private fun updateLocalProgress(positionMs: Long) {
+         controlsState = controlsState.copy(positionMs = positionMs)
+@@ -997,6 +1010,7 @@ internal class NativePlayerController(
+      */
+     private fun invalidateHandleUsersBeforeDispose(current: Long) {
+         com.nuvio.app.features.player.ConnectionFitDesktopFeed.stop()
++        com.nuvio.app.features.player.DesktopPlayerEnhance.stop()
+         com.nuvio.app.features.player.generated.GeneratedSubtitlesDesktop.onPlayerHandleDisposed(current)
+         com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.clearActiveHandle(current)
+     }
+@@ -1737,6 +1751,8 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+             append(",\"borderColor\":").append(it.borderColor.toJsonString())
+             append('}')
+         }
++        append(",\"enhance\":")
++        append(com.nuvio.app.features.player.DesktopPlayerEnhance.panelJson())
+         append(",\"party\":")
+         append(partyJson.encodeToString(PlayerControlPartyState.serializer(), party.withWebviewImages(onImageReady)))
+         append('}')
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/composeApp/src/desktopMain/resources/player-ui/controls.css
+index bc9602a4..af50c214 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.css
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
+@@ -3624,3 +3624,10 @@ svg {
+   stroke: none;
+   pointer-events: none;
+ }
++
++.enhance-panel .track-list { max-height: min(70vh, 560px); overflow-y: auto; }
++.enhance-heading { padding: 12px 16px 4px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .6; }
++.enhance-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 8px 16px; }
++.enhance-row input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: #fff; }
++.enhance-value { font-variant-numeric: tabular-nums; opacity: .7; }
++.enhance-note { padding: 4px 16px 8px; opacity: .6; font-size: 13px; }
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
+index bd8084c4..215a478d 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.html
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.html
+@@ -255,6 +255,7 @@
+             <button class="action" data-command="speed"><svg><use href="#icon-speed"></use></svg><span id="speedLabel">1x</span></button>
+             <button class="action" data-command="subtitles"><svg><use href="#icon-subs"></use></svg><span id="subtitlesLabel">Subs</span></button>
+             <button class="action" data-command="audio"><svg><use href="#icon-audio"></use></svg><span id="audioLabel">Audio</span></button>
++            <button class="action" id="enhanceButton" data-command="enhance"><svg><use href="#icon-build"></use></svg><span id="enhanceLabel">Video</span></button>
+             <button class="action optional" id="sourcesButton" data-command="sources"><svg><use href="#icon-source"></use></svg><span id="sourcesLabel">Sources</span></button>
+             <button class="action optional" id="episodesButton" data-command="episodes"><svg><use href="#icon-episodes"></use></svg><span id="episodesLabel">Episodes</span></button>
+           </div>
+@@ -292,6 +293,12 @@
+           <div class="track-list" id="speedOptionList"></div>
+         </div>
+       </section>
++      <section class="modal-layer player-rail-modal" id="enhanceModal" aria-label="Video and sound" hidden>
++        <div class="track-panel audio-rail-panel enhance-panel">
++          <div class="track-header">Video &amp; sound</div>
++          <div class="track-list" id="enhanceBody"></div>
++        </div>
++      </section>
+       <section class="modal-layer player-rail-modal" id="audioModal" aria-label="Audio tracks" hidden>
+         <div class="track-panel audio-rail-panel">
+           <div class="track-header" id="audioPanelTitle">Audio tracks</div>
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
+index 788d7675..2d903955 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.js
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
+@@ -75,6 +75,8 @@ const nextEpisodeAction = document.getElementById("nextEpisodeAction");
+ const sourcesButton = document.getElementById("sourcesButton");
+ const episodesButton = document.getElementById("episodesButton");
+ const audioModal = document.getElementById("audioModal");
++const enhanceModal = document.getElementById("enhanceModal");
++const enhanceBody = document.getElementById("enhanceBody");
+ const subtitleModal = document.getElementById("subtitleModal");
+ const speedModal = document.getElementById("speedModal");
+ const speedOptionList = document.getElementById("speedOptionList");
+@@ -1025,6 +1027,7 @@ const modalByName = {
+   audio: audioModal,
+   subtitles: subtitleModal,
+   speed: speedModal,
++  enhance: enhanceModal,
+   sources: sourceModal,
+   episodes: episodesModal,
+   submitIntro: submitIntroModal,
+@@ -1188,6 +1191,140 @@ const renderSpeedOptionList = () => {
+   });
+ };
+ 
++
++let enhanceRenderKey = "";
++let enhanceDragging = false;
++
++const enhanceSliders = [
++  { group: "Picture", key: "brightness", label: "Brightness", event: "enh.pic.brightness", min: -100, max: 100 },
++  { group: "Picture", key: "contrast", label: "Contrast", event: "enh.pic.contrast", min: -100, max: 100 },
++  { group: "Picture", key: "saturation", label: "Saturation", event: "enh.pic.saturation", min: -100, max: 100 },
++  { group: "Picture", key: "gamma", label: "Gamma", event: "enh.pic.gamma", min: -100, max: 100 },
++  { group: "Picture", key: "hue", label: "Hue", event: "enh.pic.hue", min: -100, max: 100 },
++];
++
++const enhanceSection = (title) => {
++  const heading = document.createElement("div");
++  heading.className = "enhance-heading";
++  heading.textContent = title;
++  enhanceBody.appendChild(heading);
++};
++
++const enhanceSlider = (label, value, min, max, unit, onInput) => {
++  const row = document.createElement("div");
++  row.className = "enhance-row";
++  const name = document.createElement("span");
++  name.className = "enhance-name";
++  name.textContent = label;
++  const readout = document.createElement("span");
++  readout.className = "enhance-value";
++  readout.textContent = `${value}${unit}`;
++  const input = document.createElement("input");
++  input.type = "range";
++  input.min = String(min);
++  input.max = String(max);
++  input.step = "1";
++  input.value = String(value);
++  input.addEventListener("pointerdown", () => { enhanceDragging = true; });
++  const finish = () => { enhanceDragging = false; };
++  input.addEventListener("pointerup", finish);
++  input.addEventListener("change", finish);
++  input.addEventListener("input", () => {
++    readout.textContent = `${input.value}${unit}`;
++    onInput(Number(input.value));
++  });
++  input.addEventListener("click", event => event.stopPropagation());
++  row.append(name, readout, input);
++  enhanceBody.appendChild(row);
++};
++
++const enhanceToggle = (label, on, onToggle) => {
++  const row = document.createElement("button");
++  row.type = "button";
++  row.className = `track-row${on ? " selected" : ""}`;
++  const text = document.createElement("span");
++  text.className = "track-label";
++  text.textContent = label;
++  row.append(text, buildCheckIcon());
++  row.addEventListener("click", event => {
++    event.stopPropagation();
++    onToggle(!on);
++  });
++  enhanceBody.appendChild(row);
++};
++
++const renderEnhanceModal = () => {
++  if (!enhanceBody) return;
++  const enhance = state.enhance || {};
++  const key = JSON.stringify(enhance);
++  if (key === enhanceRenderKey || enhanceDragging) return;
++  enhanceRenderKey = key;
++  const picture = enhance.picture || {};
++  const audio = enhance.audio || {};
++  const quality = enhance.quality || { selected: -1, options: [] };
++  enhanceBody.textContent = "";
++
++  enhanceSection("Quality");
++  const qualityRows = [{ id: -1, label: "Auto" }].concat(Array.isArray(quality.options) ? quality.options : []);
++  qualityRows.forEach(option => {
++    const row = document.createElement("button");
++    row.type = "button";
++    row.className = `track-row${quality.selected === option.id ? " selected" : ""}`;
++    const text = document.createElement("span");
++    text.className = "track-label";
++    text.textContent = option.label;
++    row.append(text, buildCheckIcon());
++    row.addEventListener("click", event => {
++      event.stopPropagation();
++      send("enh.quality", option.id);
++    });
++    enhanceBody.appendChild(row);
++  });
++  if (qualityRows.length === 1) {
++    const note = document.createElement("div");
++    note.className = "enhance-note";
++    note.textContent = "This stream has a single quality.";
++    enhanceBody.appendChild(note);
++  }
++
++  enhanceSection("Picture");
++  enhanceSliders.forEach(slider => {
++    enhanceSlider(slider.label, Number(picture[slider.key]) || 0, slider.min, slider.max, "", value => send(slider.event, value));
++  });
++  enhanceToggle("Deband (smooth gradients)", Boolean(picture.deband), on => send("enh.pic.deband", on ? 1 : 0));
++
++  enhanceSection("Sound");
++  enhanceSlider("Volume boost", Number(audio.gainDb) || 0, 0, 20, " dB", value => send("enh.audio.gain", value));
++  enhanceToggle("Night mode (even out loud and quiet)", Boolean(audio.normalize), on => send("enh.audio.norm", on ? 1 : 0));
++  (Array.isArray(audio.eqNames) ? audio.eqNames : []).forEach((name, index) => {
++    const row = document.createElement("button");
++    row.type = "button";
++    row.className = `track-row${(Number(audio.eq) || 0) === index ? " selected" : ""}`;
++    const text = document.createElement("span");
++    text.className = "track-label";
++    text.textContent = `Equalizer: ${name}`;
++    row.append(text, buildCheckIcon());
++    row.addEventListener("click", event => {
++      event.stopPropagation();
++      send("enh.audio.eq", index);
++    });
++    enhanceBody.appendChild(row);
++  });
++
++  const reset = document.createElement("button");
++  reset.type = "button";
++  reset.className = "track-row";
++  const resetText = document.createElement("span");
++  resetText.className = "track-label";
++  resetText.textContent = "Reset picture and sound";
++  reset.appendChild(resetText);
++  reset.addEventListener("click", event => {
++    event.stopPropagation();
++    send("enh.reset", 0);
++  });
++  enhanceBody.appendChild(reset);
++};
++
+ const renderAudioTrackList = () => {
+   audioPanelTitle.textContent = state.audioTracksPanelTitle || "Audio Tracks";
+   audioTrackList.textContent = "";
+@@ -2157,6 +2294,7 @@ const renderActiveModal = (modalOpened = false) => {
+   if (activeModal === "audio") renderAudioTrackList();
+   if (activeModal === "subtitles") renderSubtitleModal();
+   if (activeModal === "speed") renderSpeedOptionList();
++  if (activeModal === "enhance") renderEnhanceModal();
+   if (activeModal === "sources") renderSourceModal(modalOpened);
+   if (activeModal === "episodes") renderEpisodesModal(modalOpened);
+   if (activeModal === "submitIntro") renderSubmitIntroModal();
+@@ -2937,6 +3075,11 @@ document.querySelectorAll("[data-command]").forEach(button => {
+       openPlayerModal("speed");
+       return;
+     }
++    if (command === "enhance") {
++      send("enh.open", 0);
++      openPlayerModal("enhance");
++      return;
++    }
+     if (command === "sources") {
+       sourceFilterId = "";
+       openPlayerModal("sources");
