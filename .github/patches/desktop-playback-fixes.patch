@@ -877,6 +877,65 @@ index e4146272..a4023da9 100644
              NativePlayerBridge.clearExternalSubtitles(current)
              NativePlayerBridge.addSubtitleUrl(current, url)
          }
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
+index 66e470f5..0afd949e 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
+@@ -23,9 +23,10 @@ import java.security.MessageDigest
+  * cached under the content key and pushed to the user's account (shared with mobile).
+  */
+ internal object GeneratedSubtitlesDesktop {
+-    private const val WINDOW_SECONDS = 600.0
+-    private const val MAX_WINDOWS = 24
++    private const val WINDOW_SECONDS = 120.0
++    private const val MAX_WINDOWS = 90
+     private const val SAMPLE_RATE = 16_000
++    private const val DUMP_TIMEOUT_SEC = 150L
+ 
+     private val store by lazy { DesktopStorage.store("nuvio_generated_subtitles") }
+     @Volatile private var initialized = false
+@@ -84,6 +85,7 @@ internal object GeneratedSubtitlesDesktop {
+         job?.cancel()
+         synchronized(attachGate) { attachHandle = handle }
+         running = true
++        SyncLog.i("generated subtitles: started (${if (online) "online" else "on device"}, language=$spoken)")
+         job = scope.launch {
+             try {
+                 runGeneration(handle, streamUrl.orEmpty(), headers, contentId, spoken, online, deeplKey, key)
+@@ -153,18 +155,25 @@ internal object GeneratedSubtitlesDesktop {
+                             wavFile.absolutePath,
+                             startSec,
+                             startSec + WINDOW_SECONDS,
++                            timeoutSec = DUMP_TIMEOUT_SEC,
+                         )
+                     }
+                 }.getOrDefault(false)
+             }
+             if (!ok || !wavFile.exists() || wavFile.length() <= 44L) {
+                 wavFile.delete()
++                if (windowsWithAudio == 0) {
++                    SyncLog.w("generated subtitles: audio dump failed at ${startSec.toInt()}s (see the audio dump lines above)")
++                }
+                 break // end of audio
+             }
+             val samples = readWavMono16(wavFile)
+             wavFile.delete()
+             if (samples.size < SAMPLE_RATE * 2) break // window is (almost) silent: end of audio
+             windowsWithAudio += 1
++            if (windowsWithAudio == 1 || windowsWithAudio % 5 == 0) {
++                SyncLog.i("generated subtitles: window $windowsWithAudio read (${startSec.toInt()}s)")
++            }
+ 
+             val translate = spoken == GeneratedSubtitles.AUTO || spoken == "en"
+             val key0 = GeneratedSubtitles.groqKey.value
+@@ -182,6 +191,7 @@ internal object GeneratedSubtitlesDesktop {
+                 }
+             }
+             if (lines.isEmpty()) continue
++            if (cueIndex == 0) SyncLog.i("generated subtitles: first ${lines.size} lines recognised")
+             srtFile.appendText(
+                 buildSrt(groqLines.map { it.startSec to it.endSec }, lines, startSec, cueIndex),
+             )
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
 index ca4a9478..5e071fcd 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
