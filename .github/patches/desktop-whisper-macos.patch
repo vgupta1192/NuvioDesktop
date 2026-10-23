@@ -135,7 +135,7 @@ index d3f4225c..d8b891a3 100644
          SettingsGroupDivider(isTablet = isTablet)
          SettingsNavigationRow(
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-index 0afd949e..17dcca0e 100644
+index 0afd949e..ad8aaf25 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -1,6 +1,7 @@
@@ -274,6 +274,15 @@ index 0afd949e..17dcca0e 100644
              }
              var lines = groqLines.map { it.text }
              if (!translate && deeplKey.isNotBlank()) {
+@@ -193,7 +242,7 @@ internal object GeneratedSubtitlesDesktop {
+             if (lines.isEmpty()) continue
+             if (cueIndex == 0) SyncLog.i("generated subtitles: first ${lines.size} lines recognised")
+             srtFile.appendText(
+-                buildSrt(groqLines.map { it.startSec to it.endSec }, lines, startSec, cueIndex),
++                buildSrt(SubtitleTimingSnap.snap(groqLines.map { it.startSec to it.endSec }, samples), lines, startSec, cueIndex),
+             )
+             cueIndex += lines.size
+             attach(handle, srtFile) // grows every window: lines show up while later windows run
 @@ -279,8 +328,8 @@ internal object GeneratedSubtitlesDesktop {
          return "%02d:%02d:%02d,%03d".format(h, m, s, ms)
      }
@@ -285,6 +294,57 @@ index 0afd949e..17dcca0e 100644
          val digest = MessageDigest.getInstance("SHA-1").digest(raw.encodeToByteArray())
          return digest.joinToString("") { "%02x".format(it) }
      }
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt
+new file mode 100644
+index 00000000..edf6c507
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt
+@@ -0,0 +1,45 @@
++package com.nuvio.app.features.player.generated
++
++import com.nuvio.app.features.player.audiosync.RmsVad
++import kotlin.math.max
++
++/**
++ * Pulls the timing of recognised lines onto the dialogue that is really in the audio. Whisper
++ * (large-v3 in particular) often starts a line early, in the silence or music before the first
++ * word, and ends it late; Groq behaves the same. The voice-activity runs of the same window give
++ * the real speech onset and end, so each line starts when its speech starts and stops when it stops.
++ */
++internal object SubtitleTimingSnap {
++    /** A line's start moves at most this far (seconds); a larger gap means VAD and line disagree. */
++    private const val MAX_START_SHIFT = 10.0
++    private const val MAX_END_SHIFT = 6.0
++    private const val MIN_DURATION = 0.6
++    private const val TAIL = 0.15
++
++    /** [spans] are (start, end) seconds from the window start, in order; returns the same count. */
++    fun snap(spans: List<Pair<Double, Double>>, samples: FloatArray): List<Pair<Double, Double>> {
++        val runs = RmsVad.detect(samples).map { (a, b) -> a / 1000.0 to b / 1000.0 }
++        if (runs.isEmpty() || spans.isEmpty()) return spans
++        val out = ArrayList<Pair<Double, Double>>(spans.size)
++        var floor = 0.0
++        for ((rawStart, rawEnd) in spans) {
++            var start = rawStart
++            var end = rawEnd
++            // First speech run that is still going on, or starts, after the line's claimed start.
++            val first = runs.firstOrNull { it.second > rawStart && it.first < rawEnd }
++            if (first != null && first.first > rawStart && first.first - rawStart <= MAX_START_SHIFT) {
++                start = first.first
++            }
++            // Last speech run that starts before the line's claimed end.
++            val last = runs.lastOrNull { it.first < rawEnd && it.second > start }
++            if (last != null && last.second + TAIL < rawEnd && rawEnd - last.second <= MAX_END_SHIFT) {
++                end = last.second + TAIL
++            }
++            start = max(start, floor)
++            end = max(end, start + MIN_DURATION)
++            out += start to end
++            floor = out.last().second
++        }
++        return out
++    }
++}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperLocal.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperLocal.kt
 new file mode 100644
 index 00000000..11aa46a4
