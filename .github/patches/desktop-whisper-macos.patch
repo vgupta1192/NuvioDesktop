@@ -67,11 +67,187 @@ index 6426f118..76e1c2a5 100644
      /** Model download/delete, registered by the platform. */
      var modelActions: GeneratedSubtitleModelActions? = null
  
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedUsage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedUsage.kt
+new file mode 100644
+index 00000000..27951cd4
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedUsage.kt
+@@ -0,0 +1,144 @@
++package com.nuvio.app.features.player
++
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.update
++
++/**
++ * What the online generation services have been used for, shown in Settings so the choice between
++ * Groq, DeepL and the on-device model can be made with the numbers in view.
++ *
++ * Groq publishes no balance. The calls and the minutes of audio sent are counted here per UTC day
++ * (the way its daily limits count), and the "requests left" Groq reports in its response headers
++ * is shown once a call has been made. DeepL reports its own character usage when asked.
++ */
++object GeneratedUsage {
++    private data class State(
++        val day: Long = 0L,
++        val calls: Int = 0,
++        val audioSeconds: Long = 0L,
++        val requestsLeft: Int? = null,
++        val requestsLimit: Int? = null,
++        val deeplUsed: Long? = null,
++        val deeplLimit: Long? = null,
++        val deeplProblem: String? = null,
++    )
++
++    private val state = MutableStateFlow(State())
++    private val _groqText = MutableStateFlow(groqLine(State()))
++    private val _deeplText = MutableStateFlow(deeplLine(State()))
++
++    /** One or two sentences about today's Groq use. */
++    val groqText: StateFlow<String> = _groqText.asStateFlow()
++
++    /** One sentence about the DeepL characters used and left. */
++    val deeplText: StateFlow<String> = _deeplText.asStateFlow()
++
++    /** Registered by the platform: asks DeepL for the key's usage and calls [publishDeepl]. */
++    var deeplFetcher: ((key: String) -> Unit)? = null
++
++    private var save: ((key: String, value: String) -> Unit)? = null
++
++    /** Restores today's Groq counters; [nowMs] drops counters of an earlier day. */
++    fun install(nowMs: Long, load: (key: String) -> String?, save: (key: String, value: String) -> Unit) {
++        this.save = save
++        val today = nowMs / DAY_MS
++        val storedDay = load(KEY_DAY)?.toLongOrNull()
++        if (storedDay == today) {
++            state.update {
++                it.copy(
++                    day = today,
++                    calls = load(KEY_CALLS)?.toIntOrNull() ?: 0,
++                    audioSeconds = load(KEY_AUDIO)?.toLongOrNull() ?: 0L,
++                )
++            }
++        } else {
++            state.update { it.copy(day = today) }
++        }
++        publish()
++    }
++
++    /**
++     * One Groq answer: [audioSeconds] of speech were uploaded; the two header values are what Groq
++     * reported as requests left and allowed per day (null when absent). Only a successful call counts.
++     */
++    fun recordGroq(nowMs: Long, audioSeconds: Double, requestsLeft: Int?, requestsLimit: Int?, success: Boolean) {
++        val today = nowMs / DAY_MS
++        state.update { current ->
++            val base = if (current.day == today) current else current.copy(day = today, calls = 0, audioSeconds = 0L)
++            base.copy(
++                calls = base.calls + if (success) 1 else 0,
++                audioSeconds = base.audioSeconds + if (success) audioSeconds.toLong() else 0L,
++                requestsLeft = requestsLeft ?: base.requestsLeft,
++                requestsLimit = requestsLimit ?: base.requestsLimit,
++            )
++        }
++        val now = state.value
++        save?.invoke(KEY_DAY, now.day.toString())
++        save?.invoke(KEY_CALLS, now.calls.toString())
++        save?.invoke(KEY_AUDIO, now.audioSeconds.toString())
++        publish()
++    }
++
++    fun publishDeepl(used: Long, limit: Long) {
++        state.update { it.copy(deeplUsed = used, deeplLimit = limit, deeplProblem = null) }
++        publish()
++    }
++
++    fun publishDeeplProblem(problem: String) {
++        state.update { it.copy(deeplProblem = problem) }
++        publish()
++    }
++
++    /** Asks DeepL for the usage of [key] (the platform fetcher limits how often). */
++    fun refreshDeepl(key: String) {
++        if (key.isNotBlank()) deeplFetcher?.invoke(key)
++    }
++
++    private fun publish() {
++        val now = state.value
++        _groqText.value = groqLine(now)
++        _deeplText.value = deeplLine(now)
++    }
++
++    private fun groqLine(now: State): String {
++        val used = if (now.calls == 0) {
++            "Groq today (UTC): no calls yet."
++        } else {
++            "Groq today (UTC): ${now.calls} calls, ${now.audioSeconds / 60} min of audio sent."
++        }
++        val left = if (now.requestsLeft != null && now.requestsLimit != null) {
++            " Groq reports ${grouped(now.requestsLeft.toLong())} of ${grouped(now.requestsLimit.toLong())} requests left today."
++        } else {
++            ""
++        }
++        return used + left + " Groq publishes no balance; its free plan allows about 2,000 requests and 480 min of audio a day."
++    }
++
++    private fun deeplLine(now: State): String {
++        val used = now.deeplUsed
++        val limit = now.deeplLimit
++        return when {
++            used != null && limit != null ->
++                "DeepL: ${grouped(used)} of ${grouped(limit)} characters used this period, ${grouped((limit - used).coerceAtLeast(0L))} left."
++            now.deeplProblem != null -> "DeepL usage unavailable (${now.deeplProblem})."
++            else -> "DeepL usage: checking…"
++        }
++    }
++
++    private fun grouped(value: Long): String {
++        val digits = value.toString()
++        val out = StringBuilder()
++        digits.forEachIndexed { index, char ->
++            if (index > 0 && (digits.length - index) % 3 == 0) out.append(',')
++            out.append(char)
++        }
++        return out.toString()
++    }
++
++    private const val DAY_MS = 86_400_000L
++    private const val KEY_DAY = "usage_groq_day"
++    private const val KEY_CALLS = "usage_groq_calls"
++    private const val KEY_AUDIO = "usage_groq_audio_seconds"
++}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
-index d3f4225c..d8b891a3 100644
+index d3f4225c..d27ef49a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
-@@ -48,17 +48,26 @@ internal fun GeneratedSubtitleSettingsRows(isTablet: Boolean) {
+@@ -12,6 +12,7 @@ import androidx.compose.material3.OutlinedTextField
+ import androidx.compose.material3.Text
+ import androidx.compose.material3.TextButton
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.remember
+@@ -21,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.unit.dp
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import com.nuvio.app.features.player.GeneratedSubtitles
++import com.nuvio.app.features.player.GeneratedUsage
+ 
+ /** Settings for subtitles generated from the audio; shown only where they are supported. */
+ @Composable
+@@ -36,6 +38,9 @@ internal fun GeneratedSubtitleSettingsRows(isTablet: Boolean) {
+     var editKey by remember { mutableStateOf(false) }
+     val groqKey by GeneratedSubtitles.groqKey.collectAsStateWithLifecycle()
+     var editGroqKey by remember { mutableStateOf(false) }
++    val groqUsage by GeneratedUsage.groqText.collectAsStateWithLifecycle()
++    val deeplUsage by GeneratedUsage.deeplText.collectAsStateWithLifecycle()
++    LaunchedEffect(deeplKey) { GeneratedUsage.refreshDeepl(deeplKey) }
+ 
+     SettingsGroupDivider(isTablet = isTablet)
+     SettingsNavigationRow(
+@@ -48,17 +53,26 @@ internal fun GeneratedSubtitleSettingsRows(isTablet: Boolean) {
      SettingsGroupDivider(isTablet = isTablet)
      SettingsNavigationRow(
          title = "Spoken language for generated subtitles",
@@ -103,7 +279,22 @@ index d3f4225c..d8b891a3 100644
          checked = highQuality,
          isTablet = isTablet,
          onCheckedChange = GeneratedSubtitles::setHighQuality,
-@@ -89,17 +98,19 @@ internal fun GeneratedSubtitleSettingsRows(isTablet: Boolean) {
+@@ -71,7 +85,7 @@ internal fun GeneratedSubtitleSettingsRows(isTablet: Boolean) {
+                 "close to real subtitles. Only the recognised text is sent to DeepL, never audio."
+         } else {
+             "On (key …${deeplKey.takeLast(6)}). Whisper writes the spoken language down and DeepL " +
+-                "translates whole lines with context. Tap to change or remove the key."
++                "translates whole lines with context. Tap to change or remove the key.\n$deeplUsage"
+         },
+         isTablet = isTablet,
+         onClick = { editKey = true },
+@@ -84,22 +98,24 @@ internal fun GeneratedSubtitleSettingsRows(isTablet: Boolean) {
+                 "Whisper large-v3 on Groq, the most accurate. The speech audio is sent to Groq."
+         } else {
+             "On (key …${groqKey.takeLast(6)}). Pick \"English · Generated online (Groq Whisper large-v3)\" " +
+-                "in the subtitle list. Speech audio is sent to Groq; with DeepL, DeepL translates."
++                "in the subtitle list. Speech audio is sent to Groq; with DeepL, DeepL translates.\n$groqUsage"
+         },
          isTablet = isTablet,
          onClick = { editGroqKey = true },
      )
@@ -155,19 +346,100 @@ index c81dcf1d..a6f9e7e3 100644
      }
  
      private fun cancelAutoSync() {
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt
+index 654b0f31..12c2e0ac 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt
+@@ -1,6 +1,7 @@
+ package com.nuvio.app.features.player.generated
+ 
+ import com.nuvio.app.features.player.audiosync.SyncLog
++import com.nuvio.app.features.player.GeneratedUsage
+ import java.net.HttpURLConnection
+ import java.net.URL
+ import org.json.JSONArray
+@@ -63,7 +64,9 @@ internal class DeepLTranslator(private val key: String) {
+             val text = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+             val translations = JSONObject(text).getJSONArray("translations")
+             if (translations.length() != lines.size) throw Failure("DeepL answered ${translations.length()} of ${lines.size} lines", permanent = false)
+-            return List(translations.length()) { index -> translations.getJSONObject(index).optString("text").trim() }
++            val result = List(translations.length()) { index -> translations.getJSONObject(index).optString("text").trim() }
++            fetchUsage(key)
++            return result
+         } catch (failure: Failure) {
+             SyncLog.w("generated subtitles: ${failure.message}")
+             throw failure
+@@ -81,6 +84,55 @@ internal class DeepLTranslator(private val key: String) {
+         private const val RETRIES = 3
+         private const val RETRY_DELAY_MS = 2_000L
+ 
++        private const val FREE_USAGE = "https://api-free.deepl.com/v2/usage"
++        private const val PRO_USAGE = "https://api.deepl.com/v2/usage"
++        private const val USAGE_MIN_GAP_MS = 20_000L
++
++        @Volatile
++        private var usageCheckedAt = 0L
++
++        @Volatile
++        private var usageKey = ""
++
++        /** Asks DeepL how many characters [key] has used and publishes it; runs on its own thread, at most every 20 s per key. */
++        fun fetchUsage(key: String) {
++            if (key.isBlank()) return
++            val now = System.currentTimeMillis()
++            if (key == usageKey && now - usageCheckedAt < USAGE_MIN_GAP_MS) return
++            usageKey = key
++            usageCheckedAt = now
++            Thread({
++                val connection = (URL(if (key.endsWith(":fx")) FREE_USAGE else PRO_USAGE).openConnection() as HttpURLConnection).apply {
++                    connectTimeout = 15_000
++                    readTimeout = 20_000
++                    setRequestProperty("Authorization", "DeepL-Auth-Key $key")
++                }
++                try {
++                    when (val code = connection.responseCode) {
++                        200 -> {
++                            val text = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
++                            val used = Regex("\"character_count\"\\s*:\\s*(\\d+)").find(text)?.groupValues?.get(1)?.toLongOrNull()
++                            val limit = Regex("\"character_limit\"\\s*:\\s*(\\d+)").find(text)?.groupValues?.get(1)?.toLongOrNull()
++                            if (used != null && limit != null) {
++                                GeneratedUsage.publishDeepl(used, limit)
++                            } else {
++                                GeneratedUsage.publishDeeplProblem("unexpected answer")
++                            }
++                        }
++                        403 -> GeneratedUsage.publishDeeplProblem("key rejected")
++                        else -> GeneratedUsage.publishDeeplProblem("HTTP $code")
++                    }
++                } catch (error: Exception) {
++                    GeneratedUsage.publishDeeplProblem(error.message ?: "unreachable")
++                } finally {
++                    connection.disconnect()
++                }
++            }, "NuvioDeepLUsage").apply {
++                isDaemon = true
++                start()
++            }
++        }
++
+         /** DeepL's source code for one of the spoken-language codes; null lets DeepL detect it. */
+         fun sourceCode(language: String?): String? = when (val code = language?.lowercase()) {
+             null, "", "auto" -> null
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-index 0afd949e..026cedf7 100644
+index 0afd949e..32a49f57 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-@@ -1,6 +1,7 @@
+@@ -1,7 +1,9 @@
  package com.nuvio.app.features.player.generated
  
  import com.nuvio.app.core.storage.DesktopStorage
 +import com.nuvio.app.features.player.GeneratedSubtitleModelActions
  import com.nuvio.app.features.player.GeneratedSubtitles
++import com.nuvio.app.features.player.GeneratedUsage
  import com.nuvio.app.features.player.GeneratedSubtitleSync
  import com.nuvio.app.features.player.audiosync.SyncLog
-@@ -10,23 +11,48 @@ import kotlinx.coroutines.Dispatchers
+ import com.nuvio.app.features.player.desktop.NativePlayerBridge
+@@ -10,23 +12,48 @@ import kotlinx.coroutines.Dispatchers
  import kotlinx.coroutines.Job
  import kotlinx.coroutines.SupervisorJob
  import kotlinx.coroutines.cancelChildren
@@ -220,9 +492,16 @@ index 0afd949e..026cedf7 100644
  
      private val store by lazy { DesktopStorage.store("nuvio_generated_subtitles") }
      @Volatile private var initialized = false
-@@ -41,6 +67,17 @@ internal object GeneratedSubtitlesDesktop {
+@@ -40,7 +67,24 @@ internal object GeneratedSubtitlesDesktop {
+                 load = { key -> store.getString(key) },
                  save = { key, value -> store.putString(key, value) },
              )
++            GeneratedUsage.install(
++                nowMs = System.currentTimeMillis(),
++                load = { key -> store.getString(key) },
++                save = { key, value -> store.putString(key, value) },
++            )
++            GeneratedUsage.deeplFetcher = { key -> DeepLTranslator.fetchUsage(key) }
              GeneratedSubtitles.supported = true
 +            if (WhisperLocal.available) {
 +                GeneratedSubtitles.desktopWhisper = true
@@ -238,7 +517,7 @@ index 0afd949e..026cedf7 100644
              initialized = true
          }
      }
-@@ -52,11 +89,25 @@ internal object GeneratedSubtitlesDesktop {
+@@ -52,11 +96,25 @@ internal object GeneratedSubtitlesDesktop {
  
      /** Called when playback moves to a real subtitle/title: the background dump loses its purpose. */
      fun stopGeneration() {
@@ -264,7 +543,7 @@ index 0afd949e..026cedf7 100644
      /**
       * Returns true when [url] is a generated-subtitle entry and generation started (or the
       * cached file attached). The caller then skips attaching the pseudo URL to the player.
-@@ -70,8 +121,12 @@ internal object GeneratedSubtitlesDesktop {
+@@ -70,8 +128,12 @@ internal object GeneratedSubtitlesDesktop {
          ensureInitialized()
          if (!GeneratedSubtitles.isGenerated(url)) return false
          val online = url == GeneratedSubtitles.ONLINE_URL
@@ -278,7 +557,7 @@ index 0afd949e..026cedf7 100644
              return true
          }
          if (running) {
-@@ -81,21 +136,35 @@ internal object GeneratedSubtitlesDesktop {
+@@ -81,21 +143,35 @@ internal object GeneratedSubtitlesDesktop {
          val contentId = GeneratedSubtitles.contentId
          val spoken = GeneratedSubtitles.spokenLanguage.value
          val deeplKey = GeneratedSubtitles.deeplKey.value
@@ -319,7 +598,7 @@ index 0afd949e..026cedf7 100644
              }
          }
          return true
-@@ -107,43 +176,98 @@ internal object GeneratedSubtitlesDesktop {
+@@ -107,43 +183,98 @@ internal object GeneratedSubtitlesDesktop {
          headers: Map<String, String>,
          contentId: String?,
          spoken: String,
@@ -433,7 +712,7 @@ index 0afd949e..026cedf7 100644
              val ok = withContext(Dispatchers.IO) {
                  runCatching {
                      // Share the native-dump gate with the speech engine: one dump at a time. The
-@@ -162,23 +286,40 @@ internal object GeneratedSubtitlesDesktop {
+@@ -162,23 +293,40 @@ internal object GeneratedSubtitlesDesktop {
              }
              if (!ok || !wavFile.exists() || wavFile.length() <= 44L) {
                  wavFile.delete()
@@ -480,7 +759,7 @@ index 0afd949e..026cedf7 100644
              }
              var lines = groqLines.map { it.text }
              if (!translate && deeplKey.isNotBlank()) {
-@@ -190,23 +331,78 @@ internal object GeneratedSubtitlesDesktop {
+@@ -190,23 +338,78 @@ internal object GeneratedSubtitlesDesktop {
                      )
                  }
              }
@@ -569,7 +848,7 @@ index 0afd949e..026cedf7 100644
      // The player can be closed mid-generation; attaching to a disposed mpv handle is a native
      // crash (no lifetime check on the native side), so the controller invalidates the handle
      // under this gate before its teardown thread starts, and attach refuses anything stale.
-@@ -254,22 +450,22 @@ internal object GeneratedSubtitlesDesktop {
+@@ -254,22 +457,22 @@ internal object GeneratedSubtitlesDesktop {
          return -1
      }
  
@@ -605,7 +884,7 @@ index 0afd949e..026cedf7 100644
      private fun formatSrtTime(seconds: Double): String {
          val total = (seconds.coerceAtLeast(0.0) * 1000).toLong()
          val h = total / 3_600_000
-@@ -279,9 +475,169 @@ internal object GeneratedSubtitlesDesktop {
+@@ -279,9 +482,169 @@ internal object GeneratedSubtitlesDesktop {
          return "%02d:%02d:%02d,%03d".format(h, m, s, ms)
      }
  
@@ -647,7 +926,7 @@ index 0afd949e..026cedf7 100644
 +            val raw = "$content|${(durationMs + skew + 500L) / 1_000L}|${if (online) "online" else "device"}|$language"
 +            MessageDigest.getInstance("SHA-1").digest(raw.toByteArray()).joinToString("") { "%02x".format(it) }
 +        }
-+    }
+     }
 +
 +    private fun savedFile(key: String): File = File(File(DesktopStorage.rootDir.toFile(), "generated-subtitles"), "$key.json")
 +
@@ -705,7 +984,7 @@ index 0afd949e..026cedf7 100644
 +        }
 +        if (cursor < toMs) parts += longArrayOf(cursor, toMs)
 +        return parts
-     }
++    }
 +
 +    /** Writes the JSON and a plain SRT next to it on this device and, when [push] is set, to the Nuvio account. */
 +    private suspend fun saveSaved(keys: List<String>, contentId: String?, cues: List<Cue>, covered: List<LongArray>, push: Boolean): Boolean {
@@ -779,6 +1058,32 @@ index 0afd949e..026cedf7 100644
 +        "heb" to "he", "iw" to "he", "in" to "id",
 +    )
  }
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt
+index c74c81c3..7644373a 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt
+@@ -1,6 +1,7 @@
+ package com.nuvio.app.features.player.generated
+ 
+ import com.nuvio.app.features.player.audiosync.SyncLog
++import com.nuvio.app.features.player.GeneratedUsage
+ import java.io.ByteArrayOutputStream
+ import java.net.HttpURLConnection
+ import java.net.URL
+@@ -65,6 +66,13 @@ internal class GroqWhisperClient(private val key: String) {
+             } catch (error: Exception) {
+                 throw Failure("Groq unreachable: ${error.message}", permanent = false)
+             }
++            GeneratedUsage.recordGroq(
++                System.currentTimeMillis(),
++                samples.size.toDouble() / sampleRate,
++                connection.getHeaderField("x-ratelimit-remaining-requests")?.toIntOrNull(),
++                connection.getHeaderField("x-ratelimit-limit-requests")?.toIntOrNull(),
++                success = code == 200,
++            )
+             when (code) {
+                 200 -> Unit
+                 401, 403 -> throw Failure("Groq key rejected", permanent = true)
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt
 new file mode 100644
 index 00000000..edf6c507
