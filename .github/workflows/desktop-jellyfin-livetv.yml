@@ -1,6 +1,6 @@
 name: Build NuvioDesktop Jellyfin+LiveTV (upstream release sync)
 # sync-pulse: 0.1.32-alpha 2026-10-23T04:00:09Z
-# sync-pulse: forced 2026-10-23T04:24:56Z
+# sync-pulse: forced 2026-10-23T05:52:05Z
 
 on:
   push:
@@ -185,13 +185,54 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           # optional-desktop-late
-          for P in desktop-youtube-livetv desktop-player-enhance desktop-autosync-parity desktop-playback-fixes; do
+          for P in desktop-youtube-livetv desktop-player-enhance desktop-autosync-parity desktop-playback-fixes desktop-whisper-macos; do
             if git apply "fork-src/.github/patches/$P.patch"; then
               echo "applied $P.patch"
             else
               echo "::warning::$P.patch no longer applies to upstream; building without it"
             fi
           done
+
+      # On-device Whisper for generated subtitles (desktop-whisper-macos.patch): whisper.cpp is built
+      # here as static libraries and the patch's Gradle task links them into libwhisper_bridge.dylib.
+      # Metal and Accelerate on Apple silicon; the Intel build is best effort (the runner packages
+      # only its own architecture). Skipped when the patch did not apply.
+      - name: Cache whisper.cpp static libraries
+        id: whisper_cache
+        if: steps.ver.outputs.should_build == 'true' && hashFiles('composeApp/src/desktopMain/native/macos/whisper/whisper_bridge.cpp') != ''
+        uses: actions/cache@v4
+        with:
+          path: |
+            composeApp/src/desktopMain/native/macos/whisper/lib
+            composeApp/src/desktopMain/native/macos/whisper/include
+          key: whisper-cpp-macos-v1.7.6-r1
+
+      - name: Build whisper.cpp for macOS
+        if: steps.ver.outputs.should_build == 'true' && hashFiles('composeApp/src/desktopMain/native/macos/whisper/whisper_bridge.cpp') != '' && steps.whisper_cache.outputs.cache-hit != 'true'
+        run: |
+          set -eu
+          DEST="$PWD/composeApp/src/desktopMain/native/macos/whisper"
+          SRC=/tmp/whisper.cpp
+          git clone --depth 1 --branch v1.7.6 https://github.com/ggml-org/whisper.cpp "$SRC"
+          mkdir -p "$DEST/include" "$DEST/lib"
+          cp "$SRC/include/whisper.h" "$SRC"/ggml/include/*.h "$DEST/include/"
+          build_arch() {
+            ARCH="$1"; shift
+            cmake -S "$SRC" -B "/tmp/whisper-build-$ARCH" -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_OSX_ARCHITECTURES="$ARCH" -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+              -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_EXAMPLES=OFF -DWHISPER_BUILD_TESTS=OFF \
+              -DWHISPER_BUILD_SERVER=OFF -DGGML_NATIVE=OFF -DGGML_BLAS=ON -DGGML_ACCELERATE=ON "$@"
+            cmake --build "/tmp/whisper-build-$ARCH" --config Release -j "$(sysctl -n hw.ncpu)"
+            mkdir -p "$DEST/lib/$ARCH"
+            # one archive per architecture so the bridge links a single file
+            libtool -static -o "$DEST/lib/$ARCH/libwhisper_all.a" $(find "/tmp/whisper-build-$ARCH" -name '*.a')
+            ls -l "$DEST/lib/$ARCH/libwhisper_all.a"
+          }
+          build_arch arm64 -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON
+          if ! build_arch x86_64 -DGGML_METAL=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON; then
+            echo "::warning::x86_64 whisper.cpp build failed; the Intel Mac build goes without on-device Whisper"
+            rm -rf "$DEST/lib/x86_64"
+          fi
 
       - name: Create local.properties (self-hosted backend)
         if: steps.ver.outputs.should_build == 'true'
@@ -223,6 +264,9 @@ jobs:
           grep -h "^e: " build-log-macos.txt 2>/dev/null | head -40 | while IFS= read -r line; do
             echo "::error::${line#e: }"
           done
+          grep -h " error: \|ld: " build-log-macos.txt 2>/dev/null | head -20 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
           grep -h "Caused by:\|Unresolved reference" build-log-macos.txt 2>/dev/null | head -10 | while IFS= read -r line; do
             echo "::error::$line"
           done
@@ -239,6 +283,12 @@ jobs:
           MPV=$(find "$APP" -iname "*mpv*" | head -1)
           echo "bridge: $BRIDGE"
           echo "mpv: $MPV"
+          WHISPER=$(find "$APP" -name "libwhisper_bridge.dylib" | head -1)
+          echo "whisper bridge: $WHISPER"
+          if [ -f composeApp/src/desktopMain/native/macos/whisper/whisper_bridge.cpp ]; then
+            test -n "$WHISPER" || (hdiutil detach /tmp/nuvio-dmg -force; echo "MISSING libwhisper_bridge.dylib" && exit 1)
+            otool -L "$WHISPER"
+          fi
           hdiutil detach /tmp/nuvio-dmg -force
           test -n "$BRIDGE" || (echo "MISSING libplayer_bridge.dylib" && exit 1)
           test -n "$MPV" || (echo "MISSING libmpv dylib" && exit 1)

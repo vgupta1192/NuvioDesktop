@@ -1,0 +1,819 @@
+diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
+index 5c39b03a..693f7f97 100644
+--- a/composeApp/build.gradle.kts
++++ b/composeApp/build.gradle.kts
+@@ -688,6 +688,39 @@ val buildMacosPlayerBridge = tasks.register<Exec>("buildMacosPlayerBridge") {
+     commandLine(macosPlayerBridgeCommand)
+ }
+ 
++// whisper.cpp bridge for on-device generated subtitles. The CI workflow builds the static
++// libwhisper_all.a per architecture into native/macos/whisper/lib/<arch>/ and the headers into
++// native/macos/whisper/include/; without them the task is off and the app falls back to Groq.
++val macosWhisperDir = layout.projectDirectory.dir("src/desktopMain/native/macos/whisper").asFile
++val macosWhisperBridgeSource = File(macosWhisperDir, "whisper_bridge.cpp")
++val macosWhisperStaticLib = File(macosWhisperDir, "lib/$macosPlayerBridgeArch/libwhisper_all.a")
++val macosWhisperBridgeOutput = layout.buildDirectory.file("native/macos/$macosPlayerBridgeArch/libwhisper_bridge.dylib")
++val buildMacosWhisperBridge = tasks.register<Exec>("buildMacosWhisperBridge") {
++    notCompatibleWithConfigurationCache("Builds a host-local whisper.cpp bridge against the static whisper libraries.")
++    enabled = isMacHost && macosWhisperStaticLib.isFile && macosWhisperBridgeSource.isFile
++    inputs.file(macosWhisperBridgeSource)
++    inputs.file(macosWhisperStaticLib)
++    outputs.file(macosWhisperBridgeOutput)
++    doFirst { macosWhisperBridgeOutput.get().asFile.parentFile.mkdirs() }
++    commandLine(
++        "xcrun", "clang++",
++        "-std=c++17", "-O2", "-dynamiclib",
++        "-arch", macosPlayerBridgeArch,
++        "-mmacosx-version-min=13.0",
++        macosWhisperBridgeSource.absolutePath,
++        "-o", macosWhisperBridgeOutput.get().asFile.absolutePath,
++        "-I$macosPlayerBridgeJavaHome/include",
++        "-I$macosPlayerBridgeJavaHome/include/darwin",
++        "-I${File(macosWhisperDir, "include").absolutePath}",
++        macosWhisperStaticLib.absolutePath,
++        "-framework", "Accelerate",
++        "-framework", "Foundation",
++        "-framework", "Metal",
++        "-framework", "MetalKit",
++        "-lc++",
++    )
++}
++
+ // ---- Linux player bridge (system libmpv, X11 "wid" embedding) ----
+ // Compiles a single JNI .so against the system libmpv + JDK JNI headers.
+ // Requires a C++ toolchain, pkg-config, and libmpv development files on the
+@@ -950,8 +983,9 @@ val prepareMacosPlayerRuntime = tasks.register<Sync>("prepareMacosPlayerRuntime"
+ 
+ val prepareMacosPlayerAppResources = tasks.register<Sync>("prepareMacosPlayerAppResources") {
+     enabled = isMacHost
+-    dependsOn(buildMacosPlayerBridge, prepareMacosPlayerRuntime)
++    dependsOn(buildMacosPlayerBridge, buildMacosWhisperBridge, prepareMacosPlayerRuntime)
+     from(macosPlayerBridgeOutput)
++    from(macosWhisperBridgeOutput)
+     from(macosPlayerRuntimeOutput) {
+         include("*.dylib")
+     }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt
+index 6426f118..76e1c2a5 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt
+@@ -73,6 +73,9 @@ object GeneratedSubtitles {
+     /** Set by a platform that can generate subtitles (Android). */
+     var supported: Boolean = false
+ 
++    /** True where the on-device entry runs Whisper large-v3 locally (macOS Desktop): Settings words its rows for it. */
++    var desktopWhisper: Boolean = false
++
+     /** Model download/delete, registered by the platform. */
+     var modelActions: GeneratedSubtitleModelActions? = null
+ 
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
+index d3f4225c..d8b891a3 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
+@@ -48,17 +48,26 @@ internal fun GeneratedSubtitleSettingsRows(isTablet: Boolean) {
+     SettingsGroupDivider(isTablet = isTablet)
+     SettingsNavigationRow(
+         title = "Spoken language for generated subtitles",
+-        description = GeneratedSubtitles.spokenLanguageLabel(spokenLanguage) +
++        description = GeneratedSubtitles.spokenLanguageLabel(spokenLanguage) + if (GeneratedSubtitles.desktopWhisper) {
++            ". Whisper large-v3 recognises and translates every language to English, and detects " +
++                "the language when the audio track has no tag."
++        } else {
+             ". Whisper small (375 MB) recognises and translates every language to English, and detects " +
+-            "the language when the audio track has no tag. English audio uses SenseVoice (237 MB).",
++                "the language when the audio track has no tag. English audio uses SenseVoice (237 MB)."
++        },
+         isTablet = isTablet,
+         onClick = { pickLanguage = true },
+     )
+     SettingsGroupDivider(isTablet = isTablet)
+     SettingsSwitchRow(
+-        title = "Higher-quality speech model",
+-        description = "Whisper medium (945 MB, once): noticeably more accurate than Whisper small " +
+-            "(375 MB), about twice as slow. Off: Whisper small.",
++        title = if (GeneratedSubtitles.desktopWhisper) "Largest speech model (Whisper large-v3)" else "Higher-quality speech model",
++        description = if (GeneratedSubtitles.desktopWhisper) {
++            "On: Whisper large-v3 (3.1 GB, downloaded once on first use), the most accurate, runs on this " +
++                "Mac. Off: the compressed large-v3-q5_0 (1.1 GB), smaller and a little less exact."
++        } else {
++            "Whisper medium (945 MB, once): noticeably more accurate than Whisper small " +
++                "(375 MB), about twice as slow. Off: Whisper small."
++        },
+         checked = highQuality,
+         isTablet = isTablet,
+         onCheckedChange = GeneratedSubtitles::setHighQuality,
+@@ -89,17 +98,19 @@ internal fun GeneratedSubtitleSettingsRows(isTablet: Boolean) {
+         isTablet = isTablet,
+         onClick = { editGroqKey = true },
+     )
+-    SettingsGroupDivider(isTablet = isTablet)
+-    SettingsSwitchRow(
+-        title = "Faster models (lower quality)",
+-        description = "Off (recommended): Whisper for every language. On: Chinese, Cantonese, Japanese and " +
+-            "Korean use SenseVoice, and Hindi, Urdu, Bengali, Tamil, Telugu, Gujarati, Marathi, Thai, " +
+-            "Indonesian, Malay, Vietnamese, Tagalog, Arabic, Persian and Russian use Dolphin (250 MB), " +
+-            "each followed by on-device translation (about 30 MB per language): faster, often worse.",
+-        checked = fastAsianModel,
+-        isTablet = isTablet,
+-        onCheckedChange = GeneratedSubtitles::setFastAsianModel,
+-    )
++    if (!GeneratedSubtitles.desktopWhisper) {
++        SettingsGroupDivider(isTablet = isTablet)
++        SettingsSwitchRow(
++            title = "Faster models (lower quality)",
++            description = "Off (recommended): Whisper for every language. On: Chinese, Cantonese, Japanese and " +
++                "Korean use SenseVoice, and Hindi, Urdu, Bengali, Tamil, Telugu, Gujarati, Marathi, Thai, " +
++                "Indonesian, Malay, Vietnamese, Tagalog, Arabic, Persian and Russian use Dolphin (250 MB), " +
++                "each followed by on-device translation (about 30 MB per language): faster, often worse.",
++            checked = fastAsianModel,
++            isTablet = isTablet,
++            onCheckedChange = GeneratedSubtitles::setFastAsianModel,
++        )
++    }
+     if (models.isNotEmpty()) {
+         SettingsGroupDivider(isTablet = isTablet)
+         SettingsNavigationRow(
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
+index 0afd949e..17dcca0e 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
+@@ -1,6 +1,7 @@
+ package com.nuvio.app.features.player.generated
+ 
+ import com.nuvio.app.core.storage.DesktopStorage
++import com.nuvio.app.features.player.GeneratedSubtitleModelActions
+ import com.nuvio.app.features.player.GeneratedSubtitles
+ import com.nuvio.app.features.player.GeneratedSubtitleSync
+ import com.nuvio.app.features.player.audiosync.SyncLog
+@@ -16,9 +17,10 @@ import java.io.File
+ import java.security.MessageDigest
+ 
+ /**
+- * Generated subtitles for the desktop player (Groq-online phase): the stream's audio is dumped
+- * to 16 kHz mono WAV windows by the native player bridge (a headless mpv), recognised by Groq
+- * Whisper large-v3, and written to an SRT file that is attached to the playing mpv window by
++ * Generated subtitles for the desktop player: the stream's audio is dumped
++ * to 16 kHz mono WAV windows by the native player bridge (a headless mpv), recognised by
++ * Whisper large-v3 (on macOS locally through whisper.cpp, see [WhisperLocal]; otherwise, and for
++ * the online entry, on Groq), and written to an SRT file that is attached to the playing mpv window by
+  * window, so lines appear while later windows are still being recognised. The finished SRT is
+  * cached under the content key and pushed to the user's account (shared with mobile).
+  */
+@@ -41,6 +43,17 @@ internal object GeneratedSubtitlesDesktop {
+                 save = { key, value -> store.putString(key, value) },
+             )
+             GeneratedSubtitles.supported = true
++            if (WhisperLocal.available) {
++                GeneratedSubtitles.desktopWhisper = true
++                GeneratedSubtitles.modelActions = object : GeneratedSubtitleModelActions {
++                    override fun deleteModels() {
++                        WhisperLocal.release()
++                        WhisperModels.deleteAll()
++                        GeneratedSubtitles.publishModels(WhisperModels.summary())
++                    }
++                }
++                GeneratedSubtitles.publishModels(WhisperModels.summary())
++            }
+             initialized = true
+         }
+     }
+@@ -52,6 +65,7 @@ internal object GeneratedSubtitlesDesktop {
+ 
+     /** Called when playback moves to a real subtitle/title: the background dump loses its purpose. */
+     fun stopGeneration() {
++        WhisperLocal.cancelCurrent()
+         job?.cancel()
+         job = null
+         running = false
+@@ -70,7 +84,10 @@ internal object GeneratedSubtitlesDesktop {
+         ensureInitialized()
+         if (!GeneratedSubtitles.isGenerated(url)) return false
+         val online = url == GeneratedSubtitles.ONLINE_URL
+-        if (GeneratedSubtitles.groqKey.value.isBlank()) {
++        // On macOS the on-device entry runs Whisper large-v3 here; elsewhere (and when the build
++        // has no whisper.cpp bridge) it still falls back to Groq and needs the key.
++        val local = !online && WhisperLocal.available
++        if (!local && GeneratedSubtitles.groqKey.value.isBlank()) {
+             SyncLog.w("generated subtitles: pick again after setting the Groq key in Settings")
+             return true
+         }
+@@ -81,14 +98,20 @@ internal object GeneratedSubtitlesDesktop {
+         val contentId = GeneratedSubtitles.contentId
+         val spoken = GeneratedSubtitles.spokenLanguage.value
+         val deeplKey = GeneratedSubtitles.deeplKey.value
+-        val key = cacheKey(contentId, spoken, online)
++        val variant = if (GeneratedSubtitles.highQuality.value) WhisperModels.LARGE_V3 else WhisperModels.LARGE_V3_Q5
++        val engine = when {
++            online -> "groq-online"
++            local -> "whisper-${variant.id}"
++            else -> "groq"
++        }
++        val key = cacheKey(contentId, spoken, engine)
+         job?.cancel()
+         synchronized(attachGate) { attachHandle = handle }
+         running = true
+-        SyncLog.i("generated subtitles: started (${if (online) "online" else "on device"}, language=$spoken)")
++        SyncLog.i("generated subtitles: started ($engine, language=$spoken)")
+         job = scope.launch {
+             try {
+-                runGeneration(handle, streamUrl.orEmpty(), headers, contentId, spoken, online, deeplKey, key)
++                runGeneration(handle, streamUrl.orEmpty(), headers, contentId, spoken, variant.takeIf { local }, deeplKey, key)
+             } catch (failure: kotlinx.coroutines.CancellationException) {
+                 throw failure
+             } catch (error: Throwable) {
+@@ -107,7 +130,7 @@ internal object GeneratedSubtitlesDesktop {
+         headers: Map<String, String>,
+         contentId: String?,
+         spoken: String,
+-        online: Boolean,
++        localVariant: WhisperModels.Variant?,
+         deeplKey: String,
+         key: String,
+     ) {
+@@ -137,6 +160,24 @@ internal object GeneratedSubtitlesDesktop {
+             return
+         }
+ 
++        // Fetch the model before reading any audio: the first use downloads about 3 GB.
++        val modelFile = localVariant?.let { variant ->
++            withContext(Dispatchers.IO) {
++                runCatching {
++                    WhisperModels.ensure(variant) { done, total ->
++                        val percent = if (total > 0) (done * 100 / total).toInt() else -1
++                        GeneratedSubtitles.publishModels(
++                            "Downloading ${variant.label}: " +
++                                (if (percent >= 0) "$percent %" else WhisperModels.formatSize(done)),
++                        )
++                    }
++                }.onFailure { error ->
++                    SyncLog.w("generated subtitles: ${variant.label} is not available: ${error.message}")
++                }.getOrNull()
++            }.also { GeneratedSubtitles.publishModels(WhisperModels.summary()) }
++        }
++        if (localVariant != null && modelFile == null) return
++
+         srtFile.delete()
+         var cueIndex = 0
+         var windowsWithAudio = 0
+@@ -177,8 +218,16 @@ internal object GeneratedSubtitlesDesktop {
+ 
+             val translate = spoken == GeneratedSubtitles.AUTO || spoken == "en"
+             val key0 = GeneratedSubtitles.groqKey.value
++            val spokenHint = spoken.takeUnless { it == GeneratedSubtitles.AUTO }.orEmpty()
+             val groqLines = withContext(Dispatchers.IO) {
+-                GroqWhisperClient(key0).recognize(samples, SAMPLE_RATE, translate, spoken.takeUnless { it == GeneratedSubtitles.AUTO }.orEmpty())
++                if (modelFile != null) {
++                    // Whisper's own translate task writes English; with DeepL the spoken language
++                    // is written down instead and DeepL translates it.
++                    val toEnglish = spoken != "en" && (spoken == GeneratedSubtitles.AUTO || deeplKey.isBlank())
++                    WhisperLocal.recognize(modelFile, samples, toEnglish, spokenHint)
++                } else {
++                    GroqWhisperClient(key0).recognize(samples, SAMPLE_RATE, translate, spokenHint)
++                }
+             }
+             var lines = groqLines.map { it.text }
+             if (!translate && deeplKey.isNotBlank()) {
+@@ -279,8 +328,8 @@ internal object GeneratedSubtitlesDesktop {
+         return "%02d:%02d:%02d,%03d".format(h, m, s, ms)
+     }
+ 
+-    private fun cacheKey(contentId: String?, spoken: String, online: Boolean): String {
+-        val raw = "${contentId.orEmpty()}|$spoken|${if (online) "groq-online" else "groq"}"
++    private fun cacheKey(contentId: String?, spoken: String, engine: String): String {
++        val raw = "${contentId.orEmpty()}|$spoken|$engine"
+         val digest = MessageDigest.getInstance("SHA-1").digest(raw.encodeToByteArray())
+         return digest.joinToString("") { "%02x".format(it) }
+     }
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperLocal.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperLocal.kt
+new file mode 100644
+index 00000000..11aa46a4
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperLocal.kt
+@@ -0,0 +1,107 @@
++package com.nuvio.app.features.player.generated
++
++import com.nuvio.app.features.player.audiosync.SyncLog
++import java.io.File
++import java.util.concurrent.Executors
++import java.util.concurrent.ScheduledExecutorService
++import java.util.concurrent.TimeUnit
++
++/**
++ * On-device speech recognition with whisper.cpp (large-v3), macOS only. The model context takes
++ * several GB of memory, so it is loaded when generation starts and freed again after
++ * [IDLE_FREE_MS] without a request. Calls are serialised.
++ */
++internal object WhisperLocal {
++    private const val IDLE_FREE_MS = 60_000L
++    private const val NO_SPEECH_LIMIT = 0.6
++
++    private val lock = Any()
++    private var handle = 0L
++    private var loadedPath: String? = null
++    private var lastUse = 0L
++    @Volatile private var cancelHandle = 0L
++
++    private val idle: ScheduledExecutorService by lazy {
++        Executors.newSingleThreadScheduledExecutor { task ->
++            Thread(task, "nuvio-whisper-idle").apply { isDaemon = true }
++        }
++    }
++
++    /** True when the native bridge is in this build and loaded. */
++    val available: Boolean get() = WhisperNative.available
++
++    /** Recognises [samples] (16 kHz mono) with the model file [model]. Blocking; may take minutes on CPU. */
++    fun recognize(
++        model: File,
++        samples: FloatArray,
++        translate: Boolean,
++        language: String,
++    ): List<GroqWhisperClient.Line> {
++        val raw = synchronized(lock) {
++            ensureLoaded(model)
++            val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 8)
++            val result = WhisperNative.nativeTranscribe(handle, samples, translate, language, threads)
++            lastUse = System.currentTimeMillis()
++            scheduleFree()
++            result
++        } ?: throw GroqWhisperClient.Failure("on-device Whisper stopped without a result", permanent = false)
++        val spoken = raw.firstOrNull().orEmpty()
++        return raw.drop(1).mapNotNull { row ->
++            val cells = row.split('\t', limit = 4)
++            if (cells.size < 4) return@mapNotNull null
++            val noSpeech = cells[2].toDoubleOrNull() ?: 0.0
++            val text = cells[3].trim()
++            if (noSpeech >= NO_SPEECH_LIMIT || text.isEmpty()) return@mapNotNull null
++            val start = (cells[0].toLongOrNull() ?: return@mapNotNull null) / 1000.0
++            val end = (cells[1].toLongOrNull() ?: return@mapNotNull null) / 1000.0
++            GroqWhisperClient.Line(start, end, text, spoken)
++        }
++    }
++
++    /** Stops a recognition that is running now (the next call starts normally). */
++    fun cancelCurrent() {
++        val current = cancelHandle
++        if (current != 0L) WhisperNative.nativeCancel(current)
++    }
++
++    private fun ensureLoaded(model: File) {
++        if (handle != 0L && loadedPath == model.absolutePath) return
++        releaseLocked()
++        SyncLog.i("generated subtitles: loading ${model.name}")
++        var loaded = WhisperNative.nativeLoad(model.absolutePath, true)
++        if (loaded == 0L) {
++            SyncLog.w("generated subtitles: GPU load failed, trying the CPU")
++            loaded = WhisperNative.nativeLoad(model.absolutePath, false)
++        }
++        if (loaded == 0L) {
++            // a damaged file would fail on every start; the next request downloads it again
++            runCatching { model.delete() }
++            throw GroqWhisperClient.Failure("could not load ${model.name}; it is deleted and downloads again", permanent = false)
++        }
++        handle = loaded
++        cancelHandle = loaded
++        loadedPath = model.absolutePath
++    }
++
++    private fun scheduleFree() {
++        idle.schedule({
++            synchronized(lock) {
++                if (handle != 0L && System.currentTimeMillis() - lastUse >= IDLE_FREE_MS) releaseLocked()
++            }
++        }, IDLE_FREE_MS + 1_000L, TimeUnit.MILLISECONDS)
++    }
++
++    /** Frees the model now (Settings "delete models"). */
++    fun release() {
++        synchronized(lock) { releaseLocked() }
++    }
++
++    private fun releaseLocked() {
++        if (handle != 0L) {
++            cancelHandle = 0L
++            WhisperNative.nativeFree(handle)
++            handle = 0L
++            loadedPath = null
++        }
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperModels.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperModels.kt
+new file mode 100644
+index 00000000..52e6db4c
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperModels.kt
+@@ -0,0 +1,196 @@
++package com.nuvio.app.features.player.generated
++
++import com.nuvio.app.core.storage.DesktopStorage
++import com.nuvio.app.features.player.audiosync.SyncLog
++import java.io.File
++import java.io.IOException
++import java.net.HttpURLConnection
++import java.net.URL
++import java.security.MessageDigest
++
++/**
++ * The ggml Whisper models used by on-device generated subtitles, kept in the app's data folder.
++ * The model is downloaded on first use from the whisper.cpp repository on Hugging Face; an
++ * interrupted download resumes where it stopped (HTTP Range) and the finished file is checked
++ * against the SHA-256 that Hugging Face reports.
++ */
++internal object WhisperModels {
++    class Variant(val id: String, val label: String, val fileName: String, val approxBytes: Long) {
++        val url: String get() = "$BASE_URL/$fileName"
++    }
++
++    /** The full large-v3 model: the most accurate, the default. */
++    val LARGE_V3 = Variant("large-v3", "Whisper large-v3", "ggml-large-v3.bin", 3_100_000_000L)
++
++    /** large-v3 quantised to 5 bits: about a third of the size, for small disks or slow links. */
++    val LARGE_V3_Q5 = Variant("large-v3-q5_0", "Whisper large-v3 (compressed)", "ggml-large-v3-q5_0.bin", 1_100_000_000L)
++
++    private const val BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
++    private const val ATTEMPTS = 4
++    private const val FREE_SPACE_MARGIN = 500_000_000L
++    private const val MAGIC_GGML = 0x67676d6c // "ggml", stored little-endian as "lmgg"
++
++    private val downloadLock = Any()
++    @Volatile private var downloadFile: File? = null
++
++    private val directory: File
++        get() = DesktopStorage.rootDir.resolve("models").resolve("whisper").toFile()
++
++    fun file(variant: Variant): File = File(directory, variant.fileName)
++
++    fun isInstalled(variant: Variant): Boolean = file(variant).let { it.isFile && it.length() > variant.approxBytes / 2 }
++
++    /** One line for Settings: what is on disk. Empty when nothing is. */
++    fun summary(): String {
++        val parts = listOf(LARGE_V3, LARGE_V3_Q5).filter { isInstalled(it) }.map { variant ->
++            "${variant.label} (${formatSize(file(variant).length())})"
++        }
++        return parts.joinToString(", ")
++    }
++
++    fun deleteAll() {
++        synchronized(this) {
++            directory.listFiles()?.forEach { file ->
++                if (file.name.startsWith("ggml-")) runCatching { file.delete() }
++            }
++        }
++    }
++
++    /** Returns the model file, downloading it first when it is not there. Blocking. */
++    fun ensure(variant: Variant, progress: (done: Long, total: Long) -> Unit): File {
++        val target = file(variant)
++        if (isInstalled(variant)) return target
++        return synchronized(downloadLock) {
++            if (isInstalled(variant)) return@synchronized target
++            target.parentFile.mkdirs()
++            val part = File(target.parentFile, target.name + ".part")
++            val needed = (variant.approxBytes - part.length()).coerceAtLeast(0L) + FREE_SPACE_MARGIN
++            if (target.parentFile.usableSpace in 1 until needed) {
++                throw IOException(
++                    "not enough free disk space for ${variant.label}: need ${formatSize(needed)}, " +
++                        "have ${formatSize(target.parentFile.usableSpace)}",
++                )
++            }
++            downloadFile = part
++            try {
++                var lastError: IOException? = null
++                for (attempt in 1..ATTEMPTS) {
++                    try {
++                        SyncLog.i("generated subtitles: downloading ${variant.label} (attempt $attempt, ${formatSize(part.length())} on disk)")
++                        download(variant, part, progress)
++                        if (!part.renameTo(target)) throw IOException("could not move the finished download into place")
++                        SyncLog.i("generated subtitles: ${variant.label} downloaded")
++                        return@synchronized target
++                    } catch (error: IOException) {
++                        lastError = error
++                        SyncLog.w("generated subtitles: model download failed: ${error.message}")
++                        if (attempt < ATTEMPTS) Thread.sleep(2_000L * attempt * attempt)
++                    }
++                }
++                throw lastError ?: IOException("model download failed")
++            } finally {
++                downloadFile = null
++            }
++        }
++    }
++
++    private fun download(variant: Variant, part: File, progress: (Long, Long) -> Unit) {
++        var url = variant.url
++        var expectedSha: String? = null
++        var hops = 0
++        while (true) {
++            val resume = part.length()
++            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
++                instanceFollowRedirects = false
++                connectTimeout = 20_000
++                readTimeout = 60_000
++                setRequestProperty("User-Agent", "NuvioDesktop")
++                if (resume > 0) setRequestProperty("Range", "bytes=$resume-")
++            }
++            try {
++                val code = try {
++                    connection.responseCode
++                } catch (error: Exception) {
++                    throw IOException("unreachable: ${error.message}")
++                }
++                if (code in 301..308 && code != 304) {
++                    // Hugging Face reports the SHA-256 of the file on the redirect to its CDN
++                    connection.getHeaderField("X-Linked-Etag")?.trim('"')
++                        ?.takeIf { it.length == 64 }?.let { expectedSha = it.lowercase() }
++                    val location = connection.getHeaderField("Location") ?: throw IOException("redirect without a location")
++                    url = URL(URL(url), location).toString()
++                    if (++hops > 6) throw IOException("too many redirects")
++                    continue
++                }
++                if (code == 416) {
++                    part.delete()
++                    throw IOException("server refused the resume point; starting over")
++                }
++                if (code != 200 && code != 206) throw IOException("HTTP $code")
++                val append = code == 206 && resume > 0
++                val total = if (append) {
++                    connection.getHeaderField("Content-Range")?.substringAfter('/')?.toLongOrNull() ?: -1L
++                } else {
++                    connection.contentLengthLong
++                }
++                var done = if (append) resume else 0L
++                java.io.FileOutputStream(part, append).use { output ->
++                    connection.inputStream.use { input ->
++                        val buffer = ByteArray(1 shl 20)
++                        var lastReport = 0L
++                        while (true) {
++                            val read = input.read(buffer)
++                            if (read < 0) break
++                            output.write(buffer, 0, read)
++                            done += read
++                            val now = System.currentTimeMillis()
++                            if (now - lastReport >= 1_000L) {
++                                lastReport = now
++                                progress(done, total)
++                            }
++                        }
++                    }
++                }
++                progress(done, total)
++                if (total > 0 && part.length() != total) {
++                    throw IOException("download ended early (${part.length()} of $total bytes)")
++                }
++                verify(part, expectedSha)
++                return
++            } finally {
++                connection.disconnect()
++            }
++        }
++    }
++
++    private fun verify(file: File, expectedSha: String?) {
++        file.inputStream().use { input ->
++            val magic = ByteArray(4)
++            if (input.read(magic) != 4 ||
++                (magic[0].toInt() and 0xFF) or ((magic[1].toInt() and 0xFF) shl 8) or
++                ((magic[2].toInt() and 0xFF) shl 16) or ((magic[3].toInt() and 0xFF) shl 24) != MAGIC_GGML
++            ) {
++                file.delete()
++                throw IOException("the downloaded file is not a ggml model")
++            }
++        }
++        if (expectedSha == null) return
++        val digest = MessageDigest.getInstance("SHA-256")
++        file.inputStream().use { input ->
++            val buffer = ByteArray(1 shl 20)
++            while (true) {
++                val read = input.read(buffer)
++                if (read < 0) break
++                digest.update(buffer, 0, read)
++            }
++        }
++        val actual = digest.digest().joinToString("") { "%02x".format(it) }
++        if (actual != expectedSha) {
++            file.delete()
++            throw IOException("the downloaded model failed its SHA-256 check")
++        }
++    }
++
++    fun formatSize(bytes: Long): String =
++        if (bytes >= 1_000_000_000L) "%.1f GB".format(bytes / 1e9) else "${bytes / 1_000_000L} MB"
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperNative.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperNative.kt
+new file mode 100644
+index 00000000..4d960869
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperNative.kt
+@@ -0,0 +1,55 @@
++package com.nuvio.app.features.player.generated
++
++import co.touchlab.kermit.Logger
++import java.io.File
++
++/**
++ * JNI binding for the whisper.cpp bridge (libwhisper_bridge.dylib, built by Gradle from
++ * native/macos/whisper/whisper_bridge.cpp). Only the macOS app bundles it; elsewhere [available]
++ * is false and generated subtitles keep using Groq.
++ */
++internal object WhisperNative {
++    private val log = Logger.withTag("WhisperNative")
++
++    external fun nativeLoad(path: String, useGpu: Boolean): Long
++    external fun nativeTranscribe(
++        handle: Long,
++        samples: FloatArray,
++        translate: Boolean,
++        language: String,
++        threads: Int,
++    ): Array<String>?
++    external fun nativeCancel(handle: Long)
++    external fun nativeFree(handle: Long)
++
++    /** True once the bridge library is loaded. */
++    val available: Boolean by lazy { loadBridge() }
++
++    private fun loadBridge(): Boolean {
++        if (!System.getProperty("os.name").orEmpty().contains("mac", ignoreCase = true)) return false
++        val library = findLibrary() ?: run {
++            log.i { "libwhisper_bridge.dylib not found; on-device Whisper is unavailable" }
++            return false
++        }
++        return runCatching { System.load(library.absolutePath) }
++            .onFailure { error -> log.w(error) { "could not load ${library.absolutePath}" } }
++            .isSuccess
++    }
++
++    private fun findLibrary(): File? {
++        val name = "libwhisper_bridge.dylib"
++        System.getProperty("compose.application.resources.dir")
++            ?.takeIf(String::isNotBlank)
++            ?.let { File(it, "native/macos/$name") }
++            ?.takeIf(File::isFile)
++            ?.let { return it }
++        val architectures = when (System.getProperty("os.arch").orEmpty().lowercase()) {
++            "aarch64", "arm64" -> listOf("arm64", "aarch64")
++            "amd64", "x64", "x86_64" -> listOf("x86_64")
++            else -> emptyList()
++        }
++        val roots = listOf(File("composeApp/build/native/macos"), File("build/native/macos"))
++        return roots.flatMap { root -> architectures.map { root.resolve(it).resolve(name) } }
++            .firstOrNull(File::isFile)
++    }
++}
+diff --git a/composeApp/src/desktopMain/native/macos/whisper/whisper_bridge.cpp b/composeApp/src/desktopMain/native/macos/whisper/whisper_bridge.cpp
+new file mode 100644
+index 00000000..f7859484
+--- /dev/null
++++ b/composeApp/src/desktopMain/native/macos/whisper/whisper_bridge.cpp
+@@ -0,0 +1,150 @@
++// JNI bridge between the desktop app and whisper.cpp (statically linked), used for on-device
++// generated subtitles on macOS. The CI workflow builds libwhisper_all.a for each architecture
++// under ./lib/<arch>/ and copies the headers to ./include/; Gradle compiles this file into
++// libwhisper_bridge.dylib next to libplayer_bridge.dylib.
++//
++// Kotlin side: com.nuvio.app.features.player.generated.WhisperNative
++#include <jni.h>
++
++#include <atomic>
++#include <cstdio>
++#include <string>
++#include <vector>
++
++#include "whisper.h"
++
++namespace {
++
++struct Handle {
++    whisper_context* ctx = nullptr;
++    std::atomic<bool> cancel{false};
++};
++
++bool abortRequested(void* userData) {
++    return static_cast<Handle*>(userData)->cancel.load();
++}
++
++std::string toStdString(JNIEnv* env, jstring value) {
++    if (value == nullptr) return std::string();
++    const char* chars = env->GetStringUTFChars(value, nullptr);
++    if (chars == nullptr) return std::string();
++    std::string result(chars);
++    env->ReleaseStringUTFChars(value, chars);
++    return result;
++}
++
++std::string oneLine(const char* text) {
++    std::string out(text == nullptr ? "" : text);
++    for (char& c : out) {
++        if (c == '\t' || c == '\n' || c == '\r') c = ' ';
++    }
++    return out;
++}
++
++// Whisper emits standard UTF-8 (4-byte emoji, occasionally a cut sequence), which NewStringUTF does
++// not accept, so the text goes through new String(bytes, "UTF-8"), which repairs bad sequences.
++jstring utf8String(JNIEnv* env, jclass stringClass, jmethodID constructor, jstring charset, const std::string& text) {
++    jbyteArray bytes = env->NewByteArray(static_cast<jsize>(text.size()));
++    if (bytes == nullptr) return nullptr;
++    env->SetByteArrayRegion(bytes, 0, static_cast<jsize>(text.size()), reinterpret_cast<const jbyte*>(text.data()));
++    jstring result = static_cast<jstring>(env->NewObject(stringClass, constructor, bytes, charset));
++    env->DeleteLocalRef(bytes);
++    return result;
++}
++
++}  // namespace
++
++extern "C" {
++
++// Returns an opaque handle, or 0 when the model could not be loaded.
++JNIEXPORT jlong JNICALL Java_com_nuvio_app_features_player_generated_WhisperNative_nativeLoad(
++    JNIEnv* env, jobject, jstring path, jboolean useGpu) {
++    const std::string modelPath = toStdString(env, path);
++    whisper_context_params params = whisper_context_default_params();
++    params.use_gpu = useGpu == JNI_TRUE;
++    whisper_context* ctx = whisper_init_from_file_with_params(modelPath.c_str(), params);
++    if (ctx == nullptr) return 0;
++    Handle* handle = new Handle();
++    handle->ctx = ctx;
++    return reinterpret_cast<jlong>(handle);
++}
++
++// Recognises one window of 16 kHz mono float samples. The result is null when it failed or was
++// cancelled. Otherwise element 0 is the language code Whisper used and every following element is
++// "startMs<TAB>endMs<TAB>noSpeechProbability<TAB>text".
++JNIEXPORT jobjectArray JNICALL Java_com_nuvio_app_features_player_generated_WhisperNative_nativeTranscribe(
++    JNIEnv* env, jobject, jlong handlePtr, jfloatArray samples, jboolean translate, jstring language,
++    jint threads) {
++    Handle* handle = reinterpret_cast<Handle*>(handlePtr);
++    if (handle == nullptr || handle->ctx == nullptr || samples == nullptr) return nullptr;
++
++    const jsize count = env->GetArrayLength(samples);
++    std::vector<float> pcm(static_cast<size_t>(count));
++    env->GetFloatArrayRegion(samples, 0, count, pcm.data());
++    const std::string lang = toStdString(env, language);
++
++    handle->cancel.store(false);
++    whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
++    params.n_threads = threads > 0 ? threads : 4;
++    params.translate = translate == JNI_TRUE;
++    params.language = lang.empty() ? "auto" : lang.c_str();
++    params.detect_language = false;  // language "auto" already detects
++    params.print_progress = false;
++    params.print_realtime = false;
++    params.print_special = false;
++    params.print_timestamps = false;
++    params.no_context = true;  // windows are independent; carried context feeds repetition loops
++    params.suppress_blank = true;
++    params.abort_callback = abortRequested;
++    params.abort_callback_user_data = handle;
++
++    if (whisper_full(handle->ctx, params, pcm.data(), static_cast<int>(pcm.size())) != 0) return nullptr;
++    if (handle->cancel.load()) return nullptr;
++
++    const int segments = whisper_full_n_segments(handle->ctx);
++    jclass stringClass = env->FindClass("java/lang/String");
++    if (stringClass == nullptr) return nullptr;
++    jmethodID constructor = env->GetMethodID(stringClass, "<init>", "([BLjava/lang/String;)V");
++    jstring charset = env->NewStringUTF("UTF-8");
++    jobjectArray result = env->NewObjectArray(segments + 1, stringClass, nullptr);
++    if (constructor == nullptr || charset == nullptr || result == nullptr) return nullptr;
++
++    const int langId = whisper_full_lang_id(handle->ctx);
++    const char* detected = whisper_lang_str(langId);
++    jstring langString = env->NewStringUTF(detected == nullptr ? "" : detected);  // ASCII code
++    env->SetObjectArrayElement(result, 0, langString);
++    env->DeleteLocalRef(langString);
++
++    for (int i = 0; i < segments; i++) {
++        // whisper timestamps are in units of 10 ms
++        const long long start = whisper_full_get_segment_t0(handle->ctx, i) * 10;
++        const long long end = whisper_full_get_segment_t1(handle->ctx, i) * 10;
++        const float noSpeech = whisper_full_get_segment_no_speech_prob(handle->ctx, i);
++        char head[96];
++        std::snprintf(head, sizeof(head), "%lld\t%lld\t%.4f\t", start, end, static_cast<double>(noSpeech));
++        const std::string line = std::string(head) + oneLine(whisper_full_get_segment_text(handle->ctx, i));
++        jstring element = utf8String(env, stringClass, constructor, charset, line);
++        if (element == nullptr) return nullptr;  // exception pending (out of memory)
++        env->SetObjectArrayElement(result, i + 1, element);
++        env->DeleteLocalRef(element);
++    }
++    env->DeleteLocalRef(charset);
++    return result;
++}
++
++// Makes a running nativeTranscribe on this handle stop as soon as Whisper checks.
++JNIEXPORT void JNICALL Java_com_nuvio_app_features_player_generated_WhisperNative_nativeCancel(
++    JNIEnv*, jobject, jlong handlePtr) {
++    Handle* handle = reinterpret_cast<Handle*>(handlePtr);
++    if (handle != nullptr) handle->cancel.store(true);
++}
++
++JNIEXPORT void JNICALL Java_com_nuvio_app_features_player_generated_WhisperNative_nativeFree(
++    JNIEnv*, jobject, jlong handlePtr) {
++    Handle* handle = reinterpret_cast<Handle*>(handlePtr);
++    if (handle == nullptr) return;
++    if (handle->ctx != nullptr) whisper_free(handle->ctx);
++    delete handle;
++}
++
++}  // extern "C"
