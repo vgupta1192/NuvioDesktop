@@ -156,7 +156,7 @@ index c81dcf1d..a6f9e7e3 100644
  
      private fun cancelAutoSync() {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-index 0afd949e..d82af741 100644
+index 0afd949e..ac08ef9d 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -1,6 +1,7 @@
@@ -167,13 +167,27 @@ index 0afd949e..d82af741 100644
  import com.nuvio.app.features.player.GeneratedSubtitles
  import com.nuvio.app.features.player.GeneratedSubtitleSync
  import com.nuvio.app.features.player.audiosync.SyncLog
-@@ -10,21 +11,27 @@ import kotlinx.coroutines.Dispatchers
+@@ -10,23 +11,48 @@ import kotlinx.coroutines.Dispatchers
  import kotlinx.coroutines.Job
  import kotlinx.coroutines.SupervisorJob
  import kotlinx.coroutines.cancelChildren
 +import kotlinx.coroutines.isActive
  import kotlinx.coroutines.launch
++import kotlinx.coroutines.async
++import kotlinx.coroutines.awaitAll
++import kotlinx.coroutines.coroutineScope
++import kotlinx.coroutines.delay
  import kotlinx.coroutines.withContext
++import kotlinx.coroutines.withTimeoutOrNull
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonArray
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.JsonPrimitive
++import kotlinx.serialization.json.booleanOrNull
++import kotlinx.serialization.json.jsonArray
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import kotlinx.serialization.json.long
  import java.io.File
  import java.security.MessageDigest
  
@@ -186,7 +200,9 @@ index 0afd949e..d82af741 100644
 + * Whisper large-v3 (on macOS locally through whisper.cpp, see [WhisperLocal]; otherwise, and for
 + * the online entry, on Groq), and written to an SRT file that is attached to the playing mpv window by
   * window, so lines appear while later windows are still being recognised. The finished SRT is
-  * cached under the content key and pushed to the user's account (shared with mobile).
+- * cached under the content key and pushed to the user's account (shared with mobile).
++ * saved on this device and in the user's account in the same JSON and under the same key as Nuvio Mobile
++ * and Nuvio TV, so lines made on any device (with their timing) are reused on the others.
   */
  internal object GeneratedSubtitlesDesktop {
      private const val WINDOW_SECONDS = 120.0
@@ -197,8 +213,14 @@ index 0afd949e..d82af741 100644
 +    private const val WINDOW_FAILED = -1
      private const val SAMPLE_RATE = 16_000
      private const val DUMP_TIMEOUT_SEC = 150L
++    private const val PUSH_EVERY_WINDOWS = 5
++    private const val MAX_KEPT_TITLES = 200
++    private const val SYNC_TIMEOUT_MS = 10_000L
++    private const val COVERED_TOLERANCE_MS = 3_000L
  
-@@ -41,6 +48,17 @@ internal object GeneratedSubtitlesDesktop {
+     private val store by lazy { DesktopStorage.store("nuvio_generated_subtitles") }
+     @Volatile private var initialized = false
+@@ -41,6 +67,17 @@ internal object GeneratedSubtitlesDesktop {
                  save = { key, value -> store.putString(key, value) },
              )
              GeneratedSubtitles.supported = true
@@ -216,7 +238,7 @@ index 0afd949e..d82af741 100644
              initialized = true
          }
      }
-@@ -52,11 +70,25 @@ internal object GeneratedSubtitlesDesktop {
+@@ -52,11 +89,25 @@ internal object GeneratedSubtitlesDesktop {
  
      /** Called when playback moves to a real subtitle/title: the background dump loses its purpose. */
      fun stopGeneration() {
@@ -242,7 +264,7 @@ index 0afd949e..d82af741 100644
      /**
       * Returns true when [url] is a generated-subtitle entry and generation started (or the
       * cached file attached). The caller then skips attaching the pseudo URL to the player.
-@@ -70,8 +102,12 @@ internal object GeneratedSubtitlesDesktop {
+@@ -70,8 +121,12 @@ internal object GeneratedSubtitlesDesktop {
          ensureInitialized()
          if (!GeneratedSubtitles.isGenerated(url)) return false
          val online = url == GeneratedSubtitles.ONLINE_URL
@@ -256,7 +278,7 @@ index 0afd949e..d82af741 100644
              return true
          }
          if (running) {
-@@ -81,21 +117,36 @@ internal object GeneratedSubtitlesDesktop {
+@@ -81,21 +136,35 @@ internal object GeneratedSubtitlesDesktop {
          val contentId = GeneratedSubtitles.contentId
          val spoken = GeneratedSubtitles.spokenLanguage.value
          val deeplKey = GeneratedSubtitles.deeplKey.value
@@ -267,7 +289,6 @@ index 0afd949e..d82af741 100644
 +            local -> "whisper-${variant.id}"
 +            else -> "groq"
 +        }
-+        val key = cacheKey(contentId, spoken, engine)
 +        val mine = ++generation
 +        WhisperLocal.cancelCurrent()
          job?.cancel()
@@ -279,7 +300,7 @@ index 0afd949e..d82af741 100644
          job = scope.launch {
              try {
 -                runGeneration(handle, streamUrl.orEmpty(), headers, contentId, spoken, online, deeplKey, key)
-+                runGeneration(handle, streamUrl.orEmpty(), headers, contentId, spoken, variant.takeIf { local }, deeplKey, key)
++                runGeneration(handle, streamUrl.orEmpty(), headers, contentId, spoken, variant.takeIf { local }, deeplKey, online)
              } catch (failure: kotlinx.coroutines.CancellationException) {
                  throw failure
              } catch (error: Throwable) {
@@ -298,35 +319,48 @@ index 0afd949e..d82af741 100644
              }
          }
          return true
-@@ -107,42 +158,81 @@ internal object GeneratedSubtitlesDesktop {
+@@ -107,43 +176,94 @@ internal object GeneratedSubtitlesDesktop {
          headers: Map<String, String>,
          contentId: String?,
          spoken: String,
 -        online: Boolean,
 +        localVariant: WhisperModels.Variant?,
          deeplKey: String,
-         key: String,
+-        key: String,
++        online: Boolean,
      ) {
          val cacheDir = File(System.getProperty("java.io.tmpdir"), "nuvio-gensubs").apply { mkdirs() }
 -        val srtFile = File(cacheDir, "$key.srt")
 -        if (!srtFile.exists() || srtFile.length() < 64L) {
-+        // Lines are written to a working file and moved to the final name only when the whole title
-+        // is done, so a stopped run is never mistaken for a finished subtitle.
-+        val finalFile = File(cacheDir, "$key.srt")
-+        val srtFile = File(cacheDir, "$key.part.srt")
-+        if (!finalFile.exists() || finalFile.length() < 64L) {
-             // Account copy first (another device may have generated this title already).
-             GeneratedSubtitleSync.pull(key)?.let { saved ->
+-            // Account copy first (another device may have generated this title already).
+-            GeneratedSubtitleSync.pull(key)?.let { saved ->
 -                srtFile.writeText(saved)
-+                finalFile.writeText(saved)
-                 SyncLog.i("generated subtitles: restored from the account")
-             }
+-                SyncLog.i("generated subtitles: restored from the account")
+-            }
++        val keptDir = File(DesktopStorage.rootDir.toFile(), "generated-subtitles").apply { mkdirs() }
++
++        // The saved lines of this title use the same key and JSON as Nuvio Mobile and Nuvio TV, so
++        // lines made on any of them (or here earlier) are reused, with their timing, and only the
++        // part that is still missing is generated.
++        val durationMs = waitForDuration(handle)
++        val language = resolveLanguage(handle, spoken)
++        val keys = if (durationMs > 0) cacheKeys(contentId, streamUrl, durationMs, online, language) else emptyList()
++        val otherKeys = if (durationMs > 0) cacheKeys(contentId, streamUrl, durationMs, !online, language) else emptyList()
++        val key = keys.firstOrNull()
++        val cues = ArrayList<Cue>()
++        val covered = ArrayList<LongArray>()
++        if (key != null) {
++            loadSaved(keys, otherKeys, cues, covered)
          }
 -        if (srtFile.exists() && srtFile.length() > 64L) {
--            attach(handle, srtFile)
-+        if (finalFile.exists() && finalFile.length() > 64L) {
-+            attach(handle, finalFile)
-+            bubble("success", "Subtitles ready • loaded from the saved copy")
++        val srtFile = File(if (key != null) keptDir else cacheDir, "${key ?: "current"}.srt")
++        if (cues.isNotEmpty()) {
++            srtFile.writeText(buildSrt(cues))
+             attach(handle, srtFile)
++            SyncLog.i("generated subtitles: ${cues.size} saved lines reused, ${coveredSeconds(covered)}s already done")
++        }
++        if (durationMs > 0 && isFullyCovered(covered, durationMs)) {
++            bubble("success", "Subtitles ready • loaded from the saved copy (${cues.size} lines)")
              return
          }
          if (streamUrl.isBlank()) {
@@ -345,6 +379,8 @@ index 0afd949e..d82af741 100644
              return
          }
  
+-        srtFile.delete()
+-        var cueIndex = 0
 +        // Fetch the model before reading any audio: the first use downloads about 3 GB.
 +        val modelFile = localVariant?.let { variant ->
 +            withContext(Dispatchers.IO) {
@@ -373,23 +409,27 @@ index 0afd949e..d82af741 100644
 +        }
 +        if (localVariant != null && modelFile == null) return
 +
-         srtFile.delete()
--        var cueIndex = 0
-+        val cues = ArrayList<Cue>()
          var windowsWithAudio = 0
 -        for (window in 0 until MAX_WINDOWS) {
 -            if (handle == 0L) break // player closed; stop dumping
++        val lastWindow = if (durationMs > 0) ((durationMs / 1000.0) / WINDOW_SECONDS).toInt().coerceAtMost(MAX_WINDOWS - 1) else MAX_WINDOWS - 1
++        var sincePush = 0
 +
 +        // Reads, recognises and stores one window. Returns WINDOW_OK, WINDOW_END (no more audio)
 +        // or WINDOW_FAILED (the audio could not be read).
 +        suspend fun runWindow(window: Int, backfill: Boolean): Int {
 +            if (handle == 0L) return WINDOW_FAILED // player closed; stop dumping
              val startSec = window * WINDOW_SECONDS
+-            val wavFile = File(cacheDir, "$key-$window.wav")
++            val windowFromMs = (startSec * 1000).toLong()
++            val windowToMs = if (durationMs > 0) minOf(durationMs, windowFromMs + (WINDOW_SECONDS * 1000).toLong()) else windowFromMs + (WINDOW_SECONDS * 1000).toLong()
++            if (isCovered(covered, windowFromMs, windowToMs)) return WINDOW_OK // saved lines already cover it
 +            bubble("working", "Reading the audio · ${formatClock(startSec)} to ${formatClock(startSec + WINDOW_SECONDS)}" + lineCount(cues.size))
-             val wavFile = File(cacheDir, "$key-$window.wav")
++            val wavFile = File(cacheDir, "${key ?: "current"}-$window.wav")
              val ok = withContext(Dispatchers.IO) {
                  runCatching {
-@@ -162,23 +252,36 @@ internal object GeneratedSubtitlesDesktop {
+                     // Share the native-dump gate with the speech engine: one dump at a time. The
+@@ -162,23 +282,40 @@ internal object GeneratedSubtitlesDesktop {
              }
              if (!ok || !wavFile.exists() || wavFile.length() <= 44L) {
                  wavFile.delete()
@@ -402,7 +442,11 @@ index 0afd949e..d82af741 100644
              val samples = readWavMono16(wavFile)
              wavFile.delete()
 -            if (samples.size < SAMPLE_RATE * 2) break // window is (almost) silent: end of audio
-+            if (samples.size < SAMPLE_RATE * 2) return WINDOW_END // window is (almost) silent: end of audio
++            if (samples.size < SAMPLE_RATE * 2) {
++                // window is (almost) silent: end of audio
++                if (durationMs > 0 && window == lastWindow) addCovered(covered, windowFromMs, windowToMs)
++                return WINDOW_END
++            }
              windowsWithAudio += 1
              if (windowsWithAudio == 1 || windowsWithAudio % 5 == 0) {
                  SyncLog.i("generated subtitles: window $windowsWithAudio read (${startSec.toInt()}s)")
@@ -432,7 +476,7 @@ index 0afd949e..d82af741 100644
              }
              var lines = groqLines.map { it.text }
              if (!translate && deeplKey.isNotBlank()) {
-@@ -190,23 +293,66 @@ internal object GeneratedSubtitlesDesktop {
+@@ -190,23 +327,78 @@ internal object GeneratedSubtitlesDesktop {
                      )
                  }
              }
@@ -442,12 +486,22 @@ index 0afd949e..d82af741 100644
 -                buildSrt(groqLines.map { it.startSec to it.endSec }, lines, startSec, cueIndex),
 -            )
 -            cueIndex += lines.size
-+            if (lines.isEmpty()) return WINDOW_OK
-+            if (cues.isEmpty()) SyncLog.i("generated subtitles: first ${lines.size} lines recognised")
+-            attach(handle, srtFile) // grows every window: lines show up while later windows run
 +            val spans = SubtitleTimingSnap.snap(groqLines.map { it.startSec to it.endSec }, samples)
++            // This window's fresh lines replace whatever an earlier copy had inside it.
++            cues.removeAll { (it.start * 1000).toLong() in windowFromMs until windowToMs }
++            if (lines.isNotEmpty() && cues.isEmpty()) SyncLog.i("generated subtitles: first ${lines.size} lines recognised")
 +            spans.zip(lines).forEach { (span, line) -> cues += Cue(startSec + span.first, startSec + span.second, line.trim()) }
-+            srtFile.writeText(buildSrt(cues))
-             attach(handle, srtFile) // grows every window: lines show up while later windows run
++            addCovered(covered, windowFromMs, windowToMs)
++            if (cues.isNotEmpty()) {
++                srtFile.writeText(buildSrt(cues))
++                attach(handle, srtFile) // grows every window: lines show up while later windows run
++            }
++            if (key != null) {
++                sincePush += 1
++                saveSaved(listOf(key), contentId, cues, covered, push = sincePush >= PUSH_EVERY_WINDOWS)
++                if (sincePush >= PUSH_EVERY_WINDOWS) sincePush = 0
++            }
 +            return WINDOW_OK
 +        }
 +
@@ -462,7 +516,7 @@ index 0afd949e..d82af741 100644
 +        }
 +        var complete = true
 +        var window = firstWindow
-+        while (window < MAX_WINDOWS) {
++        while (window <= lastWindow) {
 +            val result = runWindow(window, backfill = false)
 +            if (result == WINDOW_FAILED && windowsWithAudio == 0 && firstWindow > 0) {
 +                // the playback position did not map to readable audio: read from the start instead
@@ -476,30 +530,34 @@ index 0afd949e..d82af741 100644
          }
          if (windowsWithAudio == 0) {
 -            SyncLog.w("generated subtitles: no audio could be read from this stream")
-+            SyncLog.w("generated subtitles: audio dump failed (see the audio dump lines above)")
-+            bubble("failure", "The audio could not be read from this stream")
-+            srtFile.delete()
+-            srtFile.delete()
++            if (cues.isEmpty()) {
++                SyncLog.w("generated subtitles: audio dump failed (see the audio dump lines above)")
++                bubble("failure", "The audio could not be read from this stream")
++            } else {
++                SyncLog.w("generated subtitles: the rest of the audio could not be read; using the saved lines")
++                bubble("success", "Subtitles ready, some parts missing • ${cues.size} lines")
++            }
 +            return
 +        }
 +        for (earlier in 0 until firstWindow) {
 +            if (runWindow(earlier, backfill = true) == WINDOW_FAILED) complete = false
 +        }
++        if (durationMs > 0) complete = isFullyCovered(covered, durationMs)
++        val pushed = key != null && saveSaved(keys, contentId, cues, covered, push = true)
 +        if (cues.isEmpty()) {
 +            SyncLog.w("generated subtitles: no speech was recognised")
-             srtFile.delete()
 +            bubble("failure", "No speech was recognised in this stream")
 +            return
 +        }
 +        if (!complete) {
-+            SyncLog.w("generated subtitles: finished with gaps ($windowsWithAudio windows), not saved as the final copy")
++            SyncLog.w("generated subtitles: finished with gaps ($windowsWithAudio windows); the missing parts are generated next time")
 +            bubble("success", "Subtitles ready, some parts missing • ${cues.size} lines")
              return
          }
 -        GeneratedSubtitleSync.push(key, contentId, srtFile.readText())
-+        srtFile.copyTo(finalFile, overwrite = true)
-+        GeneratedSubtitleSync.push(key, contentId, finalFile.readText())
          SyncLog.i("generated subtitles: finished ($windowsWithAudio windows)")
-+        bubble("success", "Subtitles ready • ${cues.size} lines")
++        bubble("success", "Subtitles ready • ${cues.size} lines" + if (pushed) " • saved to your account" else "")
      }
  
 +    private class Cue(val start: Double, val end: Double, val text: String)
@@ -507,7 +565,7 @@ index 0afd949e..d82af741 100644
      // The player can be closed mid-generation; attaching to a disposed mpv handle is a native
      // crash (no lifetime check on the native side), so the controller invalidates the handle
      // under this gate before its teardown thread starts, and attach refuses anything stale.
-@@ -254,22 +400,22 @@ internal object GeneratedSubtitlesDesktop {
+@@ -254,22 +446,22 @@ internal object GeneratedSubtitlesDesktop {
          return -1
      }
  
@@ -529,7 +587,7 @@ index 0afd949e..d82af741 100644
 +        cues.sortedBy { it.start }.forEachIndexed { index, cue ->
 +            append(index + 1).append('\n')
 +            append(formatSrtTime(cue.start)).append(" --> ").append(formatSrtTime(cue.end)).append('\n')
-+            append(cue.text).append("\n\n")
++            append(cue.text.lines().filter { it.isNotBlank() }.joinToString("\n")).append("\n\n")
          }
      }
  
@@ -543,17 +601,157 @@ index 0afd949e..d82af741 100644
      private fun formatSrtTime(seconds: Double): String {
          val total = (seconds.coerceAtLeast(0.0) * 1000).toLong()
          val h = total / 3_600_000
-@@ -279,8 +425,8 @@ internal object GeneratedSubtitlesDesktop {
+@@ -279,9 +471,146 @@ internal object GeneratedSubtitlesDesktop {
          return "%02d:%02d:%02d,%03d".format(h, m, s, ms)
      }
  
 -    private fun cacheKey(contentId: String?, spoken: String, online: Boolean): String {
 -        val raw = "${contentId.orEmpty()}|$spoken|${if (online) "groq-online" else "groq"}"
-+    private fun cacheKey(contentId: String?, spoken: String, engine: String): String {
-+        val raw = "${contentId.orEmpty()}|$spoken|$engine|v2"
-         val digest = MessageDigest.getInstance("SHA-1").digest(raw.encodeToByteArray())
-         return digest.joinToString("") { "%02x".format(it) }
+-        val digest = MessageDigest.getInstance("SHA-1").digest(raw.encodeToByteArray())
+-        return digest.joinToString("") { "%02x".format(it) }
++    /** Waits briefly for the player to report the stream duration (part of the saved-lines key). */
++    private suspend fun waitForDuration(handle: Long): Long {
++        repeat(40) {
++            val duration = runCatching { NativePlayerBridge.durationMs(handle) }.getOrDefault(0L)
++            if (duration > 0) return duration
++            delay(250)
++        }
++        return 0L
++    }
++
++    /** The spoken language for the key: the chosen one, else the playing audio track's tag, else "auto". */
++    private fun resolveLanguage(handle: Long, spoken: String): String {
++        if (spoken != GeneratedSubtitles.AUTO) return spoken
++        val tag = runCatching {
++            val tracks = Json.parseToJsonElement(NativePlayerBridge.audioTracksJson(handle)).jsonArray
++            val chosen = tracks.firstOrNull { (it as? JsonObject)?.get("selected")?.jsonPrimitive?.booleanOrNull == true } ?: tracks.firstOrNull()
++            (chosen as? JsonObject)?.get("language")?.jsonPrimitive?.content.orEmpty()
++        }.getOrDefault("").lowercase().substringBefore('-').substringBefore('_')
++        val code = THREE_LETTER_CODES[tag] ?: tag
++        return code.takeIf { known -> GeneratedSubtitles.spokenLanguages.any { it.first == known } } ?: GeneratedSubtitles.AUTO
++    }
++
++    /**
++     * The key Nuvio Mobile and Nuvio TV compute: title/episode (or stream address), stream
++     * duration in seconds (different releases are timed differently), online or on-device, and
++     * spoken language. Players can disagree on the duration by a second, so the keys for one
++     * second less and more follow the exact one.
++     */
++    private fun cacheKeys(contentId: String?, streamUrl: String, durationMs: Long, online: Boolean, language: String): List<String> {
++        val content = contentId?.takeIf { it.isNotBlank() } ?: streamUrl.substringBefore('?')
++        return listOf(0L, -1_000L, 1_000L).map { skew ->
++            val raw = "$content|${(durationMs + skew + 500L) / 1_000L}|${if (online) "online" else "device"}|$language"
++            MessageDigest.getInstance("SHA-1").digest(raw.toByteArray()).joinToString("") { "%02x".format(it) }
++        }
++    }
++
++    private fun savedFile(key: String): File = File(File(DesktopStorage.rootDir.toFile(), "generated-subtitles"), "$key.json")
++
++    /**
++     * Merges this device's saved copy with the account copy; with neither, the near-duration
++     * keys and the copy made the other way (online / on device) are tried.
++     */
++    private suspend fun loadSaved(keys: List<String>, otherKeys: List<String>, cues: MutableList<Cue>, covered: MutableList<LongArray>) {
++        fun local(k: String): String? = savedFile(k).takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }
++        suspend fun remote(k: String): String? = withTimeoutOrNull(SYNC_TIMEOUT_MS) { GeneratedSubtitleSync.pull(k) }
++        val mine = local(keys.first())
++        val account = remote(keys.first())
++        var payloads = listOfNotNull(mine, account)
++        if (payloads.isEmpty()) {
++            payloads = coroutineScope {
++                (keys.drop(1) + otherKeys).map { k -> async { local(k) ?: remote(k) } }.awaitAll()
++            }.filterNotNull().take(1)
++        }
++        if (account != null) SyncLog.i("generated subtitles: lines from your Nuvio account found")
++        payloads.forEach { payload ->
++            runCatching {
++                val json = Json.parseToJsonElement(payload).jsonObject
++                val known = cues.mapTo(HashSet()) { (it.start * 1000).toLong() }
++                json.getValue("cues").jsonArray.forEach { line ->
++                    val fields = line.jsonArray
++                    val startMs = fields[0].jsonPrimitive.long
++                    if (known.add(startMs)) cues += Cue(startMs / 1000.0, fields[1].jsonPrimitive.long / 1000.0, fields[2].jsonPrimitive.content)
++                }
++                json.getValue("covered").jsonArray.forEach { range ->
++                    addCovered(covered, range.jsonArray[0].jsonPrimitive.long, range.jsonArray[1].jsonPrimitive.long)
++                }
++            }.onFailure { SyncLog.w("generated subtitles: saved lines unreadable: ${it.message}") }
++        }
++        cues.sortBy { it.start }
++    }
++
++    /** Writes the JSON and a plain SRT next to it on this device and, when [push] is set, to the Nuvio account. */
++    private suspend fun saveSaved(keys: List<String>, contentId: String?, cues: List<Cue>, covered: List<LongArray>, push: Boolean): Boolean {
++        val key = keys.first()
++        val file = savedFile(key)
++        val payload = JsonObject(
++            mapOf(
++                "cues" to JsonArray(
++                    cues.sortedBy { it.start }.map {
++                        JsonArray(listOf(JsonPrimitive((it.start * 1000).toLong()), JsonPrimitive((it.end * 1000).toLong()), JsonPrimitive(it.text)))
++                    },
++                ),
++                "covered" to JsonArray(covered.map { JsonArray(listOf(JsonPrimitive(it[0]), JsonPrimitive(it[1]))) }),
++            ),
++        ).toString()
++        runCatching {
++            file.parentFile?.mkdirs()
++            val partial = File(file.parentFile, file.name + ".part")
++            partial.writeText(payload)
++            partial.renameTo(file)
++            File(file.parentFile, "$key.srt").writeText(buildSrt(cues))
++            file.parentFile?.listFiles { candidate -> candidate.name.endsWith(".json") }
++                ?.sortedByDescending { it.lastModified() }
++                ?.drop(MAX_KEPT_TITLES)
++                ?.forEach { stale ->
++                    stale.delete()
++                    File(stale.parentFile, stale.name.removeSuffix(".json") + ".srt").delete()
++                }
++        }.onFailure { SyncLog.w("generated subtitles: couldn't save lines: ${it.message}") }
++        if (!push) return false
++        val pushed = keys.map { k -> withTimeoutOrNull(SYNC_TIMEOUT_MS) { GeneratedSubtitleSync.push(k, contentId, payload) } == true }.all { it }
++        if (!pushed) SyncLog.d("generated subtitles: not saved to the Nuvio account (signed out or offline)")
++        return pushed
      }
++
++    /** Adds [fromMs]..[toMs] to [covered], merging ranges that touch or overlap. */
++    private fun addCovered(covered: MutableList<LongArray>, fromMs: Long, toMs: Long) {
++        if (toMs <= fromMs) return
++        var from = fromMs
++        var to = toMs
++        val kept = ArrayList<LongArray>()
++        for (range in covered) {
++            if (range[1] < from || range[0] > to) kept += range else {
++                from = minOf(from, range[0])
++                to = maxOf(to, range[1])
++            }
++        }
++        kept += longArrayOf(from, to)
++        kept.sortBy { it[0] }
++        covered.clear()
++        covered += kept
++    }
++
++    private fun isCovered(covered: List<LongArray>, fromMs: Long, toMs: Long): Boolean =
++        covered.any { it[0] <= fromMs + COVERED_TOLERANCE_MS && it[1] >= toMs - COVERED_TOLERANCE_MS }
++
++    private fun isFullyCovered(covered: List<LongArray>, durationMs: Long): Boolean =
++        isCovered(covered, 0L, durationMs)
++
++    private fun coveredSeconds(covered: List<LongArray>): Long = covered.sumOf { it[1] - it[0] } / 1_000L
++
++    /** ISO 639-2 audio tags (as in Matroska) to the codes in [GeneratedSubtitles.spokenLanguages]. */
++    private val THREE_LETTER_CODES = mapOf(
++        "zho" to "zh", "chi" to "zh", "cmn" to "zh", "jpn" to "ja", "kor" to "ko", "eng" to "en",
++        "hin" to "hi", "urd" to "ur", "ben" to "bn", "tam" to "ta", "tel" to "te", "mal" to "ml",
++        "kan" to "kn", "mar" to "mr", "guj" to "gu", "pan" to "pa", "tha" to "th", "ind" to "id",
++        "msa" to "ms", "may" to "ms", "tgl" to "tl", "fil" to "tl", "vie" to "vi", "tur" to "tr",
++        "ara" to "ar", "fas" to "fa", "per" to "fa", "rus" to "ru", "ukr" to "uk", "pol" to "pl",
++        "spa" to "es", "por" to "pt", "fra" to "fr", "fre" to "fr", "deu" to "de", "ger" to "de",
++        "ita" to "it", "nld" to "nl", "dut" to "nl", "swe" to "sv", "ell" to "el", "gre" to "el",
++        "heb" to "he", "iw" to "he", "in" to "id",
++    )
+ }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt
 new file mode 100644
 index 00000000..edf6c507
