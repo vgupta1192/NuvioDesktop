@@ -156,7 +156,7 @@ index c81dcf1d..a6f9e7e3 100644
  
      private fun cancelAutoSync() {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-index 0afd949e..3ab8a94b 100644
+index 0afd949e..d82af741 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -1,6 +1,7 @@
@@ -167,7 +167,7 @@ index 0afd949e..3ab8a94b 100644
  import com.nuvio.app.features.player.GeneratedSubtitles
  import com.nuvio.app.features.player.GeneratedSubtitleSync
  import com.nuvio.app.features.player.audiosync.SyncLog
-@@ -10,15 +11,17 @@ import kotlinx.coroutines.Dispatchers
+@@ -10,21 +11,27 @@ import kotlinx.coroutines.Dispatchers
  import kotlinx.coroutines.Job
  import kotlinx.coroutines.SupervisorJob
  import kotlinx.coroutines.cancelChildren
@@ -188,7 +188,17 @@ index 0afd949e..3ab8a94b 100644
   * window, so lines appear while later windows are still being recognised. The finished SRT is
   * cached under the content key and pushed to the user's account (shared with mobile).
   */
-@@ -41,6 +44,17 @@ internal object GeneratedSubtitlesDesktop {
+ internal object GeneratedSubtitlesDesktop {
+     private const val WINDOW_SECONDS = 120.0
+     private const val MAX_WINDOWS = 90
++    private const val LEAD_IN_SECONDS = 15.0
++    private const val WINDOW_OK = 1
++    private const val WINDOW_END = 0
++    private const val WINDOW_FAILED = -1
+     private const val SAMPLE_RATE = 16_000
+     private const val DUMP_TIMEOUT_SEC = 150L
+ 
+@@ -41,6 +48,17 @@ internal object GeneratedSubtitlesDesktop {
                  save = { key, value -> store.putString(key, value) },
              )
              GeneratedSubtitles.supported = true
@@ -206,7 +216,7 @@ index 0afd949e..3ab8a94b 100644
              initialized = true
          }
      }
-@@ -52,11 +66,25 @@ internal object GeneratedSubtitlesDesktop {
+@@ -52,11 +70,25 @@ internal object GeneratedSubtitlesDesktop {
  
      /** Called when playback moves to a real subtitle/title: the background dump loses its purpose. */
      fun stopGeneration() {
@@ -232,7 +242,7 @@ index 0afd949e..3ab8a94b 100644
      /**
       * Returns true when [url] is a generated-subtitle entry and generation started (or the
       * cached file attached). The caller then skips attaching the pseudo URL to the player.
-@@ -70,8 +98,12 @@ internal object GeneratedSubtitlesDesktop {
+@@ -70,8 +102,12 @@ internal object GeneratedSubtitlesDesktop {
          ensureInitialized()
          if (!GeneratedSubtitles.isGenerated(url)) return false
          val online = url == GeneratedSubtitles.ONLINE_URL
@@ -246,7 +256,7 @@ index 0afd949e..3ab8a94b 100644
              return true
          }
          if (running) {
-@@ -81,21 +113,36 @@ internal object GeneratedSubtitlesDesktop {
+@@ -81,21 +117,36 @@ internal object GeneratedSubtitlesDesktop {
          val contentId = GeneratedSubtitles.contentId
          val spoken = GeneratedSubtitles.spokenLanguage.value
          val deeplKey = GeneratedSubtitles.deeplKey.value
@@ -288,7 +298,7 @@ index 0afd949e..3ab8a94b 100644
              }
          }
          return true
-@@ -107,42 +154,78 @@ internal object GeneratedSubtitlesDesktop {
+@@ -107,42 +158,81 @@ internal object GeneratedSubtitlesDesktop {
          headers: Map<String, String>,
          contentId: String?,
          spoken: String,
@@ -364,24 +374,38 @@ index 0afd949e..3ab8a94b 100644
 +        if (localVariant != null && modelFile == null) return
 +
          srtFile.delete()
-         var cueIndex = 0
+-        var cueIndex = 0
++        val cues = ArrayList<Cue>()
          var windowsWithAudio = 0
-         for (window in 0 until MAX_WINDOWS) {
-             if (handle == 0L) break // player closed; stop dumping
+-        for (window in 0 until MAX_WINDOWS) {
+-            if (handle == 0L) break // player closed; stop dumping
++
++        // Reads, recognises and stores one window. Returns WINDOW_OK, WINDOW_END (no more audio)
++        // or WINDOW_FAILED (the audio could not be read).
++        suspend fun runWindow(window: Int, backfill: Boolean): Int {
++            if (handle == 0L) return WINDOW_FAILED // player closed; stop dumping
              val startSec = window * WINDOW_SECONDS
-+            bubble("working", "Reading the audio · ${formatClock(startSec)} to ${formatClock(startSec + WINDOW_SECONDS)}" + lineCount(cueIndex))
++            bubble("working", "Reading the audio · ${formatClock(startSec)} to ${formatClock(startSec + WINDOW_SECONDS)}" + lineCount(cues.size))
              val wavFile = File(cacheDir, "$key-$window.wav")
              val ok = withContext(Dispatchers.IO) {
                  runCatching {
-@@ -164,6 +247,7 @@ internal object GeneratedSubtitlesDesktop {
-                 wavFile.delete()
-                 if (windowsWithAudio == 0) {
-                     SyncLog.w("generated subtitles: audio dump failed at ${startSec.toInt()}s (see the audio dump lines above)")
-+                    bubble("failure", "The audio could not be read from this stream")
-                 }
-                 break // end of audio
+@@ -162,23 +252,36 @@ internal object GeneratedSubtitlesDesktop {
              }
-@@ -176,9 +260,24 @@ internal object GeneratedSubtitlesDesktop {
+             if (!ok || !wavFile.exists() || wavFile.length() <= 44L) {
+                 wavFile.delete()
+-                if (windowsWithAudio == 0) {
+-                    SyncLog.w("generated subtitles: audio dump failed at ${startSec.toInt()}s (see the audio dump lines above)")
+-                }
+-                break // end of audio
++                return WINDOW_FAILED
+             }
+             val samples = readWavMono16(wavFile)
+             wavFile.delete()
+-            if (samples.size < SAMPLE_RATE * 2) break // window is (almost) silent: end of audio
++            if (samples.size < SAMPLE_RATE * 2) return WINDOW_END // window is (almost) silent: end of audio
+             windowsWithAudio += 1
+             if (windowsWithAudio == 1 || windowsWithAudio % 5 == 0) {
+                 SyncLog.i("generated subtitles: window $windowsWithAudio read (${startSec.toInt()}s)")
              }
  
              val translate = spoken == GeneratedSubtitles.AUTO || spoken == "en"
@@ -389,8 +413,9 @@ index 0afd949e..3ab8a94b 100644
 +                "working",
 +                (if (modelFile != null) "Recognising speech on this device · " else "Recognising speech online · ") +
 +                    formatClock(startSec) + " to " + formatClock(startSec + WINDOW_SECONDS) +
++                    (if (backfill) " (filling in the earlier part)" else "") +
 +                    (if (modelFile != null && windowsWithAudio == 1) " (the first window also loads the model)" else "") +
-+                    lineCount(cueIndex),
++                    lineCount(cues.size),
 +            )
              val key0 = GeneratedSubtitles.groqKey.value
 +            val spokenHint = spoken.takeUnless { it == GeneratedSubtitles.AUTO }.orEmpty()
@@ -407,34 +432,104 @@ index 0afd949e..3ab8a94b 100644
              }
              var lines = groqLines.map { it.text }
              if (!translate && deeplKey.isNotBlank()) {
-@@ -193,7 +292,7 @@ internal object GeneratedSubtitlesDesktop {
-             if (lines.isEmpty()) continue
-             if (cueIndex == 0) SyncLog.i("generated subtitles: first ${lines.size} lines recognised")
-             srtFile.appendText(
+@@ -190,23 +293,66 @@ internal object GeneratedSubtitlesDesktop {
+                     )
+                 }
+             }
+-            if (lines.isEmpty()) continue
+-            if (cueIndex == 0) SyncLog.i("generated subtitles: first ${lines.size} lines recognised")
+-            srtFile.appendText(
 -                buildSrt(groqLines.map { it.startSec to it.endSec }, lines, startSec, cueIndex),
-+                buildSrt(SubtitleTimingSnap.snap(groqLines.map { it.startSec to it.endSec }, samples), lines, startSec, cueIndex),
-             )
-             cueIndex += lines.size
+-            )
+-            cueIndex += lines.size
++            if (lines.isEmpty()) return WINDOW_OK
++            if (cues.isEmpty()) SyncLog.i("generated subtitles: first ${lines.size} lines recognised")
++            val spans = SubtitleTimingSnap.snap(groqLines.map { it.startSec to it.endSec }, samples)
++            spans.zip(lines).forEach { (span, line) -> cues += Cue(startSec + span.first, startSec + span.second, line.trim()) }
++            srtFile.writeText(buildSrt(cues))
              attach(handle, srtFile) // grows every window: lines show up while later windows run
-@@ -203,8 +302,16 @@ internal object GeneratedSubtitlesDesktop {
-             srtFile.delete()
-             return
++            return WINDOW_OK
++        }
++
++        // Start where the viewer is, not at 0:00. On-device recognition takes about as long as the
++        // audio itself, so a viewer halfway through the title would otherwise wait for the whole
++        // first half before seeing a single line. The earlier part is filled in afterwards.
++        val positionSec = runCatching { NativePlayerBridge.positionMs(handle) / 1000.0 }.getOrDefault(0.0)
++        var firstWindow = ((positionSec - LEAD_IN_SECONDS).coerceAtLeast(0.0) / WINDOW_SECONDS).toInt()
++            .coerceAtMost(MAX_WINDOWS - 1)
++        if (firstWindow > 0) {
++            SyncLog.i("generated subtitles: playback is at ${positionSec.toInt()}s, starting at window $firstWindow; the earlier part follows")
++        }
++        var complete = true
++        var window = firstWindow
++        while (window < MAX_WINDOWS) {
++            val result = runWindow(window, backfill = false)
++            if (result == WINDOW_FAILED && windowsWithAudio == 0 && firstWindow > 0) {
++                // the playback position did not map to readable audio: read from the start instead
++                SyncLog.w("generated subtitles: no audio at window $firstWindow, starting from the beginning")
++                firstWindow = 0
++                window = 0
++                continue
++            }
++            if (result != WINDOW_OK) break
++            window += 1
          }
--        GeneratedSubtitleSync.push(key, contentId, srtFile.readText())
-+        if (cueIndex == 0) {
-+            SyncLog.w("generated subtitles: no speech was recognised")
+         if (windowsWithAudio == 0) {
+-            SyncLog.w("generated subtitles: no audio could be read from this stream")
++            SyncLog.w("generated subtitles: audio dump failed (see the audio dump lines above)")
++            bubble("failure", "The audio could not be read from this stream")
 +            srtFile.delete()
++            return
++        }
++        for (earlier in 0 until firstWindow) {
++            if (runWindow(earlier, backfill = true) == WINDOW_FAILED) complete = false
++        }
++        if (cues.isEmpty()) {
++            SyncLog.w("generated subtitles: no speech was recognised")
+             srtFile.delete()
 +            bubble("failure", "No speech was recognised in this stream")
 +            return
 +        }
++        if (!complete) {
++            SyncLog.w("generated subtitles: finished with gaps ($windowsWithAudio windows), not saved as the final copy")
++            bubble("success", "Subtitles ready, some parts missing • ${cues.size} lines")
+             return
+         }
+-        GeneratedSubtitleSync.push(key, contentId, srtFile.readText())
 +        srtFile.copyTo(finalFile, overwrite = true)
 +        GeneratedSubtitleSync.push(key, contentId, finalFile.readText())
          SyncLog.i("generated subtitles: finished ($windowsWithAudio windows)")
-+        bubble("success", "Subtitles ready • $cueIndex lines")
++        bubble("success", "Subtitles ready • ${cues.size} lines")
      }
  
++    private class Cue(val start: Double, val end: Double, val text: String)
++
      // The player can be closed mid-generation; attaching to a disposed mpv handle is a native
-@@ -270,6 +377,13 @@ internal object GeneratedSubtitlesDesktop {
+     // crash (no lifetime check on the native side), so the controller invalidates the handle
+     // under this gate before its teardown thread starts, and attach refuses anything stale.
+@@ -254,22 +400,22 @@ internal object GeneratedSubtitlesDesktop {
+         return -1
+     }
+ 
+-    /** SRT blocks for one window; [lines] pairs are seconds relative to the window start. */
+-    private fun buildSrt(
+-        spans: List<Pair<Double, Double>>,
+-        lines: List<String>,
+-        offsetSec: Double,
+-        firstIndex: Int,
+-    ): String = buildString {
+-        spans.zip(lines).forEachIndexed { index, (span, line) ->
+-            val (start, end) = span
+-            val number = firstIndex + index + 1
+-            append(number).append('\n')
+-            append(formatSrtTime(offsetSec + start)).append(" --> ").append(formatSrtTime(offsetSec + end)).append('\n')
+-            append(line.trim()).append("\n\n")
++    /** The whole SRT, sorted by start time: windows are not recognised in playback order. */
++    private fun buildSrt(cues: List<Cue>): String = buildString {
++        cues.sortedBy { it.start }.forEachIndexed { index, cue ->
++            append(index + 1).append('\n')
++            append(formatSrtTime(cue.start)).append(" --> ").append(formatSrtTime(cue.end)).append('\n')
++            append(cue.text).append("\n\n")
          }
      }
  
@@ -448,7 +543,7 @@ index 0afd949e..3ab8a94b 100644
      private fun formatSrtTime(seconds: Double): String {
          val total = (seconds.coerceAtLeast(0.0) * 1000).toLong()
          val h = total / 3_600_000
-@@ -279,8 +393,8 @@ internal object GeneratedSubtitlesDesktop {
+@@ -279,8 +425,8 @@ internal object GeneratedSubtitlesDesktop {
          return "%02d:%02d:%02d,%03d".format(h, m, s, ms)
      }
  
