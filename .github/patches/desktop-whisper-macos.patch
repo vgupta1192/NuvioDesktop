@@ -134,8 +134,29 @@ index d3f4225c..d8b891a3 100644
      if (models.isNotEmpty()) {
          SettingsGroupDivider(isTablet = isTablet)
          SettingsNavigationRow(
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
+index c81dcf1d..a6f9e7e3 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
+@@ -159,6 +159,8 @@ internal class AutoSyncNativePlayerController(
+ 
+     override fun setAutoSyncBubbleListener(listener: ((kind: String, message: String) -> Unit)?) {
+         bubbleListener = listener
++        // Generated subtitles report through the same bubble (always on, whatever the AutoSync toggle says).
++        com.nuvio.app.features.player.generated.GeneratedSubtitlesDesktop.bubbleSink = listener
+     }
+ 
+     override fun setSubtitleUriWithAutoSync(url: String) {
+@@ -227,6 +229,7 @@ internal class AutoSyncNativePlayerController(
+         appliedListener = null
+         messageListener = null
+         bubbleListener = null
++        com.nuvio.app.features.player.generated.GeneratedSubtitlesDesktop.bubbleSink = null
+     }
+ 
+     private fun cancelAutoSync() {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-index 0afd949e..ad8aaf25 100644
+index 0afd949e..3ab8a94b 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -1,6 +1,7 @@
@@ -146,7 +167,14 @@ index 0afd949e..ad8aaf25 100644
  import com.nuvio.app.features.player.GeneratedSubtitles
  import com.nuvio.app.features.player.GeneratedSubtitleSync
  import com.nuvio.app.features.player.audiosync.SyncLog
-@@ -16,9 +17,10 @@ import java.io.File
+@@ -10,15 +11,17 @@ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.SupervisorJob
+ import kotlinx.coroutines.cancelChildren
++import kotlinx.coroutines.isActive
+ import kotlinx.coroutines.launch
+ import kotlinx.coroutines.withContext
+ import java.io.File
  import java.security.MessageDigest
  
  /**
@@ -160,7 +188,7 @@ index 0afd949e..ad8aaf25 100644
   * window, so lines appear while later windows are still being recognised. The finished SRT is
   * cached under the content key and pushed to the user's account (shared with mobile).
   */
-@@ -41,6 +43,17 @@ internal object GeneratedSubtitlesDesktop {
+@@ -41,6 +44,17 @@ internal object GeneratedSubtitlesDesktop {
                  save = { key, value -> store.putString(key, value) },
              )
              GeneratedSubtitles.supported = true
@@ -178,15 +206,33 @@ index 0afd949e..ad8aaf25 100644
              initialized = true
          }
      }
-@@ -52,6 +65,7 @@ internal object GeneratedSubtitlesDesktop {
+@@ -52,11 +66,25 @@ internal object GeneratedSubtitlesDesktop {
  
      /** Called when playback moves to a real subtitle/title: the background dump loses its purpose. */
      fun stopGeneration() {
++        generation += 1
 +        WhisperLocal.cancelCurrent()
          job?.cancel()
          job = null
++        if (running) bubble("dismiss", "")
          running = false
-@@ -70,7 +84,10 @@ internal object GeneratedSubtitlesDesktop {
+     }
+ 
++    /** Where the player draws status bubbles (the AutoSync bubble); set by the desktop engine wrapper. */
++    @Volatile var bubbleSink: ((kind: String, message: String) -> Unit)? = null
++
++    /** Bumped on every start and stop; a finished job only clears the shared state when it is still current. */
++    @Volatile private var generation = 0L
++
++    /** "working" stays until the result; "success" and "failure" fade out. [text] is "headline" or "headline • detail". */
++    private fun bubble(kind: String, text: String) {
++        runCatching { bubbleSink?.invoke(kind, if (kind == "dismiss") "" else "Generated subtitles • $text") }
++    }
++
+     /**
+      * Returns true when [url] is a generated-subtitle entry and generation started (or the
+      * cached file attached). The caller then skips attaching the pseudo URL to the player.
+@@ -70,8 +98,12 @@ internal object GeneratedSubtitlesDesktop {
          ensureInitialized()
          if (!GeneratedSubtitles.isGenerated(url)) return false
          val online = url == GeneratedSubtitles.ONLINE_URL
@@ -196,9 +242,11 @@ index 0afd949e..ad8aaf25 100644
 +        val local = !online && WhisperLocal.available
 +        if (!local && GeneratedSubtitles.groqKey.value.isBlank()) {
              SyncLog.w("generated subtitles: pick again after setting the Groq key in Settings")
++            bubble("failure", "Groq key missing • add it in Settings, then pick the subtitle again")
              return true
          }
-@@ -81,14 +98,20 @@ internal object GeneratedSubtitlesDesktop {
+         if (running) {
+@@ -81,21 +113,36 @@ internal object GeneratedSubtitlesDesktop {
          val contentId = GeneratedSubtitles.contentId
          val spoken = GeneratedSubtitles.spokenLanguage.value
          val deeplKey = GeneratedSubtitles.deeplKey.value
@@ -210,11 +258,14 @@ index 0afd949e..ad8aaf25 100644
 +            else -> "groq"
 +        }
 +        val key = cacheKey(contentId, spoken, engine)
++        val mine = ++generation
++        WhisperLocal.cancelCurrent()
          job?.cancel()
          synchronized(attachGate) { attachHandle = handle }
          running = true
 -        SyncLog.i("generated subtitles: started (${if (online) "online" else "on device"}, language=$spoken)")
 +        SyncLog.i("generated subtitles: started ($engine, language=$spoken)")
++        bubble("working", if (local) "Starting · on this device (${variant.label})" else "Starting · online (Groq Whisper large-v3)")
          job = scope.launch {
              try {
 -                runGeneration(handle, streamUrl.orEmpty(), headers, contentId, spoken, online, deeplKey, key)
@@ -222,7 +273,22 @@ index 0afd949e..ad8aaf25 100644
              } catch (failure: kotlinx.coroutines.CancellationException) {
                  throw failure
              } catch (error: Throwable) {
-@@ -107,7 +130,7 @@ internal object GeneratedSubtitlesDesktop {
+                 SyncLog.w("generated subtitles: failed: ${error.message}")
++                // a stopped or replaced run reports nothing; its error is only the cancelled native call
++                if (isActive && generation == mine) bubble("failure", "Failed • ${error.message ?: error.javaClass.simpleName}")
+             } finally {
+-                synchronized(attachGate) { attachHandle = 0 }
+-                running = false
++                // An old, cancelled run can end long after a newer one started (a native call
++                // cannot be interrupted); it must not clear the newer run's handle.
++                if (generation == mine) {
++                    synchronized(attachGate) { attachHandle = 0 }
++                    running = false
++                }
+             }
+         }
+         return true
+@@ -107,42 +154,78 @@ internal object GeneratedSubtitlesDesktop {
          headers: Map<String, String>,
          contentId: String?,
          spoken: String,
@@ -231,7 +297,41 @@ index 0afd949e..ad8aaf25 100644
          deeplKey: String,
          key: String,
      ) {
-@@ -137,6 +160,24 @@ internal object GeneratedSubtitlesDesktop {
+         val cacheDir = File(System.getProperty("java.io.tmpdir"), "nuvio-gensubs").apply { mkdirs() }
+-        val srtFile = File(cacheDir, "$key.srt")
+-        if (!srtFile.exists() || srtFile.length() < 64L) {
++        // Lines are written to a working file and moved to the final name only when the whole title
++        // is done, so a stopped run is never mistaken for a finished subtitle.
++        val finalFile = File(cacheDir, "$key.srt")
++        val srtFile = File(cacheDir, "$key.part.srt")
++        if (!finalFile.exists() || finalFile.length() < 64L) {
+             // Account copy first (another device may have generated this title already).
+             GeneratedSubtitleSync.pull(key)?.let { saved ->
+-                srtFile.writeText(saved)
++                finalFile.writeText(saved)
+                 SyncLog.i("generated subtitles: restored from the account")
+             }
+         }
+-        if (srtFile.exists() && srtFile.length() > 64L) {
+-            attach(handle, srtFile)
++        if (finalFile.exists() && finalFile.length() > 64L) {
++            attach(handle, finalFile)
++            bubble("success", "Subtitles ready • loaded from the saved copy")
+             return
+         }
+         if (streamUrl.isBlank()) {
+             SyncLog.w("generated subtitles: no stream URL to read audio from")
++            bubble("failure", "No stream address to read the audio from")
+             return
+         }
+         if (com.nuvio.app.features.autosync.AutoSyncLiveSources.isLive(streamUrl)) {
+             SyncLog.w("generated subtitles: skipped, live channels have no stable audio timeline")
++            bubble("failure", "Not possible for live channels")
+             return
+         }
+         if (com.nuvio.app.features.streams.YouTubeStreamResolver.isYouTubeMedia(streamUrl)) {
+             SyncLog.w("generated subtitles: skipped, a second reader would stall the YouTube stream")
++            bubble("failure", "Not possible for YouTube streams")
              return
          }
  
@@ -239,8 +339,17 @@ index 0afd949e..ad8aaf25 100644
 +        val modelFile = localVariant?.let { variant ->
 +            withContext(Dispatchers.IO) {
 +                runCatching {
++                    var lastShown = -10
 +                    WhisperModels.ensure(variant) { done, total ->
 +                        val percent = if (total > 0) (done * 100 / total).toInt() else -1
++                        if (percent < 0 || percent - lastShown >= 2) {
++                            lastShown = percent
++                            bubble(
++                                "working",
++                                "Downloading ${variant.label} (first use only) · " +
++                                    (if (percent >= 0) "$percent % of ${WhisperModels.formatSize(total)}" else WhisperModels.formatSize(done)),
++                            )
++                        }
 +                        GeneratedSubtitles.publishModels(
 +                            "Downloading ${variant.label}: " +
 +                                (if (percent >= 0) "$percent %" else WhisperModels.formatSize(done)),
@@ -248,6 +357,7 @@ index 0afd949e..ad8aaf25 100644
 +                    }
 +                }.onFailure { error ->
 +                    SyncLog.w("generated subtitles: ${variant.label} is not available: ${error.message}")
++                    bubble("failure", "Model download failed • ${error.message}")
 +                }.getOrNull()
 +            }.also { GeneratedSubtitles.publishModels(WhisperModels.summary()) }
 +        }
@@ -256,9 +366,32 @@ index 0afd949e..ad8aaf25 100644
          srtFile.delete()
          var cueIndex = 0
          var windowsWithAudio = 0
-@@ -177,8 +218,16 @@ internal object GeneratedSubtitlesDesktop {
+         for (window in 0 until MAX_WINDOWS) {
+             if (handle == 0L) break // player closed; stop dumping
+             val startSec = window * WINDOW_SECONDS
++            bubble("working", "Reading the audio · ${formatClock(startSec)} to ${formatClock(startSec + WINDOW_SECONDS)}" + lineCount(cueIndex))
+             val wavFile = File(cacheDir, "$key-$window.wav")
+             val ok = withContext(Dispatchers.IO) {
+                 runCatching {
+@@ -164,6 +247,7 @@ internal object GeneratedSubtitlesDesktop {
+                 wavFile.delete()
+                 if (windowsWithAudio == 0) {
+                     SyncLog.w("generated subtitles: audio dump failed at ${startSec.toInt()}s (see the audio dump lines above)")
++                    bubble("failure", "The audio could not be read from this stream")
+                 }
+                 break // end of audio
+             }
+@@ -176,9 +260,24 @@ internal object GeneratedSubtitlesDesktop {
+             }
  
              val translate = spoken == GeneratedSubtitles.AUTO || spoken == "en"
++            bubble(
++                "working",
++                (if (modelFile != null) "Recognising speech on this device · " else "Recognising speech online · ") +
++                    formatClock(startSec) + " to " + formatClock(startSec + WINDOW_SECONDS) +
++                    (if (modelFile != null && windowsWithAudio == 1) " (the first window also loads the model)" else "") +
++                    lineCount(cueIndex),
++            )
              val key0 = GeneratedSubtitles.groqKey.value
 +            val spokenHint = spoken.takeUnless { it == GeneratedSubtitles.AUTO }.orEmpty()
              val groqLines = withContext(Dispatchers.IO) {
@@ -274,7 +407,7 @@ index 0afd949e..ad8aaf25 100644
              }
              var lines = groqLines.map { it.text }
              if (!translate && deeplKey.isNotBlank()) {
-@@ -193,7 +242,7 @@ internal object GeneratedSubtitlesDesktop {
+@@ -193,7 +292,7 @@ internal object GeneratedSubtitlesDesktop {
              if (lines.isEmpty()) continue
              if (cueIndex == 0) SyncLog.i("generated subtitles: first ${lines.size} lines recognised")
              srtFile.appendText(
@@ -283,14 +416,46 @@ index 0afd949e..ad8aaf25 100644
              )
              cueIndex += lines.size
              attach(handle, srtFile) // grows every window: lines show up while later windows run
-@@ -279,8 +328,8 @@ internal object GeneratedSubtitlesDesktop {
+@@ -203,8 +302,16 @@ internal object GeneratedSubtitlesDesktop {
+             srtFile.delete()
+             return
+         }
+-        GeneratedSubtitleSync.push(key, contentId, srtFile.readText())
++        if (cueIndex == 0) {
++            SyncLog.w("generated subtitles: no speech was recognised")
++            srtFile.delete()
++            bubble("failure", "No speech was recognised in this stream")
++            return
++        }
++        srtFile.copyTo(finalFile, overwrite = true)
++        GeneratedSubtitleSync.push(key, contentId, finalFile.readText())
+         SyncLog.i("generated subtitles: finished ($windowsWithAudio windows)")
++        bubble("success", "Subtitles ready • $cueIndex lines")
+     }
+ 
+     // The player can be closed mid-generation; attaching to a disposed mpv handle is a native
+@@ -270,6 +377,13 @@ internal object GeneratedSubtitlesDesktop {
+         }
+     }
+ 
++    private fun formatClock(seconds: Double): String {
++        val total = seconds.toInt()
++        return "%d:%02d".format(total / 60, total % 60)
++    }
++
++    private fun lineCount(cues: Int): String = if (cues > 0) " · $cues lines so far" else ""
++
+     private fun formatSrtTime(seconds: Double): String {
+         val total = (seconds.coerceAtLeast(0.0) * 1000).toLong()
+         val h = total / 3_600_000
+@@ -279,8 +393,8 @@ internal object GeneratedSubtitlesDesktop {
          return "%02d:%02d:%02d,%03d".format(h, m, s, ms)
      }
  
 -    private fun cacheKey(contentId: String?, spoken: String, online: Boolean): String {
 -        val raw = "${contentId.orEmpty()}|$spoken|${if (online) "groq-online" else "groq"}"
 +    private fun cacheKey(contentId: String?, spoken: String, engine: String): String {
-+        val raw = "${contentId.orEmpty()}|$spoken|$engine"
++        val raw = "${contentId.orEmpty()}|$spoken|$engine|v2"
          val digest = MessageDigest.getInstance("SHA-1").digest(raw.encodeToByteArray())
          return digest.joinToString("") { "%02x".format(it) }
      }
@@ -877,3 +1042,24 @@ index 00000000..f7859484
 +}
 +
 +}  // extern "C"
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
+index 25ca5a50..cda2d40f 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.js
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
+@@ -483,6 +483,7 @@ const playerToastDurationMs = 1400;
+ const autoSyncBubble = document.getElementById("autoSyncBubble");
+ const autoSyncBubbleHeadline = document.getElementById("autoSyncBubbleHeadline");
+ const autoSyncBubbleDetail = document.getElementById("autoSyncBubbleDetail");
++const autoSyncBubbleLabel = autoSyncBubble ? autoSyncBubble.querySelector(".autosync-label") : null;
+ const autoSyncBubbleDurations = { working: 600000, success: 9000, failure: 9000 };
+ let autoSyncBubbleTimer = 0;
+ 
+@@ -507,6 +508,8 @@ const showAutoSyncBubble = (kind, message) => {
+   const statsBlock = newlineAt >= 0 ? raw.slice(newlineAt + 1).trim() : "";
+   const parts = headPart.split(" • ").map(part => part.trim()).filter(Boolean);
+   const body = parts.length > 1 ? parts.slice(1) : parts;
++  // Other features (generated subtitles) reuse the bubble under their own name.
++  if (autoSyncBubbleLabel) autoSyncBubbleLabel.textContent = parts.length > 1 ? parts[0] : "Auto Sync";
+   const capitalized = text => text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
+   const headline = kind === "working" ? body[body.length - 1] || "" : body[0] || "";
+   const baseDetail = kind === "working" ? "" : body.slice(1).join(" · ");
