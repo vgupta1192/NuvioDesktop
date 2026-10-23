@@ -426,7 +426,7 @@ index 654b0f31..12c2e0ac 100644
          fun sourceCode(language: String?): String? = when (val code = language?.lowercase()) {
              null, "", "auto" -> null
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-index 0afd949e..f114e0db 100644
+index 0afd949e..e6dae6fd 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -1,7 +1,9 @@
@@ -624,7 +624,7 @@ index 0afd949e..f114e0db 100644
              }
          }
          return true
-@@ -107,43 +209,98 @@ internal object GeneratedSubtitlesDesktop {
+@@ -107,43 +209,106 @@ internal object GeneratedSubtitlesDesktop {
          headers: Map<String, String>,
          contentId: String?,
          spoken: String,
@@ -650,8 +650,16 @@ index 0afd949e..f114e0db 100644
 +        bubble("working", "Looking for saved subtitles · this device and your account")
 +        val durationMs = waitForDuration(handle)
 +        val language = resolveLanguage(handle, spoken)
++        // The audio track's language tag differs between devices (one says "und" and keeps "auto",
++        // another reads "eng" as "en"), so every copy is also saved and looked up under "auto".
++        val withAuto = durationMs > 0 && language != GeneratedSubtitles.AUTO
 +        val keys = if (durationMs > 0) cacheKeys(contentId, streamUrl, durationMs, online, language) else emptyList()
-+        val otherKeys = if (durationMs > 0) cacheKeys(contentId, streamUrl, durationMs, !online, language) else emptyList()
++        val otherKeys = if (durationMs > 0) {
++            cacheKeys(contentId, streamUrl, durationMs, !online, language) +
++                (if (withAuto) cacheKeys(contentId, streamUrl, durationMs, online, GeneratedSubtitles.AUTO) +
++                    cacheKeys(contentId, streamUrl, durationMs, !online, GeneratedSubtitles.AUTO) else emptyList())
++        } else emptyList()
++        val pushKeys = keys.take(1) + (if (withAuto) cacheKeys(contentId, streamUrl, durationMs, online, GeneratedSubtitles.AUTO).take(1) else emptyList())
 +        val key = keys.firstOrNull()
 +        val cues = ArrayList<Cue>()
 +        val covered = ArrayList<LongArray>()
@@ -738,7 +746,7 @@ index 0afd949e..f114e0db 100644
              val ok = withContext(Dispatchers.IO) {
                  runCatching {
                      // Share the native-dump gate with the speech engine: one dump at a time. The
-@@ -162,23 +319,40 @@ internal object GeneratedSubtitlesDesktop {
+@@ -162,23 +327,40 @@ internal object GeneratedSubtitlesDesktop {
              }
              if (!ok || !wavFile.exists() || wavFile.length() <= 44L) {
                  wavFile.delete()
@@ -785,7 +793,7 @@ index 0afd949e..f114e0db 100644
              }
              var lines = groqLines.map { it.text }
              if (!translate && deeplKey.isNotBlank()) {
-@@ -190,23 +364,78 @@ internal object GeneratedSubtitlesDesktop {
+@@ -190,23 +372,78 @@ internal object GeneratedSubtitlesDesktop {
                      )
                  }
              }
@@ -808,7 +816,7 @@ index 0afd949e..f114e0db 100644
 +            }
 +            if (key != null) {
 +                sincePush += 1
-+                saveSaved(listOf(key), contentId, cues, covered, push = sincePush >= PUSH_EVERY_WINDOWS)
++                saveSaved(pushKeys, contentId, cues, covered, push = sincePush >= PUSH_EVERY_WINDOWS)
 +                if (sincePush >= PUSH_EVERY_WINDOWS) sincePush = 0
 +            }
 +            return WINDOW_OK
@@ -853,7 +861,7 @@ index 0afd949e..f114e0db 100644
 +            if (runWindow(earlier, backfill = true) == WINDOW_FAILED) complete = false
 +        }
 +        if (durationMs > 0) complete = isFullyCovered(covered, durationMs)
-+        val pushed = key != null && saveSaved(keys, contentId, cues, covered, push = true)
++        val pushed = key != null && saveSaved(pushKeys, contentId, cues, covered, push = true)
 +        if (cues.isEmpty()) {
 +            SyncLog.w("generated subtitles: no speech was recognised")
 +            bubble("failure", "No speech was recognised in this stream")
@@ -874,7 +882,7 @@ index 0afd949e..f114e0db 100644
      // The player can be closed mid-generation; attaching to a disposed mpv handle is a native
      // crash (no lifetime check on the native side), so the controller invalidates the handle
      // under this gate before its teardown thread starts, and attach refuses anything stale.
-@@ -254,22 +483,22 @@ internal object GeneratedSubtitlesDesktop {
+@@ -254,22 +491,22 @@ internal object GeneratedSubtitlesDesktop {
          return -1
      }
  
@@ -910,7 +918,7 @@ index 0afd949e..f114e0db 100644
      private fun formatSrtTime(seconds: Double): String {
          val total = (seconds.coerceAtLeast(0.0) * 1000).toLong()
          val h = total / 3_600_000
-@@ -279,9 +508,169 @@ internal object GeneratedSubtitlesDesktop {
+@@ -279,9 +516,170 @@ internal object GeneratedSubtitlesDesktop {
          return "%02d:%02d:%02d,%03d".format(h, m, s, ms)
      }
  
@@ -1042,7 +1050,8 @@ index 0afd949e..f114e0db 100644
 +        }.onFailure { SyncLog.w("generated subtitles: couldn't save lines: ${it.message}") }
 +        if (!push) return false
 +        val pushed = keys.map { k -> withTimeoutOrNull(SYNC_TIMEOUT_MS) { GeneratedSubtitleSync.push(k, contentId, payload) } == true }.all { it }
-+        if (!pushed) SyncLog.d("generated subtitles: not saved to the Nuvio account (signed out or offline)")
++        if (pushed) SyncLog.i("generated subtitles: saved to your account, ${cues.size} lines, ${coveredSeconds(covered)}s covered")
++        else SyncLog.w("generated subtitles: not saved to the Nuvio account (signed out, offline or refused)")
 +        return pushed
 +    }
 +
