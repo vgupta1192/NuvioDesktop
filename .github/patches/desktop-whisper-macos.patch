@@ -156,7 +156,7 @@ index c81dcf1d..a6f9e7e3 100644
  
      private fun cancelAutoSync() {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-index 0afd949e..ac08ef9d 100644
+index 0afd949e..026cedf7 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -1,6 +1,7 @@
@@ -319,7 +319,7 @@ index 0afd949e..ac08ef9d 100644
              }
          }
          return true
-@@ -107,43 +176,94 @@ internal object GeneratedSubtitlesDesktop {
+@@ -107,43 +176,98 @@ internal object GeneratedSubtitlesDesktop {
          headers: Map<String, String>,
          contentId: String?,
          spoken: String,
@@ -342,6 +342,7 @@ index 0afd949e..ac08ef9d 100644
 +        // The saved lines of this title use the same key and JSON as Nuvio Mobile and Nuvio TV, so
 +        // lines made on any of them (or here earlier) are reused, with their timing, and only the
 +        // part that is still missing is generated.
++        bubble("working", "Looking for saved subtitles · this device and your account")
 +        val durationMs = waitForDuration(handle)
 +        val language = resolveLanguage(handle, spoken)
 +        val keys = if (durationMs > 0) cacheKeys(contentId, streamUrl, durationMs, online, language) else emptyList()
@@ -360,6 +361,9 @@ index 0afd949e..ac08ef9d 100644
 +            SyncLog.i("generated subtitles: ${cues.size} saved lines reused, ${coveredSeconds(covered)}s already done")
 +        }
 +        if (durationMs > 0 && isFullyCovered(covered, durationMs)) {
++            SyncLog.i("generated subtitles: loaded from the saved copy, ${cues.size} lines, nothing to generate")
++            // also keep it under this mode's own key so the next load finds it directly
++            saveSaved(keys, contentId, cues, covered, push = false)
 +            bubble("success", "Subtitles ready • loaded from the saved copy (${cues.size} lines)")
              return
          }
@@ -429,7 +433,7 @@ index 0afd949e..ac08ef9d 100644
              val ok = withContext(Dispatchers.IO) {
                  runCatching {
                      // Share the native-dump gate with the speech engine: one dump at a time. The
-@@ -162,23 +282,40 @@ internal object GeneratedSubtitlesDesktop {
+@@ -162,23 +286,40 @@ internal object GeneratedSubtitlesDesktop {
              }
              if (!ok || !wavFile.exists() || wavFile.length() <= 44L) {
                  wavFile.delete()
@@ -476,7 +480,7 @@ index 0afd949e..ac08ef9d 100644
              }
              var lines = groqLines.map { it.text }
              if (!translate && deeplKey.isNotBlank()) {
-@@ -190,23 +327,78 @@ internal object GeneratedSubtitlesDesktop {
+@@ -190,23 +331,78 @@ internal object GeneratedSubtitlesDesktop {
                      )
                  }
              }
@@ -565,7 +569,7 @@ index 0afd949e..ac08ef9d 100644
      // The player can be closed mid-generation; attaching to a disposed mpv handle is a native
      // crash (no lifetime check on the native side), so the controller invalidates the handle
      // under this gate before its teardown thread starts, and attach refuses anything stale.
-@@ -254,22 +446,22 @@ internal object GeneratedSubtitlesDesktop {
+@@ -254,22 +450,22 @@ internal object GeneratedSubtitlesDesktop {
          return -1
      }
  
@@ -601,7 +605,7 @@ index 0afd949e..ac08ef9d 100644
      private fun formatSrtTime(seconds: Double): String {
          val total = (seconds.coerceAtLeast(0.0) * 1000).toLong()
          val h = total / 3_600_000
-@@ -279,9 +471,146 @@ internal object GeneratedSubtitlesDesktop {
+@@ -279,9 +475,169 @@ internal object GeneratedSubtitlesDesktop {
          return "%02d:%02d:%02d,%03d".format(h, m, s, ms)
      }
  
@@ -647,38 +651,61 @@ index 0afd949e..ac08ef9d 100644
 +
 +    private fun savedFile(key: String): File = File(File(DesktopStorage.rootDir.toFile(), "generated-subtitles"), "$key.json")
 +
++    private class SavedCopy(val cues: List<Cue>, val covered: List<LongArray>)
++
++    private fun parseSaved(payload: String): SavedCopy? = runCatching {
++        val json = Json.parseToJsonElement(payload).jsonObject
++        val cues = json.getValue("cues").jsonArray.map { line ->
++            val fields = line.jsonArray
++            Cue(fields[0].jsonPrimitive.long / 1000.0, fields[1].jsonPrimitive.long / 1000.0, fields[2].jsonPrimitive.content)
++        }
++        val covered = ArrayList<LongArray>()
++        json.getValue("covered").jsonArray.forEach { range ->
++            addCovered(covered, range.jsonArray[0].jsonPrimitive.long, range.jsonArray[1].jsonPrimitive.long)
++        }
++        SavedCopy(cues, covered)
++    }.onFailure { SyncLog.w("generated subtitles: saved lines unreadable: ${it.message}") }.getOrNull()
++
 +    /**
-+     * Merges this device's saved copy with the account copy; with neither, the near-duration
-+     * keys and the copy made the other way (online / on device) are tried.
++     * Collects every saved copy of this title (this device and the account, this mode and the
++     * other one, the stream durations one second either side), starts from the copy that covers
++     * the most and fills only its gaps from the others. A partial copy made one way therefore
++     * never hides a complete copy made the other way.
 +     */
 +    private suspend fun loadSaved(keys: List<String>, otherKeys: List<String>, cues: MutableList<Cue>, covered: MutableList<LongArray>) {
 +        fun local(k: String): String? = savedFile(k).takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }
 +        suspend fun remote(k: String): String? = withTimeoutOrNull(SYNC_TIMEOUT_MS) { GeneratedSubtitleSync.pull(k) }
-+        val mine = local(keys.first())
-+        val account = remote(keys.first())
-+        var payloads = listOfNotNull(mine, account)
-+        if (payloads.isEmpty()) {
-+            payloads = coroutineScope {
-+                (keys.drop(1) + otherKeys).map { k -> async { local(k) ?: remote(k) } }.awaitAll()
-+            }.filterNotNull().take(1)
++        val found = coroutineScope {
++            (keys + otherKeys).map { k -> async { Pair(local(k), remote(k)) } }.awaitAll()
 +        }
-+        if (account != null) SyncLog.i("generated subtitles: lines from your Nuvio account found")
-+        payloads.forEach { payload ->
-+            runCatching {
-+                val json = Json.parseToJsonElement(payload).jsonObject
-+                val known = cues.mapTo(HashSet()) { (it.start * 1000).toLong() }
-+                json.getValue("cues").jsonArray.forEach { line ->
-+                    val fields = line.jsonArray
-+                    val startMs = fields[0].jsonPrimitive.long
-+                    if (known.add(startMs)) cues += Cue(startMs / 1000.0, fields[1].jsonPrimitive.long / 1000.0, fields[2].jsonPrimitive.content)
++        if (found.any { it.second != null }) SyncLog.i("generated subtitles: lines from your Nuvio account found")
++        val copies = found.flatMap { listOfNotNull(it.first, it.second) }
++            .mapNotNull { parseSaved(it) }
++            .sortedByDescending { coveredSeconds(it.covered) }
++        copies.forEach { copy ->
++            copy.covered.forEach { range ->
++                uncoveredParts(covered, range[0], range[1]).forEach { gap ->
++                    copy.cues.filter { (it.start * 1000).toLong() in gap[0] until gap[1] }.forEach { cues += it }
++                    addCovered(covered, gap[0], gap[1])
 +                }
-+                json.getValue("covered").jsonArray.forEach { range ->
-+                    addCovered(covered, range.jsonArray[0].jsonPrimitive.long, range.jsonArray[1].jsonPrimitive.long)
-+                }
-+            }.onFailure { SyncLog.w("generated subtitles: saved lines unreadable: ${it.message}") }
++            }
 +        }
 +        cues.sortBy { it.start }
 +    }
++
++    /** The parts of [fromMs]..[toMs] that [covered] does not reach yet. */
++    private fun uncoveredParts(covered: List<LongArray>, fromMs: Long, toMs: Long): List<LongArray> {
++        var cursor = fromMs
++        val parts = ArrayList<LongArray>()
++        for (range in covered.sortedBy { it[0] }) {
++            if (range[1] <= cursor) continue
++            if (range[0] >= toMs) break
++            if (range[0] > cursor) parts += longArrayOf(cursor, range[0])
++            cursor = maxOf(cursor, range[1])
++        }
++        if (cursor < toMs) parts += longArrayOf(cursor, toMs)
++        return parts
+     }
 +
 +    /** Writes the JSON and a plain SRT next to it on this device and, when [push] is set, to the Nuvio account. */
 +    private suspend fun saveSaved(keys: List<String>, contentId: String?, cues: List<Cue>, covered: List<LongArray>, push: Boolean): Boolean {
@@ -712,7 +739,7 @@ index 0afd949e..ac08ef9d 100644
 +        val pushed = keys.map { k -> withTimeoutOrNull(SYNC_TIMEOUT_MS) { GeneratedSubtitleSync.push(k, contentId, payload) } == true }.all { it }
 +        if (!pushed) SyncLog.d("generated subtitles: not saved to the Nuvio account (signed out or offline)")
 +        return pushed
-     }
++    }
 +
 +    /** Adds [fromMs]..[toMs] to [covered], merging ranges that touch or overlap. */
 +    private fun addCovered(covered: MutableList<LongArray>, fromMs: Long, toMs: Long) {
