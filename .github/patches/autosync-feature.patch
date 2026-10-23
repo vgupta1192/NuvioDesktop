@@ -2933,8 +2933,8 @@ index c4163af1..bc9602a4 100644
 +}
 +
 +.subtitle-option-row.selected .subtitle-autosync-chip {
-+  background: rgba(255, 255, 255, .18);
-+  color: rgba(255, 255, 255, .95);
++  background: rgba(20, 20, 24, .86);
++  color: #fff;
 +}
 +
  .subtitle-option-row.selected .subtitle-source-chip {
