@@ -777,7 +777,7 @@ new file mode 100644
 index 00000000..e666fd83
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-@@ -0,0 +1,491 @@
+@@ -0,0 +1,492 @@
 +package com.nuvio.app.features.player
 +
 +import co.touchlab.kermit.Logger
@@ -932,6 +932,7 @@ index 00000000..e666fd83
 +            ?: return false
 +        cancelAutoSync()
 +        SyncedSubtitles.restoredUrls += url
++        SyncedSubtitles.adopt(url)
 +        base.setSubtitleDelayMs(0)
 +        base.setSubtitleUri(file.absolutePath)
 +        activeSyncedKey = url
