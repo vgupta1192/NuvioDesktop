@@ -426,7 +426,7 @@ index 654b0f31..12c2e0ac 100644
          fun sourceCode(language: String?): String? = when (val code = language?.lowercase()) {
              null, "", "auto" -> null
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-index 0afd949e..32a49f57 100644
+index 0afd949e..f114e0db 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -1,7 +1,9 @@
@@ -439,7 +439,7 @@ index 0afd949e..32a49f57 100644
  import com.nuvio.app.features.player.GeneratedSubtitleSync
  import com.nuvio.app.features.player.audiosync.SyncLog
  import com.nuvio.app.features.player.desktop.NativePlayerBridge
-@@ -10,23 +12,48 @@ import kotlinx.coroutines.Dispatchers
+@@ -10,23 +12,50 @@ import kotlinx.coroutines.Dispatchers
  import kotlinx.coroutines.Job
  import kotlinx.coroutines.SupervisorJob
  import kotlinx.coroutines.cancelChildren
@@ -478,6 +478,8 @@ index 0afd949e..32a49f57 100644
   */
  internal object GeneratedSubtitlesDesktop {
      private const val WINDOW_SECONDS = 120.0
++    private const val WORKING_BUBBLE_GAP_MS = 60_000L
++    private const val WORKING_BUBBLE_HOLD_MS = 6_000L
      private const val MAX_WINDOWS = 90
 +    private const val LEAD_IN_SECONDS = 15.0
 +    private const val WINDOW_OK = 1
@@ -492,7 +494,7 @@ index 0afd949e..32a49f57 100644
  
      private val store by lazy { DesktopStorage.store("nuvio_generated_subtitles") }
      @Volatile private var initialized = false
-@@ -40,7 +67,24 @@ internal object GeneratedSubtitlesDesktop {
+@@ -40,7 +69,24 @@ internal object GeneratedSubtitlesDesktop {
                  load = { key -> store.getString(key) },
                  save = { key, value -> store.putString(key, value) },
              )
@@ -517,7 +519,7 @@ index 0afd949e..32a49f57 100644
              initialized = true
          }
      }
-@@ -52,11 +96,25 @@ internal object GeneratedSubtitlesDesktop {
+@@ -52,11 +98,49 @@ internal object GeneratedSubtitlesDesktop {
  
      /** Called when playback moves to a real subtitle/title: the background dump loses its purpose. */
      fun stopGeneration() {
@@ -536,14 +538,38 @@ index 0afd949e..32a49f57 100644
 +    @Volatile private var generation = 0L
 +
 +    /** "working" stays until the result; "success" and "failure" fade out. [text] is "headline" or "headline • detail". */
++    private var workingBubbleAtMs = 0L
++    private var workingBubbleToken = 0L
++
++    /**
++     * The "working" bubble shows when a run starts and then now and then, for a few seconds each
++     * time; results (success, failure) always show. Called from several threads, so it locks.
++     */
 +    private fun bubble(kind: String, text: String) {
++        synchronized(this) {
++            if (kind == "working") {
++                val now = System.currentTimeMillis()
++                if (workingBubbleAtMs != 0L && now - workingBubbleAtMs < WORKING_BUBBLE_GAP_MS) return
++                workingBubbleAtMs = now
++                val token = ++workingBubbleToken
++                Thread {
++                    Thread.sleep(WORKING_BUBBLE_HOLD_MS)
++                    synchronized(this) {
++                        if (token == workingBubbleToken) runCatching { bubbleSink?.invoke("dismiss", "") }
++                    }
++                }.apply { isDaemon = true; start() }
++            } else {
++                workingBubbleToken++
++                workingBubbleAtMs = 0L
++            }
++        }
 +        runCatching { bubbleSink?.invoke(kind, if (kind == "dismiss") "" else "Generated subtitles • $text") }
 +    }
 +
      /**
       * Returns true when [url] is a generated-subtitle entry and generation started (or the
       * cached file attached). The caller then skips attaching the pseudo URL to the player.
-@@ -70,8 +128,12 @@ internal object GeneratedSubtitlesDesktop {
+@@ -70,8 +154,12 @@ internal object GeneratedSubtitlesDesktop {
          ensureInitialized()
          if (!GeneratedSubtitles.isGenerated(url)) return false
          val online = url == GeneratedSubtitles.ONLINE_URL
@@ -557,7 +583,7 @@ index 0afd949e..32a49f57 100644
              return true
          }
          if (running) {
-@@ -81,21 +143,35 @@ internal object GeneratedSubtitlesDesktop {
+@@ -81,21 +169,35 @@ internal object GeneratedSubtitlesDesktop {
          val contentId = GeneratedSubtitles.contentId
          val spoken = GeneratedSubtitles.spokenLanguage.value
          val deeplKey = GeneratedSubtitles.deeplKey.value
@@ -598,7 +624,7 @@ index 0afd949e..32a49f57 100644
              }
          }
          return true
-@@ -107,43 +183,98 @@ internal object GeneratedSubtitlesDesktop {
+@@ -107,43 +209,98 @@ internal object GeneratedSubtitlesDesktop {
          headers: Map<String, String>,
          contentId: String?,
          spoken: String,
@@ -712,7 +738,7 @@ index 0afd949e..32a49f57 100644
              val ok = withContext(Dispatchers.IO) {
                  runCatching {
                      // Share the native-dump gate with the speech engine: one dump at a time. The
-@@ -162,23 +293,40 @@ internal object GeneratedSubtitlesDesktop {
+@@ -162,23 +319,40 @@ internal object GeneratedSubtitlesDesktop {
              }
              if (!ok || !wavFile.exists() || wavFile.length() <= 44L) {
                  wavFile.delete()
@@ -759,7 +785,7 @@ index 0afd949e..32a49f57 100644
              }
              var lines = groqLines.map { it.text }
              if (!translate && deeplKey.isNotBlank()) {
-@@ -190,23 +338,78 @@ internal object GeneratedSubtitlesDesktop {
+@@ -190,23 +364,78 @@ internal object GeneratedSubtitlesDesktop {
                      )
                  }
              }
@@ -848,7 +874,7 @@ index 0afd949e..32a49f57 100644
      // The player can be closed mid-generation; attaching to a disposed mpv handle is a native
      // crash (no lifetime check on the native side), so the controller invalidates the handle
      // under this gate before its teardown thread starts, and attach refuses anything stale.
-@@ -254,22 +457,22 @@ internal object GeneratedSubtitlesDesktop {
+@@ -254,22 +483,22 @@ internal object GeneratedSubtitlesDesktop {
          return -1
      }
  
@@ -884,7 +910,7 @@ index 0afd949e..32a49f57 100644
      private fun formatSrtTime(seconds: Double): String {
          val total = (seconds.coerceAtLeast(0.0) * 1000).toLong()
          val h = total / 3_600_000
-@@ -279,9 +482,169 @@ internal object GeneratedSubtitlesDesktop {
+@@ -279,9 +508,169 @@ internal object GeneratedSubtitlesDesktop {
          return "%02d:%02d:%02d,%03d".format(h, m, s, ms)
      }
  
@@ -912,7 +938,7 @@ index 0afd949e..32a49f57 100644
 +        }.getOrDefault("").lowercase().substringBefore('-').substringBefore('_')
 +        val code = THREE_LETTER_CODES[tag] ?: tag
 +        return code.takeIf { known -> GeneratedSubtitles.spokenLanguages.any { it.first == known } } ?: GeneratedSubtitles.AUTO
-+    }
+     }
 +
 +    /**
 +     * The key Nuvio Mobile and Nuvio TV compute: title/episode (or stream address), stream
@@ -926,7 +952,7 @@ index 0afd949e..32a49f57 100644
 +            val raw = "$content|${(durationMs + skew + 500L) / 1_000L}|${if (online) "online" else "device"}|$language"
 +            MessageDigest.getInstance("SHA-1").digest(raw.toByteArray()).joinToString("") { "%02x".format(it) }
 +        }
-     }
++    }
 +
 +    private fun savedFile(key: String): File = File(File(DesktopStorage.rootDir.toFile(), "generated-subtitles"), "$key.json")
 +
@@ -1086,10 +1112,10 @@ index c74c81c3..7644373a 100644
                  401, 403 -> throw Failure("Groq key rejected", permanent = true)
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt
 new file mode 100644
-index 00000000..edf6c507
+index 00000000..388802a2
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,49 @@
 +package com.nuvio.app.features.player.generated
 +
 +import com.nuvio.app.features.player.audiosync.RmsVad
@@ -1105,6 +1131,7 @@ index 00000000..edf6c507
 +    /** A line's start moves at most this far (seconds); a larger gap means VAD and line disagree. */
 +    private const val MAX_START_SHIFT = 10.0
 +    private const val MAX_END_SHIFT = 6.0
++    private const val MAX_EARLIER_SHIFT = 1.5
 +    private const val MIN_DURATION = 0.6
 +    private const val TAIL = 0.15
 +
@@ -1120,6 +1147,9 @@ index 00000000..edf6c507
 +            // First speech run that is still going on, or starts, after the line's claimed start.
 +            val first = runs.firstOrNull { it.second > rawStart && it.first < rawEnd }
 +            if (first != null && first.first > rawStart && first.first - rawStart <= MAX_START_SHIFT) {
++                start = first.first
++            } else if (first != null && first.first < rawStart && rawStart - first.first <= MAX_EARLIER_SHIFT && first.first >= floor) {
++                // Whisper started the line after the words began: show it when the speech starts.
 +                start = first.first
 +            }
 +            // Last speech run that starts before the line's claimed end.
