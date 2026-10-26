@@ -1,0 +1,306 @@
+diff --git a/composeApp/src/commonMain/composeResources/values/strings_livetv_netflix.xml b/composeApp/src/commonMain/composeResources/values/strings_livetv_netflix.xml
+index 66484ce0..01ab5a9a 100644
+--- a/composeApp/src/commonMain/composeResources/values/strings_livetv_netflix.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings_livetv_netflix.xml
+@@ -2,6 +2,7 @@
+ <resources>
+     <string name="settings_livetv_netflix_section">Appearance</string>
+     <string name="settings_livetv_netflix_style">Netflix style Live TV</string>
+-    <string name="settings_livetv_netflix_style_description">Show channels as landscape cards with the current programme and a progress bar. Turn off for the original list.</string>
++    <string name="settings_livetv_netflix_style_description">Show channels as landscape cards with the current programme and a progress bar, and play the focused channel muted in the details panel. Turn off for the original list.</string>
+     <string name="livetv_netflix_style_chip">Netflix style</string>
++    <string name="livetv_preview_live_badge">LIVE</string>
+ </resources>
+diff --git a/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml b/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml
+index 629f8dae..2517411f 100644
+--- a/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml
+@@ -2,5 +2,5 @@
+ <resources>
+     <string name="settings_netflix_style_section">Netflix style</string>
+     <string name="settings_netflix_style">Netflix style</string>
+-    <string name="settings_netflix_style_description">Hover preview after a short delay with a muted trailer, and landscape Continue Watching cards with a progress bar. Turn off to restore your previous settings.</string>
++    <string name="settings_netflix_style_description">Hover preview after a short delay with a muted trailer, a muted trailer in the details hero (where supported), landscape Continue Watching cards with a progress bar, and Live TV cards with a muted channel preview. Turn off to restore your previous settings.</string>
+ </resources>
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
+index 7138794f..3d8ae60c 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
+@@ -1,5 +1,8 @@
+ package com.nuvio.app.core.ui
+ 
++import com.nuvio.app.core.build.AppFeaturePolicy
++import com.nuvio.app.features.details.HeroTrailerAudioState
++import com.nuvio.app.features.details.MetaScreenSettingsRepository
+ import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
+ import com.nuvio.app.features.watchprogress.ContinueWatchingSectionStyle
+ import kotlinx.coroutines.flow.MutableStateFlow
+@@ -57,6 +60,8 @@ private data class StoredPosterCardStylePreferences(
+     val netflixPrevCwStyle: ContinueWatchingSectionStyle = ContinueWatchingSectionStyle.Card,
+     val liveTvNetflixStyleEnabled: Boolean = false,
+     val liveTvNetflixPrevEnabled: Boolean = false,
++    val netflixPrevHeroTrailer: Boolean = false,
++    val netflixPrevHeroMuted: Boolean = true,
+     val alwaysShowLandscapeClearlogo: Boolean = false,
+     val animatedArtworkMode: String = AnimatedArtworkMode.Always.name,
+ )
+@@ -80,6 +85,8 @@ data class PosterCardStyleUiState(
+     val netflixPrevCwStyle: ContinueWatchingSectionStyle = ContinueWatchingSectionStyle.Card,
+     val liveTvNetflixStyleEnabled: Boolean = false,
+     val liveTvNetflixPrevEnabled: Boolean = false,
++    val netflixPrevHeroTrailer: Boolean = false,
++    val netflixPrevHeroMuted: Boolean = true,
+     val alwaysShowLandscapeClearlogo: Boolean = false,
+     val animatedArtworkMode: AnimatedArtworkMode = AnimatedArtworkMode.Always,
+ )
+@@ -205,6 +212,8 @@ object PosterCardStyleRepository {
+         ContinueWatchingPreferencesRepository.ensureLoaded()
+         val current = _uiState.value
+         if (current.netflixStyleEnabled == enabled) return
++        MetaScreenSettingsRepository.ensureLoaded()
++        val heroTrailerNow = MetaScreenSettingsRepository.uiState.value.heroTrailerPlayback
+         if (enabled) {
+             _uiState.value = current.copy(
+                 netflixStyleEnabled = true,
+@@ -219,8 +228,14 @@ object PosterCardStyleRepository {
+                 hoverPreviewTrailerSoundEnabled = false,
+                 liveTvNetflixPrevEnabled = current.liveTvNetflixStyleEnabled,
+                 liveTvNetflixStyleEnabled = true,
++                netflixPrevHeroTrailer = heroTrailerNow,
++                netflixPrevHeroMuted = HeroTrailerAudioState.muted.value,
+             )
+             ContinueWatchingPreferencesRepository.setStyle(ContinueWatchingSectionStyle.Card)
++            if (AppFeaturePolicy.heroTrailerPlaybackSupported) {
++                MetaScreenSettingsRepository.setHeroTrailerPlayback(true)
++                HeroTrailerAudioState.setMuted(true)
++            }
+         } else {
+             _uiState.value = current.copy(
+                 netflixStyleEnabled = false,
+@@ -231,6 +246,10 @@ object PosterCardStyleRepository {
+                 liveTvNetflixStyleEnabled = current.liveTvNetflixPrevEnabled,
+             )
+             ContinueWatchingPreferencesRepository.setStyle(current.netflixPrevCwStyle)
++            if (AppFeaturePolicy.heroTrailerPlaybackSupported) {
++                MetaScreenSettingsRepository.setHeroTrailerPlayback(current.netflixPrevHeroTrailer)
++                HeroTrailerAudioState.setMuted(current.netflixPrevHeroMuted)
++            }
+         }
+         persist()
+     }
+@@ -259,6 +278,8 @@ object PosterCardStyleRepository {
+             netflixPrevCwStyle = _uiState.value.netflixPrevCwStyle,
+             liveTvNetflixStyleEnabled = _uiState.value.liveTvNetflixStyleEnabled,
+             liveTvNetflixPrevEnabled = _uiState.value.liveTvNetflixPrevEnabled,
++            netflixPrevHeroTrailer = _uiState.value.netflixPrevHeroTrailer,
++            netflixPrevHeroMuted = _uiState.value.netflixPrevHeroMuted,
+             animatedArtworkMode = _uiState.value.animatedArtworkMode,
+         )
+         if (_uiState.value == defaults) return
+@@ -306,6 +327,8 @@ object PosterCardStyleRepository {
+                 netflixPrevCwStyle = stored.netflixPrevCwStyle,
+                 liveTvNetflixStyleEnabled = stored.liveTvNetflixStyleEnabled,
+                 liveTvNetflixPrevEnabled = stored.liveTvNetflixPrevEnabled,
++                netflixPrevHeroTrailer = stored.netflixPrevHeroTrailer,
++                netflixPrevHeroMuted = stored.netflixPrevHeroMuted,
+                 alwaysShowLandscapeClearlogo = stored.alwaysShowLandscapeClearlogo,
+                 animatedArtworkMode = AnimatedArtworkMode.entries
+                     .firstOrNull { it.name == stored.animatedArtworkMode }
+@@ -338,6 +361,10 @@ object PosterCardStyleRepository {
+                     netflixPrevCwStyle = _uiState.value.netflixPrevCwStyle,
+                     liveTvNetflixStyleEnabled = _uiState.value.liveTvNetflixStyleEnabled,
+                     liveTvNetflixPrevEnabled = _uiState.value.liveTvNetflixPrevEnabled,
++                    netflixPrevHeroTrailer = _uiState.value.netflixPrevHeroTrailer,
++                    netflixPrevHeroMuted = _uiState.value.netflixPrevHeroMuted,
++            netflixPrevHeroTrailer = _uiState.value.netflixPrevHeroTrailer,
++            netflixPrevHeroMuted = _uiState.value.netflixPrevHeroMuted,
+                     alwaysShowLandscapeClearlogo = _uiState.value.alwaysShowLandscapeClearlogo,
+                     animatedArtworkMode = _uiState.value.animatedArtworkMode.name,
+                 ),
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/HeroTrailerAudioState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/HeroTrailerAudioState.kt
+index b0b3a447..fa0fd1ed 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/HeroTrailerAudioState.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/HeroTrailerAudioState.kt
+@@ -8,6 +8,10 @@ object HeroTrailerAudioState {
+     private val _muted = MutableStateFlow(true)
+     val muted: StateFlow<Boolean> = _muted.asStateFlow()
+ 
++    fun setMuted(muted: Boolean) {
++        _muted.value = muted
++    }
++
+     fun toggleMuted() {
+         _muted.value = !_muted.value
+     }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
+index 806ef2f7..2a061fad 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
+@@ -3,6 +3,9 @@ package com.nuvio.app.features.livetv
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.border
+ import androidx.compose.foundation.clickable
++import androidx.compose.foundation.hoverable
++import androidx.compose.foundation.interaction.MutableInteractionSource
++import androidx.compose.foundation.interaction.collectIsHoveredAsState
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.Column
+@@ -45,13 +48,16 @@ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableLongStateOf
++import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberUpdatedState
+ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.graphics.Brush
+ import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.graphicsLayer
+ import androidx.compose.ui.layout.ContentScale
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.style.TextOverflow
+@@ -63,9 +69,11 @@ import com.nuvio.app.core.ui.NuvioScreenHeader
+ import com.nuvio.app.core.ui.NuvioSectionLabel
+ import com.nuvio.app.core.ui.PosterCardStyleRepository
+ import com.nuvio.app.core.ui.nuvio
++import com.nuvio.app.features.details.components.HeroTrailerPlayerSurface
+ import kotlinx.coroutines.delay
+ import nuvio.composeapp.generated.resources.Res
+ import nuvio.composeapp.generated.resources.livetv_netflix_style_chip
++import nuvio.composeapp.generated.resources.livetv_preview_live_badge
+ import org.jetbrains.compose.resources.stringResource
+ 
+ @Composable
+@@ -154,6 +162,7 @@ fun LiveTvScreen(
+                     state = state,
+                     epg = remember(selected, epgState.revision, nowMs) { LiveTvEpgRepository.epgFor(selected, nowMs) },
+                     nowMs = nowMs,
++                    netflixStyle = netflixStyle,
+                     onPlay = onPlay,
+                     modifier = Modifier.width(380.dp).fillMaxHeight(),
+                 )
+@@ -367,6 +376,11 @@ private fun LiveTvChannelList(
+                             nowMs = nowMs,
+                             selected = state.selectedChannel?.stableKey() == channel.stableKey(),
+                             favorite = state.isFavorite(channel),
++                            onHoverSelect = {
++                                if (state.selectedChannel?.stableKey() != channel.stableKey()) {
++                                    LiveTvRepository.selectChannel(channel)
++                                }
++                            },
+                             onClick = {
+                                 if (state.selectedChannel?.stableKey() == channel.stableKey()) {
+                                     state.streams.firstOrNull()?.let { onPlay(channel, it) }
+@@ -431,14 +445,27 @@ private fun LiveTvChannelCard(
+     nowMs: Long,
+     selected: Boolean,
+     favorite: Boolean,
++    onHoverSelect: () -> Unit,
+     onClick: () -> Unit,
+ ) {
+     val tokens = MaterialTheme.nuvio
+     val shape = RoundedCornerShape(12.dp)
++    // Netflix style preview: resting the pointer on a card for a moment selects it, which starts the
++    // muted preview in the detail panel.
++    val hoverSource = remember { MutableInteractionSource() }
++    val hovered by hoverSource.collectIsHoveredAsState()
++    val latestHoverSelect by rememberUpdatedState(onHoverSelect)
++    LaunchedEffect(hovered) {
++        if (hovered) {
++            delay(LiveTvPreviewHoverDelayMillis)
++            latestHoverSelect()
++        }
++    }
+     Box(
+         modifier = Modifier
+             .fillMaxWidth()
+             .aspectRatio(16f / 9f)
++            .hoverable(hoverSource)
+             .clip(shape)
+             .background(tokens.colors.surfaceCard)
+             .then(if (selected) Modifier.border(2.dp, tokens.colors.accent, shape) else Modifier)
+@@ -599,6 +626,7 @@ private fun LiveTvDetailPanel(
+     state: LiveTvUiState,
+     epg: ChannelEpgInfo?,
+     nowMs: Long,
++    netflixStyle: Boolean,
+     onPlay: (LiveTvChannel, LiveTvStreamOption) -> Unit,
+     modifier: Modifier = Modifier,
+ ) {
+@@ -613,6 +641,11 @@ private fun LiveTvDetailPanel(
+             .padding(16.dp),
+         verticalArrangement = Arrangement.spacedBy(8.dp),
+     ) {
++        if (netflixStyle) {
++            item(key = "netflix-preview") {
++                LiveTvMutedPreview(channel = channel, option = state.streams.firstOrNull())
++            }
++        }
+         item {
+             Row(verticalAlignment = Alignment.CenterVertically) {
+                 ChannelLogo(channel, Modifier.size(width = 96.dp, height = 60.dp))
+@@ -753,3 +786,60 @@ private fun LiveTvDetailPanel(
+         }
+     }
+ }
++
++private const val LiveTvPreviewHoverDelayMillis = 900L
++
++/**
++ * Netflix style Live TV preview: the selected channel's first stream plays muted above the details
++ * after a short delay, over the channel logo. A stream that cannot be played just leaves the logo.
++ */
++@Composable
++private fun LiveTvMutedPreview(channel: LiveTvChannel, option: LiveTvStreamOption?) {
++    val tokens = MaterialTheme.nuvio
++    val shape = RoundedCornerShape(12.dp)
++    val url = option?.url
++    var started by remember(channel.stableKey(), url) { mutableStateOf(false) }
++    var ready by remember(channel.stableKey(), url) { mutableStateOf(false) }
++    var failed by remember(channel.stableKey(), url) { mutableStateOf(false) }
++    LaunchedEffect(channel.stableKey(), url) {
++        if (url != null) {
++            delay(LiveTvPreviewHoverDelayMillis)
++            started = true
++        }
++    }
++    Box(
++        modifier = Modifier
++            .fillMaxWidth()
++            .aspectRatio(16f / 9f)
++            .clip(shape)
++            .background(Color.Black),
++        contentAlignment = Alignment.Center,
++    ) {
++        ChannelLogo(channel, Modifier.fillMaxWidth(0.4f).fillMaxHeight(0.5f))
++        if (url != null && started && !failed) {
++            HeroTrailerPlayerSurface(
++                sourceUrl = url,
++                sourceAudioUrl = null,
++                playWhenReady = true,
++                muted = true,
++                fillFrame = false,
++                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = if (ready) 1f else 0f },
++                onReady = { ready = true },
++                onEnded = { ready = false; failed = true },
++                onError = { ready = false; failed = true },
++            )
++        }
++        Text(
++            text = stringResource(Res.string.livetv_preview_live_badge),
++            style = MaterialTheme.typography.labelSmall,
++            fontWeight = FontWeight.Bold,
++            color = Color.White,
++            modifier = Modifier
++                .align(Alignment.TopStart)
++                .padding(8.dp)
++                .clip(RoundedCornerShape(4.dp))
++                .background(tokens.colors.danger)
++                .padding(horizontal = 6.dp, vertical = 2.dp),
++        )
++    }
++}
