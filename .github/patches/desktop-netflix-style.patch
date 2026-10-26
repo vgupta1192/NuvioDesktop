@@ -1,0 +1,178 @@
+diff --git a/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml b/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml
+new file mode 100644
+index 00000000..629f8dae
+--- /dev/null
++++ b/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="settings_netflix_style_section">Netflix style</string>
++    <string name="settings_netflix_style">Netflix style</string>
++    <string name="settings_netflix_style_description">Hover preview after a short delay with a muted trailer, and landscape Continue Watching cards with a progress bar. Turn off to restore your previous settings.</string>
++</resources>
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
+index 67270a6b..edfb22cb 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
+@@ -1,5 +1,7 @@
+ package com.nuvio.app.core.ui
+ 
++import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
++import com.nuvio.app.features.watchprogress.ContinueWatchingSectionStyle
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.asStateFlow
+@@ -9,6 +11,7 @@ import kotlinx.serialization.encodeToString
+ import kotlinx.serialization.json.Json
+ import kotlin.math.roundToInt
+ 
++internal const val NetflixHoverPreviewOpenDelayMillis = 1_000
+ internal const val DefaultPosterCardWidthDp = 126
+ internal const val DefaultPosterCardHeightDp = 189
+ internal const val DefaultPosterCardCornerRadiusDp = 12
+@@ -46,6 +49,12 @@ private data class StoredPosterCardStylePreferences(
+     val hoverPreviewTrailerEnabled: Boolean = false,
+     val hoverPreviewTrailerSoundEnabled: Boolean = false,
+     val hoverPreviewTrailerStartSeconds: Int = DefaultHoverPreviewTrailerStartSeconds,
++    val netflixStyleEnabled: Boolean = false,
++    val netflixPrevHoverEnabled: Boolean = true,
++    val netflixPrevOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
++    val netflixPrevTrailerEnabled: Boolean = false,
++    val netflixPrevTrailerSoundEnabled: Boolean = false,
++    val netflixPrevCwStyle: ContinueWatchingSectionStyle = ContinueWatchingSectionStyle.Card,
+     val alwaysShowLandscapeClearlogo: Boolean = false,
+     val animatedArtworkMode: String = AnimatedArtworkMode.Always.name,
+ )
+@@ -61,6 +70,12 @@ data class PosterCardStyleUiState(
+     val hoverPreviewTrailerEnabled: Boolean = false,
+     val hoverPreviewTrailerSoundEnabled: Boolean = false,
+     val hoverPreviewTrailerStartSeconds: Int = DefaultHoverPreviewTrailerStartSeconds,
++    val netflixStyleEnabled: Boolean = false,
++    val netflixPrevHoverEnabled: Boolean = true,
++    val netflixPrevOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
++    val netflixPrevTrailerEnabled: Boolean = false,
++    val netflixPrevTrailerSoundEnabled: Boolean = false,
++    val netflixPrevCwStyle: ContinueWatchingSectionStyle = ContinueWatchingSectionStyle.Card,
+     val alwaysShowLandscapeClearlogo: Boolean = false,
+     val animatedArtworkMode: AnimatedArtworkMode = AnimatedArtworkMode.Always,
+ )
+@@ -176,6 +191,43 @@ object PosterCardStyleRepository {
+         persist()
+     }
+ 
++    /**
++     * Netflix style: ON snapshots the current hover preview / Continue Watching settings, then turns
++     * the hover preview on with a short delay, a muted trailer and the landscape Continue Watching
++     * card with progress bar. OFF restores the snapshot.
++     */
++    fun setNetflixStyleEnabled(enabled: Boolean) {
++        ensureLoaded()
++        ContinueWatchingPreferencesRepository.ensureLoaded()
++        val current = _uiState.value
++        if (current.netflixStyleEnabled == enabled) return
++        if (enabled) {
++            _uiState.value = current.copy(
++                netflixStyleEnabled = true,
++                netflixPrevHoverEnabled = current.hoverPreviewEnabled,
++                netflixPrevOpenDelayMillis = current.hoverPreviewOpenDelayMillis,
++                netflixPrevTrailerEnabled = current.hoverPreviewTrailerEnabled,
++                netflixPrevTrailerSoundEnabled = current.hoverPreviewTrailerSoundEnabled,
++                netflixPrevCwStyle = ContinueWatchingPreferencesRepository.uiState.value.style,
++                hoverPreviewEnabled = true,
++                hoverPreviewOpenDelayMillis = normalizeHoverPreviewOpenDelayMillis(NetflixHoverPreviewOpenDelayMillis),
++                hoverPreviewTrailerEnabled = true,
++                hoverPreviewTrailerSoundEnabled = false,
++            )
++            ContinueWatchingPreferencesRepository.setStyle(ContinueWatchingSectionStyle.Card)
++        } else {
++            _uiState.value = current.copy(
++                netflixStyleEnabled = false,
++                hoverPreviewEnabled = current.netflixPrevHoverEnabled,
++                hoverPreviewOpenDelayMillis = normalizeHoverPreviewOpenDelayMillis(current.netflixPrevOpenDelayMillis),
++                hoverPreviewTrailerEnabled = current.netflixPrevTrailerEnabled,
++                hoverPreviewTrailerSoundEnabled = current.netflixPrevTrailerSoundEnabled,
++            )
++            ContinueWatchingPreferencesRepository.setStyle(current.netflixPrevCwStyle)
++        }
++        persist()
++    }
++
+     fun resetToDefaults() {
+         ensureLoaded()
+         val defaults = PosterCardStyleUiState(
+@@ -184,6 +236,12 @@ object PosterCardStyleRepository {
+             hoverPreviewTrailerEnabled = _uiState.value.hoverPreviewTrailerEnabled,
+             hoverPreviewTrailerSoundEnabled = _uiState.value.hoverPreviewTrailerSoundEnabled,
+             hoverPreviewTrailerStartSeconds = _uiState.value.hoverPreviewTrailerStartSeconds,
++            netflixStyleEnabled = _uiState.value.netflixStyleEnabled,
++            netflixPrevHoverEnabled = _uiState.value.netflixPrevHoverEnabled,
++            netflixPrevOpenDelayMillis = _uiState.value.netflixPrevOpenDelayMillis,
++            netflixPrevTrailerEnabled = _uiState.value.netflixPrevTrailerEnabled,
++            netflixPrevTrailerSoundEnabled = _uiState.value.netflixPrevTrailerSoundEnabled,
++            netflixPrevCwStyle = _uiState.value.netflixPrevCwStyle,
+             animatedArtworkMode = _uiState.value.animatedArtworkMode,
+         )
+         if (_uiState.value == defaults) return
+@@ -223,6 +281,12 @@ object PosterCardStyleRepository {
+                 hoverPreviewTrailerStartSeconds = normalizeHoverPreviewTrailerStartSeconds(
+                     stored.hoverPreviewTrailerStartSeconds,
+                 ),
++                netflixStyleEnabled = stored.netflixStyleEnabled,
++                netflixPrevHoverEnabled = stored.netflixPrevHoverEnabled,
++                netflixPrevOpenDelayMillis = stored.netflixPrevOpenDelayMillis,
++                netflixPrevTrailerEnabled = stored.netflixPrevTrailerEnabled,
++                netflixPrevTrailerSoundEnabled = stored.netflixPrevTrailerSoundEnabled,
++                netflixPrevCwStyle = stored.netflixPrevCwStyle,
+                 alwaysShowLandscapeClearlogo = stored.alwaysShowLandscapeClearlogo,
+                 animatedArtworkMode = AnimatedArtworkMode.entries
+                     .firstOrNull { it.name == stored.animatedArtworkMode }
+@@ -247,6 +311,12 @@ object PosterCardStyleRepository {
+                     hoverPreviewTrailerEnabled = _uiState.value.hoverPreviewTrailerEnabled,
+                     hoverPreviewTrailerSoundEnabled = _uiState.value.hoverPreviewTrailerSoundEnabled,
+                     hoverPreviewTrailerStartSeconds = _uiState.value.hoverPreviewTrailerStartSeconds,
++                    netflixStyleEnabled = _uiState.value.netflixStyleEnabled,
++                    netflixPrevHoverEnabled = _uiState.value.netflixPrevHoverEnabled,
++                    netflixPrevOpenDelayMillis = _uiState.value.netflixPrevOpenDelayMillis,
++                    netflixPrevTrailerEnabled = _uiState.value.netflixPrevTrailerEnabled,
++                    netflixPrevTrailerSoundEnabled = _uiState.value.netflixPrevTrailerSoundEnabled,
++                    netflixPrevCwStyle = _uiState.value.netflixPrevCwStyle,
+                     alwaysShowLandscapeClearlogo = _uiState.value.alwaysShowLandscapeClearlogo,
+                     animatedArtworkMode = _uiState.value.animatedArtworkMode.name,
+                 ),
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HoverPreviewSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HoverPreviewSettingsPage.kt
+index c49583d4..80a85cc9 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HoverPreviewSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HoverPreviewSettingsPage.kt
+@@ -45,6 +45,9 @@ import nuvio.composeapp.generated.resources.settings_hover_preview_trailer_sound
+ import nuvio.composeapp.generated.resources.settings_hover_preview_trailer_start_time
+ import nuvio.composeapp.generated.resources.settings_hover_preview_trailer_start_time_description
+ import nuvio.composeapp.generated.resources.settings_hover_preview_trailer_start_time_value
++import nuvio.composeapp.generated.resources.settings_netflix_style
++import nuvio.composeapp.generated.resources.settings_netflix_style_description
++import nuvio.composeapp.generated.resources.settings_netflix_style_section
+ import org.jetbrains.compose.resources.stringResource
+ import kotlin.math.roundToInt
+ 
+@@ -52,6 +55,22 @@ internal fun LazyListScope.hoverPreviewSettingsContent(
+     isTablet: Boolean,
+     uiState: PosterCardStyleUiState,
+ ) {
++    item {
++        SettingsSection(
++            title = stringResource(Res.string.settings_netflix_style_section),
++            isTablet = isTablet,
++        ) {
++            SettingsGroup(isTablet = isTablet) {
++                SettingsSwitchRow(
++                    title = stringResource(Res.string.settings_netflix_style),
++                    description = stringResource(Res.string.settings_netflix_style_description),
++                    checked = uiState.netflixStyleEnabled,
++                    isTablet = isTablet,
++                    onCheckedChange = PosterCardStyleRepository::setNetflixStyleEnabled,
++                )
++            }
++        }
++    }
+     item {
+         SettingsSection(
+             title = stringResource(Res.string.settings_hover_preview_section_behavior),
