@@ -1,5 +1,5 @@
 name: Build NuvioDesktop Jellyfin+LiveTV (upstream release sync)
-# sync-pulse: forced 2026-10-26T06:16:46Z
+# sync-pulse: forced 2026-10-26T06:29:38Z
 # sync-pulse: 0.1.32-alpha 2026-10-26T03:30:09Z
 # sync-pulse: 0.1.32-alpha 2026-10-26T03:30:09Z
 
@@ -161,7 +161,7 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           # optional-ports
-          for P in fix-desktop-isgifurl ttml-framerate custom-stretch jellyfin-subtitles synced-subtitles library-calendar desktop-seek-previews desktop-native-props desktop-generated-subtitles desktop-audio-sync-hls desktop-synced-chips custom-stretch-continuous custom-stretch-memory; do
+          for P in fix-desktop-isgifurl ttml-framerate custom-stretch jellyfin-subtitles synced-subtitles library-calendar desktop-seek-previews-v2 desktop-native-props desktop-generated-subtitles desktop-audio-sync-hls desktop-synced-chips custom-stretch-continuous custom-stretch-memory; do
             if git apply "fork-src/.github/patches/$P.patch"; then
               echo "applied $P.patch"
             else
