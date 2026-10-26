@@ -98,11 +98,11 @@ index 00000000..ddeabeb8
 +    private fun Int?.clampPercent(): Int = (this ?: 0).coerceIn(-100, 100)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index ea7b6740..ea0d9231 100644
+index 329b06ff..ea547f57 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -146,6 +146,9 @@ internal fun LazyListScope.playbackSettingsContent(
-             libassRenderType = libassRenderType,
+@@ -148,6 +148,9 @@ internal fun LazyListScope.playbackSettingsContent(
+             libassRenderScale = libassRenderScale,
          )
      }
 +    item {
@@ -111,7 +111,7 @@ index ea7b6740..ea0d9231 100644
  }
  
  private fun formatStep(value: Float): String {
-@@ -227,7 +230,7 @@ fun ValueBox(
+@@ -229,7 +232,7 @@ fun ValueBox(
  }
  
  @Composable
@@ -513,7 +513,7 @@ index 02fe85bd..53519d66 100644
          append(partyJson.encodeToString(PlayerControlPartyState.serializer(), party.withWebviewImages(onImageReady)))
          append('}')
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/composeApp/src/desktopMain/resources/player-ui/controls.css
-index bc9602a4..af50c214 100644
+index d9228f8d..f1de292e 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.css
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
 @@ -3624,3 +3624,10 @@ svg {
