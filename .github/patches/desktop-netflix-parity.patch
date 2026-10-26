@@ -106,14 +106,12 @@ index 7138794f..3d8ae60c 100644
                  alwaysShowLandscapeClearlogo = stored.alwaysShowLandscapeClearlogo,
                  animatedArtworkMode = AnimatedArtworkMode.entries
                      .firstOrNull { it.name == stored.animatedArtworkMode }
-@@ -338,6 +361,10 @@ object PosterCardStyleRepository {
+@@ -338,6 +361,8 @@ object PosterCardStyleRepository {
                      netflixPrevCwStyle = _uiState.value.netflixPrevCwStyle,
                      liveTvNetflixStyleEnabled = _uiState.value.liveTvNetflixStyleEnabled,
                      liveTvNetflixPrevEnabled = _uiState.value.liveTvNetflixPrevEnabled,
 +                    netflixPrevHeroTrailer = _uiState.value.netflixPrevHeroTrailer,
 +                    netflixPrevHeroMuted = _uiState.value.netflixPrevHeroMuted,
-+            netflixPrevHeroTrailer = _uiState.value.netflixPrevHeroTrailer,
-+            netflixPrevHeroMuted = _uiState.value.netflixPrevHeroMuted,
                      alwaysShowLandscapeClearlogo = _uiState.value.alwaysShowLandscapeClearlogo,
                      animatedArtworkMode = _uiState.value.animatedArtworkMode.name,
                  ),
