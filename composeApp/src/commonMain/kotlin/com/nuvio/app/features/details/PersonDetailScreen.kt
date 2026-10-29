@@ -74,6 +74,7 @@ import com.nuvio.app.core.ui.skeleton
 import com.nuvio.app.features.details.components.DetailPosterRailSection
 import com.nuvio.app.features.details.components.ExpandableDescription
 import com.nuvio.app.features.home.MetaPreview
+import com.nuvio.app.features.details.components.ownedLabelFor
 import com.nuvio.app.features.tmdb.TmdbMetadataService
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
