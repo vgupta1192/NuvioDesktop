@@ -1,5 +1,5 @@
 name: Build NuvioDesktop Jellyfin+LiveTV (upstream release sync)
-# sync-pulse: 0.1.33-alpha 2026-10-30T03:05:00Z
+# sync-pulse: 0.1.33-alpha 2026-10-30T04:20:00Z
 # sync-pulse: 0.1.33-alpha 2026-10-29T19:30:10Z
 # sync-pulse: 0.1.33-alpha 2026-10-29T19:30:10Z
 
@@ -230,7 +230,7 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           # optional-desktop-batch2
-          for P in desktop-fork-prefs desktop-subs-off-shadow desktop-stall-hint desktop-calendar-monday desktop-introdb-fallback desktop-sleep-timer desktop-image-cache-clear desktop-skip-feedback desktop-omdb-fallback desktop-whats-new desktop-doh-dns; do
+          for P in desktop-fork-prefs desktop-subs-off-shadow desktop-stall-hint desktop-calendar-monday desktop-introdb-fallback desktop-sleep-timer desktop-image-cache-clear desktop-skip-feedback desktop-omdb-fallback desktop-whats-new desktop-doh-dns desktop-batch2-fixes; do
             if git apply "fork-src/.github/patches/$P.patch"; then
               echo "applied $P.patch"
             else

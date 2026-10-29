@@ -1,0 +1,59 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt
+index 2ce123eaa..4b045d0e9 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt
+@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.BoxScope
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.unit.Dp
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SleepTimer.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SleepTimer.kt
+index 71de6f7fe..390e494f9 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SleepTimer.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SleepTimer.kt
+@@ -1,6 +1,7 @@
+ package com.nuvio.app.features.player
+ 
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import kotlinx.coroutines.delay
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+index 4d272724c..cf8a9d46b 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+@@ -103,6 +103,7 @@ internal fun LazyListScope.advancedSettingsContent(
+             isTablet = isTablet,
+         ) {
+             SettingsGroup(isTablet = isTablet) {
++                val imageLoaderContext = coil3.compose.LocalPlatformContext.current
+                 SettingsNavigationRow(
+                     title = "Clear image cache",
+                     description = "Remove cached posters and backdrops. They download again when needed.",
+@@ -119,7 +120,7 @@ internal fun LazyListScope.advancedSettingsContent(
+                         null
+                     },
+                     onClick = {
+-                        val loader = coil3.SingletonImageLoader.get(coil3.compose.LocalPlatformContext.current)
++                        val loader = coil3.SingletonImageLoader.get(imageLoaderContext)
+                         loader.memoryCache?.clear()
+                         loader.diskCache?.clear()
+                         cleared = true
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index c8b0266bb..482893c16 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -627,7 +627,7 @@ internal class NativePlayerController(
+             "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
+             "autoSyncRetry" -> com.nuvio.app.features.player.DesktopAutoSyncRetry.retry()
+             "enh.sleep" -> {
+-                com.nuvio.app.features.player.SleepTimer.set(value.toIntOrNull()?.coerceAtLeast(0) ?: 0)
++                com.nuvio.app.features.player.SleepTimer.set(value.toInt().coerceAtLeast(0))
+                 refreshControlsForEnhance()
+             }
+             "enh.open", "enh.reset", "enh.quality", "enh.smart",
