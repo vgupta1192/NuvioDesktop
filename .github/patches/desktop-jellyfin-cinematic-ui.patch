@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index f35772b84..3405f7c2e 100644
+index 372a8ac2..8494824d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -1784,11 +1784,26 @@ internal fun MainAppContent(
+@@ -1793,11 +1793,26 @@ internal fun MainAppContent(
                  }
                  entry<JellyfinRoute> { route ->
                      val onBack = rememberGuardedPopBackStack(navController, route)
@@ -32,7 +32,7 @@ index f35772b84..3405f7c2e 100644
                  entry<DownloadsRoute> { route ->
                      DownloadsDestination(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailCastSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailCastSection.kt
-index 4a8cc86a8..5c1def667 100644
+index 4a8cc86a..5c1def66 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailCastSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailCastSection.kt
 @@ -89,7 +89,9 @@ fun DetailCastSection(
@@ -47,7 +47,7 @@ index 4a8cc86a8..5c1def667 100644
                          } else {
                              null
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
-index b1b97c1f1..c20f82856 100644
+index b1b97c1f..c20f8285 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
 @@ -24,6 +24,7 @@ import kotlinx.serialization.json.put
@@ -225,7 +225,7 @@ index b1b97c1f1..c20f82856 100644
          json.parseToJsonElement(this).jsonObject
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
-index 7d1d7399b..acd0e923a 100644
+index 7d1d7399..acd0e923 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
 @@ -1,78 +1,508 @@
@@ -763,7 +763,7 @@ index 7d1d7399b..acd0e923a 100644
 +    return if (hours > 0) "${hours}h ${minutes.toString().padStart(2, '0')}m" else "${minutes}m"
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
-index 05f1c5237..d4ee562d4 100644
+index 05f1c523..d4ee562d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
 @@ -1,7 +1,10 @@
@@ -894,7 +894,7 @@ index 05f1c5237..d4ee562d4 100644
 +    cast = cast,
 +)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt
-index 2800325d6..33c560b47 100644
+index 2800325d..33c560b4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt
 @@ -10,4 +10,7 @@ internal expect object JellyfinPlatform {
@@ -906,7 +906,7 @@ index 2800325d6..33c560b47 100644
 +    fun localEndTimeLabel(minutesFromNow: Long): String?
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
-index 2c0d407f1..e800cc171 100644
+index 2c0d407f..e800cc17 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
 @@ -43,6 +43,7 @@ object JellyfinRepository {
@@ -1098,7 +1098,7 @@ index 2c0d407f1..e800cc171 100644
  
      /**
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
-index 76e8719b0..08ed3fab9 100644
+index 76e8719b..08ed3fab 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
 @@ -16,30 +16,23 @@ import androidx.compose.foundation.layout.height
@@ -2065,7 +2065,7 @@ index 76e8719b0..08ed3fab9 100644
 -    }
 -}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-index 4d3b23b78..0f354438c 100644
+index 30ee6fd9..35c64824 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 @@ -4,6 +4,7 @@ import com.nuvio.app.isDesktop
@@ -2076,7 +2076,7 @@ index 4d3b23b78..0f354438c 100644
  import com.nuvio.app.features.details.MetaCompany
  import com.nuvio.app.features.details.MetaDetails
  import com.nuvio.app.features.details.MetaPerson
-@@ -73,6 +74,24 @@ object TmdbMetadataService {
+@@ -84,6 +85,24 @@ object TmdbMetadataService {
              }
          }
  
@@ -2101,7 +2101,7 @@ index 4d3b23b78..0f354438c 100644
      suspend fun fetchPersonDetail(
          personId: Int,
          preferCrewCredits: Boolean? = null,
-@@ -2236,3 +2255,15 @@ internal data class TmdbDiscoverResult(
+@@ -2251,3 +2270,15 @@ internal data class TmdbDiscoverResult(
      @SerialName("vote_average") val voteAverage: Double? = null,
      @SerialName("vote_count") val voteCount: Int? = null,
  )
@@ -2118,7 +2118,7 @@ index 4d3b23b78..0f354438c 100644
 +    val name: String = "",
 +)
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt
-index 629c2f969..210f006fd 100644
+index 629c2f96..210f006f 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt
 @@ -48,4 +48,9 @@ internal actual object JellyfinPlatform {
@@ -2132,10 +2132,10 @@ index 629c2f969..210f006fd 100644
 +    }.getOrNull()
  }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
-index 1a2719263..c5e9a8630 100644
+index 97f47f5b..1783bf9d 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/updater/AppUpdaterPlatform.desktop.kt
-@@ -148,7 +148,31 @@ actual object AppUpdaterPlatform {
+@@ -147,7 +147,31 @@ actual object AppUpdaterPlatform {
          check(updateFile.exists()) { runBlocking { getString(Res.string.updates_downloaded_file_missing) } }
  
          launchInstaller(updateFile)

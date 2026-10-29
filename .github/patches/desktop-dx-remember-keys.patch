@@ -1,0 +1,208 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxRemember.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxRemember.kt
+new file mode 100644
+index 00000000..b63dd6e8
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxRemember.kt
+@@ -0,0 +1,66 @@
++package com.nuvio.app.features.player
++
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++
++/**
++ * dx.bi port: remember the playback speed across sessions and let the number keys 0-9 jump to
++ * that fraction of the title. (The desktop player already remembers volume by itself.)
++ * The desktop engine installs [Storage]; elsewhere everything stays default and inert.
++ */
++object DxRemember {
++    interface Storage {
++        fun getBoolean(key: String): Boolean?
++        fun putBoolean(key: String, value: Boolean)
++        fun getFloat(key: String): Float?
++        fun putFloat(key: String, value: Float)
++    }
++
++    private val _rememberSpeed = MutableStateFlow(true)
++    val rememberSpeed: StateFlow<Boolean> = _rememberSpeed.asStateFlow()
++
++    private val _numberKeys = MutableStateFlow(true)
++    val numberKeys: StateFlow<Boolean> = _numberKeys.asStateFlow()
++
++    var storage: Storage? = null
++        private set
++    var available: Boolean = false
++        private set
++
++    /** Last playback speed chosen by the viewer; applied at the start of the next playback. */
++    var savedSpeed: Float = 1f
++        private set
++
++    fun install(storage: Storage) {
++        this.storage = storage
++        available = true
++        _rememberSpeed.value = storage.getBoolean("remember_speed") ?: true
++        _numberKeys.value = storage.getBoolean("number_keys") ?: true
++        savedSpeed = (storage.getFloat("last_speed") ?: 1f).coerceIn(0.25f, 4f)
++    }
++
++    /** Set by the desktop engine; asks it to resend the controls JSON when a toggle flips. */
++    var onChanged: (() -> Unit)? = null
++
++    fun setRememberSpeed(on: Boolean) {
++        _rememberSpeed.value = on
++        storage?.putBoolean("remember_speed", on)
++        onChanged?.invoke()
++    }
++
++    fun setNumberKeys(on: Boolean) {
++        _numberKeys.value = on
++        storage?.putBoolean("number_keys", on)
++        onChanged?.invoke()
++    }
++
++    fun noteSpeed(speed: Float) {
++        if (!_rememberSpeed.value || speed <= 0f) return
++        savedSpeed = speed.coerceIn(0.25f, 4f)
++        storage?.putFloat("last_speed", savedSpeed)
++    }
++
++    /** What a fresh player should start at (1x when remembering is off). */
++    fun speedToApply(): Float = if (_rememberSpeed.value) savedSpeed else 1f
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DxRememberSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DxRememberSettings.kt
+new file mode 100644
+index 00000000..fd119945
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DxRememberSettings.kt
+@@ -0,0 +1,33 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.player.DxRemember
++
++/** dx.bi port: remember speed across sessions and number-key jumps. Desktop only. */
++@Composable
++internal fun DxRememberSettingsSection(isTablet: Boolean) {
++    if (!DxRemember.available) return
++    val rememberSpeed by DxRemember.rememberSpeed.collectAsStateWithLifecycle()
++    val numberKeys by DxRemember.numberKeys.collectAsStateWithLifecycle()
++    SettingsSection(title = "Keyboard & memory", isTablet = isTablet) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsSwitchRow(
++                title = "Remember playback speed",
++                description = "Starts the next video at the speed you used last.",
++                checked = rememberSpeed,
++                isTablet = isTablet,
++                onCheckedChange = DxRemember::setRememberSpeed,
++            )
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSwitchRow(
++                title = "Number keys 0-9 jump",
++                description = "Press 0-9 while watching to jump to that fraction of the video.",
++                checked = numberKeys,
++                isTablet = isTablet,
++                onCheckedChange = DxRemember::setNumberKeys,
++            )
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+index fa90d0f9..8961e2e5 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+@@ -156,6 +156,7 @@ internal fun LazyListScope.playbackSettingsContent(
+     }
+     item {
+         PlayerEnhanceSettingsSection(isTablet = isTablet) // Nuvio fork: desktop picture & sound
++        DxRememberSettingsSection(isTablet = isTablet) // Nuvio fork: remember speed + number keys
+     }
+ }
+ 
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
+index 7968e660..61dda8a0 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
+@@ -53,6 +53,13 @@ internal object DesktopPlayerEnhance {
+             }
+             bump()
+         }
++        DxRemember.install(object : DxRemember.Storage {
++            override fun getBoolean(key: String) = store.getBoolean(key)
++            override fun putBoolean(key: String, value: Boolean) = store.putBoolean(key, value)
++            override fun getFloat(key: String) = store.getFloat(key)
++            override fun putFloat(key: String, value: Float) = store.putFloat(key, value)
++        })
++        DxRemember.onChanged = { bump() }
+     }
+ 
+     /** Called once the native player exists: reapplies saved settings and caps YouTube HLS. */
+@@ -149,7 +156,7 @@ internal object DesktopPlayerEnhance {
+     fun panelJson(): String = synchronized(gate) {
+         val v = PlayerEnhancePrefs.values.value
+         buildString {
+-            append("{\"smart\":$smartEnhance,\"picture\":{")
++            append("{\"smart\":$smartEnhance,\"numberKeys\":${DxRemember.numberKeys.value},\"picture\":{")
+             append("\"brightness\":${v.brightness},\"contrast\":${v.contrast},\"saturation\":${v.saturation}")
+             append(",\"gamma\":${v.gamma},\"hue\":${v.hue},\"deband\":${v.deband},\"picEnhance\":${v.picEnhance},\"picEnhanceNames\":[")
+             PlayerEnhancePrefs.picEnhanceNames.joinTo(this, ",") { "\"$it\"" }
+@@ -184,6 +191,7 @@ internal object DesktopPlayerEnhance {
+         hlsBitrateCapFor(sourceUrl)?.let { setLocked("hls-bitrate", it) }
+         applyPictureLocked()
+         applyAudioLocked()
++        if (DxRemember.available && DxRemember.rememberSpeed.value) setLocked("speed", DxRemember.speedToApply().toString()) // Nuvio fork: remember speed
+     }
+ 
+     private fun applyPictureLocked() {
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index d400149c..9eefd494 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -2,6 +2,7 @@ package com.nuvio.app.features.player.desktop
+ 
+ import androidx.compose.ui.graphics.Color
+ import co.touchlab.kermit.Logger
++import com.nuvio.app.features.player.DxRemember
+ import com.nuvio.app.features.player.PlayerControlAddonSubtitleItem
+ import com.nuvio.app.features.player.PlayerControlEpisodeItem
+ import com.nuvio.app.features.player.PlayerControlFilterItem
+@@ -762,6 +763,7 @@ internal class NativePlayerController(
+         val currentSpeed = NativePlayerBridge.speed(current)
+         val next = speeds.firstOrNull { it > currentSpeed + 0.01f } ?: speeds.first()
+         NativePlayerBridge.setSpeed(current, next)
++        DxRemember.noteSpeed(next)
+     }
+ 
+     fun snapshot(): PlayerPlaybackSnapshot {
+@@ -1089,6 +1091,7 @@ internal class NativePlayerController(
+ 
+     override fun setPlaybackSpeed(speed: Float) {
+         log.d { "setPlaybackSpeed speed=$speed handle=$handle" }
++        DxRemember.noteSpeed(speed)
+         handle.takeIf { it != 0L }?.let { NativePlayerBridge.setSpeed(it, speed) }
+     }
+ 
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
+index 8dfd1e67..b33d314c 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.js
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
+@@ -4210,6 +4210,17 @@ document.addEventListener("keydown", event => {
+     return;
+   }
+ 
++  // Nuvio fork (dx.bi port): number keys 0-9 jump to that fraction of the title.
++  if (/^Digit[0-9]$/.test(event.code) && !activeModal && (!state.enhance || state.enhance.numberKeys !== false) && Number(state.durationMs) > 0) {
++    event.preventDefault();
++    const d = Number(event.code.slice(5));
++    const ms = Math.round(state.durationMs / 10) * d; // mobile mapping: 0-9 -> 0%..90%
++    send("scrubFinish", ms);
++    state.positionMs = ms;
++    render();
++    return;
++  }
++
+   if ((activeModal === "episodes" || activeModal === "sources") && (event.code === "ArrowLeft" || event.code === "ArrowRight")) {
+     const chips = Array.from(document.querySelectorAll('.filter-chip:not([hidden])')).filter(el => el.offsetWidth > 0 || el.offsetHeight > 0);
+     if (chips.length > 0) {

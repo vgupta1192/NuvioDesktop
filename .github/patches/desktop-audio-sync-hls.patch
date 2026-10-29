@@ -1,6 +1,6 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
 new file mode 100644
-index 000000000..e9ccd051a
+index 00000000..e9ccd051
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/AudioDumpProcess.kt
 @@ -0,0 +1,231 @@
@@ -237,7 +237,7 @@ index 000000000..e9ccd051a
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/DialogueSpotPlanner.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/DialogueSpotPlanner.kt
 new file mode 100644
-index 000000000..c6fe1beb0
+index 00000000..c6fe1beb
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/DialogueSpotPlanner.kt
 @@ -0,0 +1,135 @@
@@ -378,7 +378,7 @@ index 000000000..c6fe1beb0
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/Fft.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/Fft.kt
 new file mode 100644
-index 000000000..a1e535f08
+index 00000000..a1e535f0
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/Fft.kt
 @@ -0,0 +1,73 @@
@@ -457,7 +457,7 @@ index 000000000..a1e535f08
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
 new file mode 100644
-index 000000000..3d5f5e47d
+index 00000000..3d5f5e47
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
 @@ -0,0 +1,214 @@
@@ -677,7 +677,7 @@ index 000000000..3d5f5e47d
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsMediaPlaylist.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsMediaPlaylist.kt
 new file mode 100644
-index 000000000..1cae95957
+index 00000000..1cae9595
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsMediaPlaylist.kt
 @@ -0,0 +1,116 @@
@@ -799,7 +799,7 @@ index 000000000..1cae95957
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/RmsVad.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/RmsVad.kt
 new file mode 100644
-index 000000000..6b15ded72
+index 00000000..6b15ded7
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/RmsVad.kt
 @@ -0,0 +1,81 @@
@@ -886,7 +886,7 @@ index 000000000..6b15ded72
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 new file mode 100644
-index 000000000..a2496cd6c
+index 00000000..a2496cd6
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 @@ -0,0 +1,395 @@
@@ -1287,7 +1287,7 @@ index 000000000..a2496cd6c
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechTimeline.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechTimeline.kt
 new file mode 100644
-index 000000000..8f8fb1376
+index 00000000..8f8fb137
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechTimeline.kt
 @@ -0,0 +1,19 @@
@@ -1312,7 +1312,7 @@ index 000000000..8f8fb1376
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleAudioAligner.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleAudioAligner.kt
 new file mode 100644
-index 000000000..526566406
+index 00000000..52656640
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleAudioAligner.kt
 @@ -0,0 +1,432 @@
@@ -1750,7 +1750,7 @@ index 000000000..526566406
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleSpeechCandidates.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleSpeechCandidates.kt
 new file mode 100644
-index 000000000..cce061f86
+index 00000000..cce061f8
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleSpeechCandidates.kt
 @@ -0,0 +1,183 @@
@@ -1939,7 +1939,7 @@ index 000000000..cce061f86
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleSpeechTrack.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleSpeechTrack.kt
 new file mode 100644
-index 000000000..5cee090b0
+index 00000000..5cee090b
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SubtitleSpeechTrack.kt
 @@ -0,0 +1,78 @@

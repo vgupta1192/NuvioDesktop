@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
-index e1f5d106..30b967d1 100644
+index c990be8a..afac1136 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
-@@ -135,6 +135,15 @@ internal object NativePlayerBridge {
+@@ -137,6 +137,15 @@ internal object NativePlayerBridge {
      external fun shutdownWebView2Warmup()
      external fun setWindowsDisplaySleepInhibited(inhibited: Boolean): Boolean
  
@@ -19,10 +19,10 @@ index e1f5d106..30b967d1 100644
          ensureLoaded()
          controlsPageAssets.url
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-index 3c2791ec..b7d15ba1 100644
+index 34e60bbe..34049f91 100644
 --- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-@@ -2021,6 +2021,49 @@ JNIEXPORT void JNICALL NP(addSubtitleUrl)(JNIEnv *env, jobject, jlong handle, js
+@@ -2035,6 +2035,49 @@ JNIEXPORT void JNICALL NP(addSubtitleUrl)(JNIEnv *env, jobject, jlong handle, js
      mpv_command(p->mpv, cmd);
  }
  
@@ -73,10 +73,10 @@ index 3c2791ec..b7d15ba1 100644
      Player *p = asPlayer(handle);
      if (!p) return;
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index ae95de61..0bbd8da7 100644
+index cc8d7139..e9ddefe7 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-@@ -2709,6 +2709,25 @@ static void nuvioMpvWakeup(void *ctx) {
+@@ -2757,6 +2757,25 @@ static void nuvioMpvWakeup(void *ctx) {
      mpv_set_property_string(_mpv, name, (value ?: @"").UTF8String);
  }
  
@@ -102,7 +102,7 @@ index ae95de61..0bbd8da7 100644
  - (void)command:(NSArray<NSString *> *)args {
      if (!_mpv || args.count == 0) return;
      std::vector<const char *> cargs;
-@@ -3369,6 +3388,54 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_updateControls(
+@@ -3417,6 +3436,54 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_updateControls(
      });
  }
  

@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/network/SupabaseProvider.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/network/SupabaseProvider.kt
-index 6aa81eb1c..c5886bd08 100644
+index 6aa81eb1..c5886bd0 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/network/SupabaseProvider.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/network/SupabaseProvider.kt
 @@ -1,6 +1,7 @@
@@ -23,10 +23,10 @@ index 6aa81eb1c..c5886bd08 100644
          client = createSupabaseClient(
              supabaseUrl = configuration.backendUrl,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
-index 190b38f0e..793227be0 100644
+index b209fbd7..319a0c7c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
-@@ -78,6 +78,7 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
+@@ -79,6 +79,7 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
      val addonsUiState by AddonRepository.uiState.collectAsStateWithLifecycle()
      val addonSubtitles by SubtitleRepository.addonSubtitles.collectAsStateWithLifecycle()
      val isLoadingAddonSubtitles by SubtitleRepository.isLoading.collectAsStateWithLifecycle()
@@ -34,7 +34,7 @@ index 190b38f0e..793227be0 100644
  
      val runtime = remember { PlayerScreenRuntime(args) }
      runtime.args = args
-@@ -120,7 +121,11 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
+@@ -140,7 +141,11 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
          runtime.episodeStreamsRepoState = episodeStreamsRepoState
          runtime.metaUiState = metaUiState
          runtime.addonsUiState = addonsUiState
@@ -47,8 +47,8 @@ index 190b38f0e..793227be0 100644
          runtime.isLoadingAddonSubtitles = isLoadingAddonSubtitles
          runtime.horizontalSafePadding = horizontalSafePadding
          runtime.metrics = metrics
-@@ -178,6 +183,6 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
-             ),
+@@ -192,6 +197,6 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
+             videoSize = videoSize,
          )
          runtime.BindPlayerRuntimeEffects()
 -        runtime.RenderPlayerRuntimeUi()
@@ -56,7 +56,7 @@ index 190b38f0e..793227be0 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenModalHosts.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenModalHosts.kt
-index b3665232a..90d5c0737 100644
+index b3665232..90d5c073 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenModalHosts.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenModalHosts.kt
 @@ -154,6 +154,7 @@ internal fun PlayerScreenModalHosts(
@@ -77,7 +77,7 @@ index b3665232a..90d5c0737 100644
          PlayerEpisodesPanel(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
 new file mode 100644
-index 000000000..06f840348
+index 00000000..eb8e747f
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitles.kt
 @@ -0,0 +1,413 @@
@@ -496,7 +496,7 @@ index 000000000..06f840348
 +val LocalSyncedSubtitleVideoId = compositionLocalOf<String?> { null }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesRuntime.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesRuntime.kt
 new file mode 100644
-index 000000000..6c59c4a71
+index 00000000..6c59c4a7
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesRuntime.kt
 @@ -0,0 +1,66 @@
@@ -567,17 +567,18 @@ index 000000000..6c59c4a71
 +    controller.setSubtitleUri(target.url)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
-index 743752f22..55e9365b2 100644
+index b5e535f8..9c97a907 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
-@@ -81,4 +81,5 @@ internal fun StreamCard(
+@@ -79,6 +79,7 @@ internal fun StreamCard(
+     outlined: Boolean = false,
+ ) {
      val partyLabel = if (isCurrent) null else LocalStreamHighlight.current(stream)
 +    val hasSyncedSubtitles = rememberSyncedSubtitlesMark(stream) // Nuvio fork: synced subtitles
      val cardShape = RoundedCornerShape(12.dp)
      val badgeImages = stream.badges.filter { it.imageURL.isNotBlank() }
      val hasBadges = badgeImages.isNotEmpty() || (showFileSizeBadges && stream.behaviorHints.videoSize != null)
-@@ -153,7 +154,11 @@ internal fun StreamCard(
-                 if (isCurrent && !currentLabel.isNullOrBlank()) {
+@@ -154,6 +155,10 @@ internal fun StreamCard(
                      Spacer(modifier = Modifier.width(8.dp))
                      CurrentStreamBadge(label = currentLabel)
                  }
@@ -589,10 +590,10 @@ index 743752f22..55e9365b2 100644
                      Spacer(modifier = Modifier.width(8.dp))
                      Text(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index 06a740985..a4244774e 100644
+index 58a263d8..46871aea 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-@@ -250,6 +250,9 @@ fun StreamsScreen(
+@@ -252,6 +252,9 @@ fun StreamsScreen(
  
      if (showLoadingScreen) return
  
@@ -602,7 +603,7 @@ index 06a740985..a4244774e 100644
      BoxWithConstraints(
          modifier = modifier
              .fillMaxSize()
-@@ -446,6 +449,7 @@ fun StreamsScreen(
+@@ -449,6 +452,7 @@ fun StreamsScreen(
              },
          )
      }
@@ -612,7 +613,7 @@ index 06a740985..a4244774e 100644
  @Composable
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/SyncedSubtitlesStreamBadge.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/SyncedSubtitlesStreamBadge.kt
 new file mode 100644
-index 000000000..caf187e9c
+index 00000000..caf187e9
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/SyncedSubtitlesStreamBadge.kt
 @@ -0,0 +1,48 @@
@@ -666,7 +667,7 @@ index 000000000..caf187e9c
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesDesktop.kt
 new file mode 100644
-index 000000000..3d50f4ebf
+index 00000000..3d50f4eb
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/SyncedSubtitlesDesktop.kt
 @@ -0,0 +1,53 @@

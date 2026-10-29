@@ -1,0 +1,173 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEnhancePrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEnhancePrefs.kt
+index a9f800f6..f7afc412 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEnhancePrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEnhancePrefs.kt
+@@ -30,10 +30,13 @@ object PlayerEnhancePrefs {
+         val eq: Int = 0,
+         /** dx.bi voice preset index into [DxSoundPreset.values]. */
+         val dx: Int = 0,
++        /** dx.bi picture enhancement: 0 off, 1 sharpen, 2 anime. */
++        val picEnhance: Int = 0,
+     )
+ 
+     val eqNames: List<String> = listOf("Flat", "Bass boost", "Voice clarity", "Treble boost")
+     val dxNames: List<String> = DxSoundPreset.names
++    val picEnhanceNames: List<String> = listOf("Off", "Sharpen", "Anime")
+ 
+     private val _values = MutableStateFlow(Values())
+     val values: StateFlow<Values> = _values.asStateFlow()
+@@ -60,6 +63,7 @@ object PlayerEnhancePrefs {
+             normalize = storage.getBoolean("normalize") ?: false,
+             eq = (storage.getInt("eq") ?: 0).coerceIn(0, eqNames.lastIndex),
+             dx = (storage.getInt("voice_preset") ?: 0).coerceIn(0, DxSoundPreset.values().lastIndex),
++            picEnhance = (storage.getInt("pic_enhance") ?: 0).coerceIn(0, picEnhanceNames.lastIndex),
+         )
+     }
+ 
+@@ -74,6 +78,7 @@ object PlayerEnhancePrefs {
+                 gainDb = it.gainDb.coerceIn(0, 20),
+                 eq = it.eq.coerceIn(0, eqNames.lastIndex),
+                 dx = it.dx.coerceIn(0, DxSoundPreset.values().lastIndex),
++                picEnhance = it.picEnhance.coerceIn(0, picEnhanceNames.lastIndex),
+             )
+         }
+         if (next == _values.value) return
+@@ -89,6 +94,7 @@ object PlayerEnhancePrefs {
+             putBoolean("normalize", next.normalize)
+             putInt("eq", next.eq)
+             putInt("voice_preset", next.dx)
++            putInt("pic_enhance", next.picEnhance)
+         }
+         onChanged?.invoke(next)
+     }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlayerEnhanceSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlayerEnhanceSettings.kt
+index 9b893684..c4b6439e 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlayerEnhanceSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlayerEnhanceSettings.kt
+@@ -44,6 +44,15 @@ internal fun PlayerEnhanceSettingsSection(isTablet: Boolean) {
+                 onCheckedChange = { on -> PlayerEnhancePrefs.update { it.copy(deband = on) } },
+             )
+             SettingsGroupDivider(isTablet = isTablet)
++            SettingsNavigationRow(
++                title = "Picture enhance",
++                description = PlayerEnhancePrefs.picEnhanceNames[values.picEnhance.coerceIn(0, PlayerEnhancePrefs.picEnhanceNames.lastIndex)],
++                isTablet = isTablet,
++                onClick = {
++                    PlayerEnhancePrefs.update { it.copy(picEnhance = (it.picEnhance + 1) % PlayerEnhancePrefs.picEnhanceNames.size) }
++                },
++            )
++            SettingsGroupDivider(isTablet = isTablet)
+             SettingsSliderRow("Volume boost", values.gainDb, { "+$it dB" }, 0..20, 1, isTablet) { v ->
+                 PlayerEnhancePrefs.update { it.copy(gainDb = v) }
+             }
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
+index c25a76a5..7968e660 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
+@@ -137,6 +137,7 @@ internal object DesktopPlayerEnhance {
+                 key == "audio.norm" -> PlayerEnhancePrefs.update { it.copy(normalize = level != 0) }
+                 key == "audio.eq" -> PlayerEnhancePrefs.update { it.copy(eq = level) }
+                 key == "audio.dx" -> PlayerEnhancePrefs.update { it.copy(dx = level) } // dx.bi voice presets
++                key == "pic.enh" -> PlayerEnhancePrefs.update { it.copy(picEnhance = level) } // dx.bi picture enhance
+                 key == "quality" -> selectQualityLocked(level)
+                 else -> return true
+             }
+@@ -150,7 +151,9 @@ internal object DesktopPlayerEnhance {
+         buildString {
+             append("{\"smart\":$smartEnhance,\"picture\":{")
+             append("\"brightness\":${v.brightness},\"contrast\":${v.contrast},\"saturation\":${v.saturation}")
+-            append(",\"gamma\":${v.gamma},\"hue\":${v.hue},\"deband\":${v.deband}},\"audio\":{")
++            append(",\"gamma\":${v.gamma},\"hue\":${v.hue},\"deband\":${v.deband},\"picEnhance\":${v.picEnhance},\"picEnhanceNames\":[")
++            PlayerEnhancePrefs.picEnhanceNames.joinTo(this, ",") { "\"$it\"" }
++            append("]},\"audio\":{")
+             append("\"gainDb\":${v.gainDb},\"normalize\":${v.normalize},\"eq\":${v.eq},\"dx\":${v.dx},\"eqNames\":[")
+             PlayerEnhancePrefs.eqNames.joinTo(this, ",") { "\"$it\"" }
+             append("],\"dxNames\":[")
+@@ -192,6 +195,39 @@ internal object DesktopPlayerEnhance {
+         setLocked("gamma", (v.gamma + if (lift) SMART_GAMMA else 0).coerceIn(-100, 100).toString())
+         setLocked("hue", v.hue.toString())
+         setLocked("deband", if (v.deband) "yes" else "no")
++        applyEnhanceShaderLocked(v.picEnhance)
++    }
++
++    /**
++     * dx.bi picture enhancement as one mpv hook shader (unsharp mask, plus line thinning for the
++     * Anime preset). The shader template ships as a resource; the active preset's constants are
++     * substituted into a cache copy that `glsl-shaders` points at. Clearing the property unloads it.
++     */
++    private fun applyEnhanceShaderLocked(mode: Int) {
++        val current = handle
++        if (current == 0L) return
++        if (mode <= 0) {
++            setLocked("glsl-shaders", "")
++            return
++        }
++        val anime = mode >= 2
++        val shader = runCatching {
++            val template = NativePlayerBridge::class.java
++                .getResourceAsStream("/player-ui/dx-enhance.glsl")?.use { it.readBytes() }
++                ?.toString(Charsets.UTF_8) ?: return
++            template
++                .replace("%THIN%", if (anime) "0.55" else "0.0")
++                .replace("%SHARPEN%", if (anime) "0.6" else "0.45")
++        }.getOrNull() ?: return
++        val target = runCatching {
++            val dir = com.nuvio.app.core.storage.DesktopStorage.cacheDir.resolve("dx-enhance")
++            java.nio.file.Files.createDirectories(dir)
++            dir.resolve(if (anime) "anime.glsl" else "sharpen.glsl")
++        }.getOrNull() ?: return
++        runCatching { java.nio.file.Files.writeString(target, shader) } ?: return
++        // Re-set through empty so mpv reloads an overwritten file.
++        setLocked("glsl-shaders", "")
++        setLocked("glsl-shaders", target.toString())
+     }
+ 
+     private fun applyAudioLocked() {
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
+index 5b71b34c..8dfd1e67 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.js
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
+@@ -1312,6 +1312,20 @@ const renderEnhanceModal = () => {
+     enhanceSlider(slider.label, Number(picture[slider.key]) || 0, slider.min, slider.max, "", value => send(slider.event, value));
+   });
+   enhanceToggle("Deband (smooth gradients)", Boolean(picture.deband), on => send("enh.pic.deband", on ? 1 : 0));
++  (Array.isArray(picture.picEnhanceNames) ? picture.picEnhanceNames : []).forEach((name, index) => {
++    const row = document.createElement("button");
++    row.type = "button";
++    row.className = `track-row${(Number(picture.picEnhance) || 0) === index ? " selected" : ""}`;
++    const text = document.createElement("span");
++    text.className = "track-label";
++    text.textContent = `Picture enhance: ${name}`;
++    row.append(text, buildCheckIcon());
++    row.addEventListener("click", event => {
++      event.stopPropagation();
++      send("enh.pic.enh", index);
++    });
++    enhanceBody.appendChild(row);
++  });
+ 
+   enhanceSection("Sound");
+   enhanceSlider("Volume boost", Number(audio.gainDb) || 0, 0, 20, " dB", value => send("enh.audio.gain", value));
+diff --git a/composeApp/src/desktopMain/resources/player-ui/dx-enhance.glsl b/composeApp/src/desktopMain/resources/player-ui/dx-enhance.glsl
+new file mode 100644
+index 00000000..bb759ce6
+--- /dev/null
++++ b/composeApp/src/desktopMain/resources/player-ui/dx-enhance.glsl
+@@ -0,0 +1,17 @@
++//!HOOK LUMA
++//!BIND HOOKED
++//!DESC dx.bi picture enhance (line thin + unsharp mask)
++// Ported from the fork's dx.bi picture enhancement: an unsharp mask, plus (Anime preset)
++// pulling line pixels toward their darkest neighbour so lines read thinner and darker.
++vec4 hook() {
++  vec2 pt = HOOKED_pt;
++  vec4 c = HOOKED_tex(HOOKED_pos);
++  vec4 n = HOOKED_tex(HOOKED_pos + vec2(0.0, -pt.y));
++  vec4 s = HOOKED_tex(HOOKED_pos + vec2(0.0, pt.y));
++  vec4 e = HOOKED_tex(HOOKED_pos + vec2(pt.x, 0.0));
++  vec4 w = HOOKED_tex(HOOKED_pos - vec2(pt.x, 0.0));
++  vec4 mn = min(n, min(s, min(e, w)));
++  vec4 blur = (n + s + e + w) * 0.25;
++  vec4 thin = mix(c, min(c, mn), %THIN%);
++  return vec4(thin.rgb + (thin.rgb - blur.rgb) * %SHARPEN%, c.a);
++}

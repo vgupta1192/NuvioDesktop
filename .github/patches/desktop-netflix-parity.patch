@@ -23,7 +23,7 @@ index 629f8dae..2517411f 100644
 +    <string name="settings_netflix_style_description">Hover preview after a short delay with a muted trailer, a muted trailer in the details hero (where supported), landscape Continue Watching cards with a progress bar, and Live TV cards with a muted channel preview. Turn off to restore your previous settings.</string>
  </resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
-index 7138794f..3d8ae60c 100644
+index 7138794f..3b6570e5 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
 @@ -1,5 +1,8 @@

@@ -24,7 +24,7 @@ index 00000000..693a01cd
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
-index b0aed88f..b197bdfc 100644
+index 4f2e223b..472fcabc 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
 @@ -28,6 +28,8 @@ internal val navigationSavedStateConfiguration = SavedStateConfiguration {
@@ -37,7 +37,7 @@ index b0aed88f..b197bdfc 100644
              subclass(EntityBrowseRoute::class, EntityBrowseRoute.serializer())
              subclass(SettingsPageRoute::class, SettingsPageRoute.serializer())
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index 2f6dd47c..53de4fe6 100644
+index b4e437a0..319f1366 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 @@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
@@ -48,7 +48,7 @@ index 2f6dd47c..53de4fe6 100644
  import androidx.compose.material.icons.filled.Home
  import androidx.compose.material.icons.rounded.Settings
  import androidx.compose.material.icons.rounded.LiveTv
-@@ -876,6 +877,23 @@ internal fun DesktopHoverSidebar(
+@@ -878,6 +879,23 @@ internal fun DesktopHoverSidebar(
                          tint = color,
                      )
                  }
@@ -73,10 +73,10 @@ index 2f6dd47c..53de4fe6 100644
                      label = stringResource(Res.string.compose_settings_page_root),
                      selected = selectedTab == AppScreenTab.Settings,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 0286ae0e..eba54ab1 100644
+index 11a6a34f..fa2c7ec5 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -121,6 +121,12 @@ import com.nuvio.app.features.home.HomeCatalogSettingsRepository
+@@ -120,6 +120,12 @@ import com.nuvio.app.features.home.HomeCatalogSettingsRepository
  import com.nuvio.app.features.home.HomeRepository
  import com.nuvio.app.features.home.buildAddonCatalogRefreshSignature
  import com.nuvio.app.features.home.components.shouldBlurContinueWatchingArtwork
@@ -89,7 +89,7 @@ index 0286ae0e..eba54ab1 100644
  import com.nuvio.app.features.library.LibraryItem
  import com.nuvio.app.features.library.LibraryRepository
  import com.nuvio.app.features.library.LibrarySection
-@@ -931,6 +937,45 @@ internal fun MainAppContent(
+@@ -945,6 +951,45 @@ internal fun MainAppContent(
              navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
          }
  
@@ -135,7 +135,7 @@ index 0286ae0e..eba54ab1 100644
          fun openExternalStreamUrl(url: String): Boolean {
              val opened = runCatching {
                  uriHandler.openUri(url)
-@@ -1393,9 +1438,22 @@ internal fun MainAppContent(
+@@ -1451,9 +1496,22 @@ internal fun MainAppContent(
                          actions = { isTabletLayout ->
                              AppTabActions(
                                  onCatalogClick = onCatalogClick,
@@ -160,7 +160,7 @@ index 0286ae0e..eba54ab1 100644
                                  },
                                  onLibraryPosterClick = { item ->
                                      navController.navigate(
-@@ -1667,6 +1725,14 @@ internal fun MainAppContent(
+@@ -1727,6 +1785,14 @@ internal fun MainAppContent(
                      val onBack = rememberGuardedPopBackStack(navController, route)
                      LiveTvScreen(onBack = onBack, onPlay = ::openLiveTvChannel)
                  }
@@ -2242,10 +2242,10 @@ index ded9279d..57bea73c 100644
          if (canReuseRequestState(forceRefresh, requestKey, lastRequestKey)) return
          lastRequestKey = requestKey
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-index d82c2b79..4c935eec 100644
+index 95e389a9..7536a820 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-@@ -1262,6 +1262,12 @@ object WatchProgressRepository {
+@@ -1322,6 +1322,12 @@ object WatchProgressRepository {
          ) {
              return
          }
@@ -2259,7 +2259,7 @@ index d82c2b79..4c935eec 100644
          val positionMs = snapshot.positionMs.coerceAtLeast(0L)
          val durationMs = snapshot.durationMs.coerceAtLeast(0L)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/navigation/Routes.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/navigation/Routes.kt
-index cdd96650..25bfe24b 100644
+index 99099829..141eecf0 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/navigation/Routes.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/navigation/Routes.kt
 @@ -40,6 +40,16 @@ data class DetailRoute(

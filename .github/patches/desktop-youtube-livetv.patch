@@ -307,10 +307,10 @@ index 00000000..e6fb99ea
 +        }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
-index 4c03fdb9..54d90c76 100644
+index 7d4b9279..7e667027 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
-@@ -229,6 +229,7 @@ private fun NativePlayerSurface(
+@@ -231,6 +231,7 @@ private fun NativePlayerSurface(
              return@LaunchedEffect
          }
          delay(16L)
@@ -318,7 +318,7 @@ index 4c03fdb9..54d90c76 100644
          controller.attach(
              sourceUrl = sourceUrl,
              sourceHeaders = playbackHeaders,
-@@ -236,7 +237,10 @@ private fun NativePlayerSurface(
+@@ -238,7 +239,10 @@ private fun NativePlayerSurface(
              initialPositionMs = initialPositionMs,
              decoderPriority = decoderPriority,
              nvidiaRtxSuperResolutionEnabled = nvidiaRtxSuperResolutionEnabled,
@@ -330,7 +330,7 @@ index 4c03fdb9..54d90c76 100644
          )
          initialPositionRequestKey?.let { key ->
              latestOnInitialPositionHandled.value(key, initialPositionMs > 0L)
-@@ -291,7 +295,11 @@ private fun NativePlayerSurface(
+@@ -293,7 +297,11 @@ private fun NativePlayerSurface(
  
      LaunchedEffect(controller) {
          while (true) {

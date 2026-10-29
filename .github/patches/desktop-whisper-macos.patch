@@ -1,5 +1,5 @@
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index 5c39b03a..693f7f97 100644
+index 500383b5..da5a0dac 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
 @@ -688,6 +688,39 @@ val buildMacosPlayerBridge = tasks.register<Exec>("buildMacosPlayerBridge") {
@@ -1724,10 +1724,10 @@ index 00000000..f7859484
 +
 +}  // extern "C"
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index 25ca5a50..cda2d40f 100644
+index 8dd429bd..58ac5796 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
-@@ -483,6 +483,7 @@ const playerToastDurationMs = 1400;
+@@ -495,6 +495,7 @@ const playerToastDurationMs = 1400;
  const autoSyncBubble = document.getElementById("autoSyncBubble");
  const autoSyncBubbleHeadline = document.getElementById("autoSyncBubbleHeadline");
  const autoSyncBubbleDetail = document.getElementById("autoSyncBubbleDetail");
@@ -1735,7 +1735,7 @@ index 25ca5a50..cda2d40f 100644
  const autoSyncBubbleDurations = { working: 600000, success: 9000, failure: 9000 };
  let autoSyncBubbleTimer = 0;
  
-@@ -507,6 +508,8 @@ const showAutoSyncBubble = (kind, message) => {
+@@ -519,6 +520,8 @@ const showAutoSyncBubble = (kind, message) => {
    const statsBlock = newlineAt >= 0 ? raw.slice(newlineAt + 1).trim() : "";
    const parts = headPart.split(" • ").map(part => part.trim()).filter(Boolean);
    const body = parts.length > 1 ? parts.slice(1) : parts;

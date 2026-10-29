@@ -37,10 +37,10 @@ index f38d5cd7..755bd891 100644
 +    )
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
-index 5d87d88c..fb4dec5d 100644
+index 1927bedf..3e38c393 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
-@@ -121,7 +121,10 @@ fun LibraryScreen(
+@@ -123,7 +123,10 @@ fun LibraryScreen(
      val uiState by remember {
          LibraryRepository.ensureLoaded()
          LibraryRepository.uiState
@@ -177,10 +177,10 @@ index 182e6308..ded9279d 100644
                      val genreExtra = catalog.genreExtra()
                      DiscoverCatalogOption(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-index 2b861b65..d82c2b79 100644
+index 6b8af13a..95e389a9 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-@@ -1255,6 +1255,13 @@ object WatchProgressRepository {
+@@ -1315,6 +1315,13 @@ object WatchProgressRepository {
          persist: Boolean,
          syncRemote: Boolean,
      ) {

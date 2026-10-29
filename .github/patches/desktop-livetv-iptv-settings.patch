@@ -221,10 +221,10 @@ index ac56ac9a..6d5d2dfb 100644
                      SettingsNavigationRow(
                          title = stringResource(Res.string.compose_settings_page_playback),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
-index 672ab5c9..db288acb 100644
+index 8da04de0..8b7d664a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
-@@ -703,6 +703,7 @@ private fun MobileSettingsScreen(
+@@ -712,6 +712,7 @@ private fun MobileSettingsScreen(
                              onAdvancedClick = { onPageChange(SettingsPage.Advanced) },
                              onNotificationsClick = { onPageChange(SettingsPage.Notifications) },
                              onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
@@ -232,7 +232,7 @@ index 672ab5c9..db288acb 100644
                              onIntegrationsClick = { onPageChange(SettingsPage.Integrations) },
                              onTrackingClick = { onPageChange(SettingsPage.TraktAuthentication) },
                              onSupportersContributorsClick = onSupportersContributorsClick,
-@@ -782,6 +783,7 @@ private fun MobileSettingsScreen(
+@@ -794,6 +795,7 @@ private fun MobileSettingsScreen(
                      isTablet = false,
                      uiState = posterCardStyleUiState,
                  )
@@ -240,7 +240,7 @@ index 672ab5c9..db288acb 100644
                  SettingsPage.Advanced -> advancedSettingsContent(
                      isTablet = false,
                      rememberLastProfileEnabled = rememberLastProfileEnabled,
-@@ -1175,6 +1177,7 @@ private fun TabletSettingsScreen(
+@@ -1190,6 +1192,7 @@ private fun TabletSettingsScreen(
                                          onAdvancedClick = { openInlinePage(SettingsPage.Advanced) },
                                          onNotificationsClick = { openInlinePage(SettingsPage.Notifications) },
                                          onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
@@ -248,7 +248,7 @@ index 672ab5c9..db288acb 100644
                                          onIntegrationsClick = { openInlinePage(SettingsPage.Integrations) },
                                          onTrackingClick = { openInlinePage(SettingsPage.TraktAuthentication) },
                                          onSupportersContributorsClick = { openInlinePage(SettingsPage.SupportersContributors) },
-@@ -1259,6 +1262,7 @@ private fun TabletSettingsScreen(
+@@ -1277,6 +1280,7 @@ private fun TabletSettingsScreen(
                                  isTablet = true,
                                  uiState = posterCardStyleUiState,
                              )

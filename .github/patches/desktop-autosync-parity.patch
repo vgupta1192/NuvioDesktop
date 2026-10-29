@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-index e666fd83..4934af0c 100644
+index 2ec04512..c81dcf1d 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 @@ -55,6 +55,11 @@ internal class AutoSyncNativePlayerController(
@@ -48,7 +48,7 @@ index e666fd83..4934af0c 100644
      }
  
      override fun setAutoSyncAppliedListener(
-@@ -189,6 +221,7 @@ internal class AutoSyncNativePlayerController(
+@@ -190,6 +222,7 @@ internal class AutoSyncNativePlayerController(
  
      /** Called when the player surface is disposed so a running analysis cannot linger. */
      fun dispose() {
@@ -56,7 +56,7 @@ index e666fd83..4934af0c 100644
          cancelAutoSync()
          appliedListener = null
          messageListener = null
-@@ -212,6 +245,23 @@ internal class AutoSyncNativePlayerController(
+@@ -213,6 +246,23 @@ internal class AutoSyncNativePlayerController(
      ) {
          AutoSyncPreferencesRepository.ensureLoaded()
          val streamUrlAtCall = sourceUrl()
@@ -80,7 +80,7 @@ index e666fd83..4934af0c 100644
          if (
              !isHttpUrl(selectedUrl) ||
              !isHttpUrl(streamUrlAtCall) ||
-@@ -261,6 +311,7 @@ internal class AutoSyncNativePlayerController(
+@@ -262,6 +312,7 @@ internal class AutoSyncNativePlayerController(
          val sourceHeadersAtStart = sourceHeaders()
          val selectedHeaders = selectedSubtitle.headers.orEmpty()
          val selectedLanguage = selectedSubtitle.language
@@ -88,7 +88,7 @@ index e666fd83..4934af0c 100644
          val selectedName = selectedSubtitle.name.orEmpty()
  
          // The subtitle is attached unsynced right away so the user reads it while the engine
-@@ -489,3 +540,12 @@ internal class AutoSyncNativePlayerController(
+@@ -490,3 +541,12 @@ internal class AutoSyncNativePlayerController(
          )
      }
  }
@@ -102,10 +102,10 @@ index e666fd83..4934af0c 100644
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 53519d66..e4146272 100644
+index 0ed7a905..a3be3a8f 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -622,6 +622,7 @@ internal class NativePlayerController(
+@@ -624,6 +624,7 @@ internal class NativePlayerController(
                  }
              }
              "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
@@ -114,10 +114,10 @@ index 53519d66..e4146272 100644
              "enh.pic.brightness", "enh.pic.contrast", "enh.pic.saturation", "enh.pic.gamma",
              "enh.pic.hue", "enh.pic.deband", "enh.audio.gain", "enh.audio.norm", "enh.audio.eq" ->
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
-index 215a478d..67b2042a 100644
+index 407df2b1..7363584c 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.html
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.html
-@@ -381,6 +381,7 @@
+@@ -394,6 +394,7 @@
                      <div class="style-control-row">
                        <button class="panel-button" id="autoSyncReload" type="button">Reload</button>
                        <button class="panel-button" id="autoSyncCapture" type="button">Capture</button>
@@ -126,10 +126,10 @@ index 215a478d..67b2042a 100644
                      <div class="stream-subtitle" id="autoSyncStatus"></div>
                      <div id="autoSyncCueList"></div>
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index 2d903955..a7478a15 100644
+index 30252521..47f35ac9 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
-@@ -102,6 +102,7 @@ const subtitleDelayReset = document.getElementById("subtitleDelayReset");
+@@ -114,6 +114,7 @@ const subtitleDelayReset = document.getElementById("subtitleDelayReset");
  const autoSyncLabel = document.getElementById("autoSyncLabel");
  const autoSyncReload = document.getElementById("autoSyncReload");
  const autoSyncCapture = document.getElementById("autoSyncCapture");
@@ -137,7 +137,7 @@ index 2d903955..a7478a15 100644
  const autoSyncStatus = document.getElementById("autoSyncStatus");
  const autoSyncCueList = document.getElementById("autoSyncCueList");
  const fontSizeLabel = document.getElementById("fontSizeLabel");
-@@ -1577,6 +1578,7 @@ const renderAutoSyncCues = () => {
+@@ -1603,6 +1604,7 @@ const renderAutoSyncCues = () => {
    autoSyncCueList.textContent = "";
    autoSyncReload.disabled = !state.hasSelectedAddonSubtitle;
    autoSyncCapture.disabled = !state.hasSelectedAddonSubtitle;
@@ -145,7 +145,7 @@ index 2d903955..a7478a15 100644
    if (!state.hasSelectedAddonSubtitle) {
      autoSyncStatus.textContent = state.selectAddonSubtitleFirstLabel || "Select an addon subtitle first";
      return;
-@@ -3145,6 +3147,10 @@ autoSyncReload.addEventListener("click", event => {
+@@ -3378,6 +3380,10 @@ autoSyncReload.addEventListener("click", event => {
    event.stopPropagation();
    send("subtitleAutoSyncReload", 0);
  });

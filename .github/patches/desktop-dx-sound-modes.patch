@@ -1,0 +1,154 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxSoundPresets.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxSoundPresets.kt
+new file mode 100644
+index 00000000..af4c88c3
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxSoundPresets.kt
+@@ -0,0 +1,30 @@
++package com.nuvio.app.features.player
++
++/**
++ * dx.bi port: Dialogue boost and Night mode audio presets for the Desktop (mpv) player.
++ * The numbers follow dx.bi's own presets (low shelf at 200 Hz, speech presence at 2.5 kHz,
++ * compressor threshold, ratio and make-up gain). They ride the player's `af` chain, which
++ * DesktopPlayerEnhance owns as the single writer.
++ */
++enum class DxSoundPreset(
++    val id: String,
++    val label: String,
++    val hint: String,
++    /** ffmpeg filters appended to the player's `af` chain; empty for [OFF]. */
++    val mpvFilters: String,
++) {
++    OFF("off", "Off", "As the stream comes.", ""),
++    DIALOGUE(
++        "dialogue", "Dialogue boost", "Raises voices and softens booming lows.",
++        "lowshelf=f=200:g=-3,equalizer=f=2500:t=q:w=1:g=5,acompressor=threshold=-26dB:ratio=3:makeup=1.4",
++    ),
++    NIGHT(
++        "night", "Late night", "Strong night compression: evens out loud and quiet scenes so you can keep the volume down.",
++        "lowshelf=f=200:g=-6,equalizer=f=2500:t=q:w=1:g=4,acompressor=threshold=-42dB:ratio=8:makeup=2.4,alimiter=limit=0.95",
++    );
++
++    companion object {
++        val names: List<String> = values().map { it.label }
++        fun forIndex(index: Int): DxSoundPreset = values()[index.coerceIn(0, values().lastIndex)]
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEnhancePrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEnhancePrefs.kt
+index ddeabeb8..a9f800f6 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEnhancePrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEnhancePrefs.kt
+@@ -28,9 +28,12 @@ object PlayerEnhancePrefs {
+         val gainDb: Int = 0,
+         val normalize: Boolean = false,
+         val eq: Int = 0,
++        /** dx.bi voice preset index into [DxSoundPreset.values]. */
++        val dx: Int = 0,
+     )
+ 
+     val eqNames: List<String> = listOf("Flat", "Bass boost", "Voice clarity", "Treble boost")
++    val dxNames: List<String> = DxSoundPreset.names
+ 
+     private val _values = MutableStateFlow(Values())
+     val values: StateFlow<Values> = _values.asStateFlow()
+@@ -56,6 +59,7 @@ object PlayerEnhancePrefs {
+             gainDb = (storage.getInt("gain_db") ?: 0).coerceIn(0, 20),
+             normalize = storage.getBoolean("normalize") ?: false,
+             eq = (storage.getInt("eq") ?: 0).coerceIn(0, eqNames.lastIndex),
++            dx = (storage.getInt("voice_preset") ?: 0).coerceIn(0, DxSoundPreset.values().lastIndex),
+         )
+     }
+ 
+@@ -69,6 +73,7 @@ object PlayerEnhancePrefs {
+                 hue = it.hue.coerceIn(-100, 100),
+                 gainDb = it.gainDb.coerceIn(0, 20),
+                 eq = it.eq.coerceIn(0, eqNames.lastIndex),
++                dx = it.dx.coerceIn(0, DxSoundPreset.values().lastIndex),
+             )
+         }
+         if (next == _values.value) return
+@@ -83,6 +88,7 @@ object PlayerEnhancePrefs {
+             putInt("gain_db", next.gainDb)
+             putBoolean("normalize", next.normalize)
+             putInt("eq", next.eq)
++            putInt("voice_preset", next.dx)
+         }
+         onChanged?.invoke(next)
+     }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlayerEnhanceSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlayerEnhanceSettings.kt
+index 8ed43fb6..9b893684 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlayerEnhanceSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlayerEnhanceSettings.kt
+@@ -65,6 +65,15 @@ internal fun PlayerEnhanceSettingsSection(isTablet: Boolean) {
+                 },
+             )
+             SettingsGroupDivider(isTablet = isTablet)
++            SettingsNavigationRow(
++                title = "Voice preset",
++                description = PlayerEnhancePrefs.dxNames[values.dx.coerceIn(0, PlayerEnhancePrefs.dxNames.lastIndex)],
++                isTablet = isTablet,
++                onClick = {
++                    PlayerEnhancePrefs.update { it.copy(dx = (it.dx + 1) % PlayerEnhancePrefs.dxNames.size) }
++                },
++            )
++            SettingsGroupDivider(isTablet = isTablet)
+             SettingsNavigationRow(
+                 title = "Reset picture and sound",
+                 description = null,
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
+index b87149d3..c25a76a5 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
+@@ -136,6 +136,7 @@ internal object DesktopPlayerEnhance {
+                 key == "audio.gain" -> PlayerEnhancePrefs.update { it.copy(gainDb = level) }
+                 key == "audio.norm" -> PlayerEnhancePrefs.update { it.copy(normalize = level != 0) }
+                 key == "audio.eq" -> PlayerEnhancePrefs.update { it.copy(eq = level) }
++                key == "audio.dx" -> PlayerEnhancePrefs.update { it.copy(dx = level) } // dx.bi voice presets
+                 key == "quality" -> selectQualityLocked(level)
+                 else -> return true
+             }
+@@ -150,8 +151,10 @@ internal object DesktopPlayerEnhance {
+             append("{\"smart\":$smartEnhance,\"picture\":{")
+             append("\"brightness\":${v.brightness},\"contrast\":${v.contrast},\"saturation\":${v.saturation}")
+             append(",\"gamma\":${v.gamma},\"hue\":${v.hue},\"deband\":${v.deband}},\"audio\":{")
+-            append("\"gainDb\":${v.gainDb},\"normalize\":${v.normalize},\"eq\":${v.eq},\"eqNames\":[")
++            append("\"gainDb\":${v.gainDb},\"normalize\":${v.normalize},\"eq\":${v.eq},\"dx\":${v.dx},\"eqNames\":[")
+             PlayerEnhancePrefs.eqNames.joinTo(this, ",") { "\"$it\"" }
++            append("],\"dxNames\":[")
++            PlayerEnhancePrefs.dxNames.joinTo(this, ",") { "\"$it\"" }
+             append("]},\"quality\":{\"selected\":").append(qualityId).append(",\"options\":[")
+             qualityOptions.joinTo(this, ",") {
+                 "{\"id\":${it.id},\"label\":\"${it.label}\",\"height\":${it.height},\"bitrate\":${it.bitrate}}"
+@@ -197,6 +200,7 @@ internal object DesktopPlayerEnhance {
+             if (v.gainDb > 0) add("volume=${v.gainDb}dB")
+             if (v.normalize) add("dynaudnorm=f=250:g=15")
+             eqPresets[v.eq.coerceIn(0, eqPresets.lastIndex)].second.takeIf { it.isNotEmpty() }?.let { add(it) }
++            DxSoundPreset.forIndex(v.dx).mpvFilters.takeIf { it.isNotEmpty() }?.let { add(it) } // dx.bi voice presets
+             if (v.gainDb > 0) add("alimiter=limit=0.95")
+         }
+         setLocked("af", if (filters.isEmpty()) "" else "lavfi=[${filters.joinToString(",")}]")
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
+index 35949f50..5b71b34c 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.js
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
+@@ -1330,6 +1330,20 @@ const renderEnhanceModal = () => {
+     });
+     enhanceBody.appendChild(row);
+   });
++  (Array.isArray(audio.dxNames) ? audio.dxNames : []).forEach((name, index) => {
++    const row = document.createElement("button");
++    row.type = "button";
++    row.className = `track-row${(Number(audio.dx) || 0) === index ? " selected" : ""}`;
++    const text = document.createElement("span");
++    text.className = "track-label";
++    text.textContent = `Voice preset: ${name}`;
++    row.append(text, buildCheckIcon());
++    row.addEventListener("click", event => {
++      event.stopPropagation();
++      send("enh.audio.dx", index);
++    });
++    enhanceBody.appendChild(row);
++  });
+ 
+   const reset = document.createElement("button");
+   reset.type = "button";

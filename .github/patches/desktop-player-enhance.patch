@@ -98,11 +98,11 @@ index 00000000..ddeabeb8
 +    private fun Int?.clampPercent(): Int = (this ?: 0).coerceIn(-100, 100)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index af8f69fb..72f48899 100644
+index 2b511ae1..fa90d0f9 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -150,6 +150,9 @@ internal fun LazyListScope.playbackSettingsContent(
-             libassRenderScale = libassRenderScale,
+@@ -154,6 +154,9 @@ internal fun LazyListScope.playbackSettingsContent(
+             libassRenderMode = libassRenderMode,
          )
      }
 +    item {
@@ -111,7 +111,7 @@ index af8f69fb..72f48899 100644
  }
  
  private fun formatStep(value: Float): String {
-@@ -231,7 +234,7 @@ fun ValueBox(
+@@ -235,7 +238,7 @@ fun ValueBox(
  }
  
  @Composable
@@ -458,7 +458,7 @@ index 00000000..3b147ac3
 +    private const val YOUTUBE_HLS_CAP_BPS = 2_500_000
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 389569a1..eaf40ed2 100644
+index f9dd084f..0ed7a905 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 @@ -343,6 +343,8 @@ internal class NativePlayerController(
@@ -503,7 +503,7 @@ index 389569a1..eaf40ed2 100644
          com.nuvio.app.features.player.generated.GeneratedSubtitlesDesktop.onPlayerHandleDisposed(current)
          com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.clearActiveHandle(current)
      }
-@@ -1783,6 +1797,8 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+@@ -1785,6 +1799,8 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
              }
              append("]}")
          }
@@ -513,12 +513,12 @@ index 389569a1..eaf40ed2 100644
          append(partyJson.encodeToString(PlayerControlPartyState.serializer(), party.withWebviewImages(onImageReady)))
          append('}')
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/composeApp/src/desktopMain/resources/player-ui/controls.css
-index 6d654dd3..5fcc0855 100644
+index 95159696..48f4c025 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.css
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
-@@ -3843,3 +3843,10 @@ svg {
-   text-overflow: ellipsis;
-   white-space: nowrap;
+@@ -3867,3 +3867,10 @@ svg {
+   align-items: center;
+   gap: 6px;
  }
 +
 +.enhance-panel .track-list { max-height: min(70vh, 560px); overflow-y: auto; }
@@ -528,10 +528,10 @@ index 6d654dd3..5fcc0855 100644
 +.enhance-value { font-variant-numeric: tabular-nums; opacity: .7; }
 +.enhance-note { padding: 4px 16px 8px; opacity: .6; font-size: 13px; }
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
-index 658ee751..1e9e9f8d 100644
+index d98aa179..407df2b1 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.html
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.html
-@@ -263,6 +263,7 @@
+@@ -266,6 +266,7 @@
              <button class="action" data-command="speed"><svg><use href="#icon-speed"></use></svg><span id="speedLabel">1x</span></button>
              <button class="action" data-command="subtitles"><svg><use href="#icon-subs"></use></svg><span id="subtitlesLabel">Subs</span></button>
              <button class="action" data-command="audio"><svg><use href="#icon-audio"></use></svg><span id="audioLabel">Audio</span></button>
@@ -539,7 +539,7 @@ index 658ee751..1e9e9f8d 100644
              <button class="action optional" id="sourcesButton" data-command="sources"><svg><use href="#icon-source"></use></svg><span id="sourcesLabel">Sources</span></button>
              <button class="action optional" id="episodesButton" data-command="episodes"><svg><use href="#icon-episodes"></use></svg><span id="episodesLabel">Episodes</span></button>
              <button class="action optional" id="chaptersButton" data-command="chapters" hidden><svg><use href="#icon-chapters"></use></svg><span id="chaptersLabel">Chapters</span></button>
-@@ -302,6 +303,12 @@
+@@ -305,6 +306,12 @@
            <div class="track-list" id="speedOptionList"></div>
          </div>
        </section>
@@ -553,7 +553,7 @@ index 658ee751..1e9e9f8d 100644
          <div class="track-panel audio-rail-panel">
            <div class="track-header" id="audioPanelTitle">Audio tracks</div>
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index 3dd7c18e..341bc3df 100644
+index 6eb69071..30252521 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
 @@ -87,6 +87,8 @@ const chaptersPanelTitle = document.getElementById("chaptersPanelTitle");
@@ -714,7 +714,7 @@ index 3dd7c18e..341bc3df 100644
  const renderAudioTrackList = () => {
    audioPanelTitle.textContent = state.audioTracksPanelTitle || "Audio Tracks";
    audioTrackList.textContent = "";
-@@ -2357,6 +2494,7 @@ const renderActiveModal = (modalOpened = false) => {
+@@ -2369,6 +2506,7 @@ const renderActiveModal = (modalOpened = false) => {
    if (activeModal === "audio") renderAudioTrackList();
    if (activeModal === "subtitles") renderSubtitleModal();
    if (activeModal === "speed") renderSpeedOptionList();
@@ -722,7 +722,7 @@ index 3dd7c18e..341bc3df 100644
    if (activeModal === "sources") renderSourceModal(modalOpened);
    if (activeModal === "episodes") renderEpisodesModal(modalOpened);
    if (activeModal === "chapters") renderChaptersModal(modalOpened);
-@@ -3148,6 +3286,11 @@ document.querySelectorAll("[data-command]").forEach(button => {
+@@ -3160,6 +3298,11 @@ document.querySelectorAll("[data-command]").forEach(button => {
        openPlayerModal("speed");
        return;
      }

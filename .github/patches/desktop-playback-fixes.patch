@@ -724,7 +724,7 @@ index 00000000..9664ed88
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
-index 54d90c76..c4f45bfa 100644
+index 7e667027..497f2025 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 @@ -1,5 +1,6 @@
@@ -734,7 +734,7 @@ index 54d90c76..c4f45bfa 100644
  import androidx.compose.foundation.background
  import androidx.compose.foundation.layout.Arrangement
  import androidx.compose.foundation.layout.Box
-@@ -229,9 +230,14 @@ private fun NativePlayerSurface(
+@@ -231,9 +232,14 @@ private fun NativePlayerSurface(
              return@LaunchedEffect
          }
          delay(16L)
@@ -844,10 +844,10 @@ index a2496cd6..d8c332a3 100644
          } finally {
              wav.delete()
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index e4146272..a4023da9 100644
+index a3be3a8f..2b8647f8 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -623,7 +623,7 @@ internal class NativePlayerController(
+@@ -625,7 +625,7 @@ internal class NativePlayerController(
              }
              "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
              "autoSyncRetry" -> com.nuvio.app.features.player.DesktopAutoSyncRetry.retry()
@@ -856,7 +856,7 @@ index e4146272..a4023da9 100644
              "enh.pic.brightness", "enh.pic.contrast", "enh.pic.saturation", "enh.pic.gamma",
              "enh.pic.hue", "enh.pic.deband", "enh.audio.gain", "enh.audio.norm", "enh.audio.eq" ->
                  com.nuvio.app.features.player.DesktopPlayerEnhance.handleEvent(type, value)
-@@ -1159,6 +1159,20 @@ internal class NativePlayerController(
+@@ -1175,6 +1175,20 @@ internal class NativePlayerController(
      override fun setSubtitleUri(url: String) {
          log.d { "setSubtitleUri ${url.toPlaybackLogKey()} handle=$handle" }
          handle.takeIf { it != 0L }?.let { current ->
@@ -1229,10 +1229,10 @@ index ca4a9478..5e071fcd 100644
 +    return ok ? JNI_TRUE : JNI_FALSE;
  }
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/composeApp/src/desktopMain/resources/player-ui/controls.css
-index af50c214..926077f1 100644
+index 48f4c025..aa7160b3 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.css
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
-@@ -3631,3 +3631,12 @@ svg {
+@@ -3874,3 +3874,12 @@ svg {
  .enhance-row input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: #fff; }
  .enhance-value { font-variant-numeric: tabular-nums; opacity: .7; }
  .enhance-note { padding: 4px 16px 8px; opacity: .6; font-size: 13px; }
@@ -1246,7 +1246,7 @@ index af50c214..926077f1 100644
 +  fill: #ffd766;
 +}
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
-index 67b2042a..6a9e6957 100644
+index 7363584c..df95c458 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.html
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.html
 @@ -26,6 +26,9 @@
@@ -1259,7 +1259,7 @@ index 67b2042a..6a9e6957 100644
      <symbol id="icon-build" viewBox="0 0 24 24">
        <path d="M22 19.59 12.41 10 14 8.41l1.17 1.17 2.83-2.83-1.17-1.17L19.66 2.75A6 6 0 0 0 12.2 10.2L2.3 20.1a1 1 0 0 0 0 1.41l.19.19a1 1 0 0 0 1.41 0l9.9-9.9A6 6 0 0 0 21.25 4.34l-2.83 2.83 1.17 1.17-2.83 2.83L15.59 10 14 11.59 20.41 18 22 19.59Z"/>
      </symbol>
-@@ -255,6 +258,7 @@
+@@ -266,6 +269,7 @@
              <button class="action" data-command="speed"><svg><use href="#icon-speed"></use></svg><span id="speedLabel">1x</span></button>
              <button class="action" data-command="subtitles"><svg><use href="#icon-subs"></use></svg><span id="subtitlesLabel">Subs</span></button>
              <button class="action" data-command="audio"><svg><use href="#icon-audio"></use></svg><span id="audioLabel">Audio</span></button>
@@ -1268,7 +1268,7 @@ index 67b2042a..6a9e6957 100644
              <button class="action optional" id="sourcesButton" data-command="sources"><svg><use href="#icon-source"></use></svg><span id="sourcesLabel">Sources</span></button>
              <button class="action optional" id="episodesButton" data-command="episodes"><svg><use href="#icon-episodes"></use></svg><span id="episodesLabel">Episodes</span></button>
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index a7478a15..25ca5a50 100644
+index 47f35ac9..8dd429bd 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
 @@ -35,6 +35,7 @@ const streamTitle = document.getElementById("streamTitle");
@@ -1279,7 +1279,7 @@ index a7478a15..25ca5a50 100644
  const speedLabel = document.getElementById("speedLabel");
  const subtitlesLabel = document.getElementById("subtitlesLabel");
  const audioLabel = document.getElementById("audioLabel");
-@@ -1289,6 +1290,7 @@ const renderEnhanceModal = () => {
+@@ -1303,6 +1304,7 @@ const renderEnhanceModal = () => {
    }
  
    enhanceSection("Picture");
@@ -1287,7 +1287,7 @@ index a7478a15..25ca5a50 100644
    enhanceSliders.forEach(slider => {
      enhanceSlider(slider.label, Number(picture[slider.key]) || 0, slider.min, slider.max, "", value => send(slider.event, value));
    });
-@@ -2648,6 +2650,9 @@ const renderChrome = () => {
+@@ -2863,6 +2865,9 @@ const renderChrome = () => {
    setText(streamTitle, state.streamTitle);
    setText(providerName, state.providerName);
    renderPlayerBadges();
@@ -1297,7 +1297,7 @@ index a7478a15..25ca5a50 100644
    resizeLabel.textContent = state.resizeModeLabel || "Fit";
    speedLabel.textContent = state.playbackSpeedLabel || "1x";
    subtitlesLabel.textContent = state.subtitlesLabel || "Subs";
-@@ -3077,6 +3082,10 @@ document.querySelectorAll("[data-command]").forEach(button => {
+@@ -3300,6 +3305,10 @@ document.querySelectorAll("[data-command]").forEach(button => {
        openPlayerModal("speed");
        return;
      }

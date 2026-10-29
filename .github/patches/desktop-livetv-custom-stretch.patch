@@ -115,7 +115,7 @@ index 98e64ada..38583fa5 100644
      resizeMode = nextMode
      lastSyncedSettingsResizeMode = nextMode
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index f704e8b8..3cdf8e07 100644
+index d28142e6..c6b04995 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 @@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
@@ -126,24 +126,24 @@ index f704e8b8..3cdf8e07 100644
  import androidx.compose.runtime.DisposableEffect
  import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.ui.graphics.Color
-@@ -561,6 +562,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
-         if (renderPlayerSurface) {
-             val surfaceSource = currentPlayerSurfaceSource
-             val sourceAvailable = surfaceSource != null
+@@ -585,6 +586,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+                 engineFailoverDisarmed = false
+                 playbackEngineOverride = null
+             }
 +            CompositionLocalProvider(LocalLiveTvWideBars provides liveTvWideBars) {
              PlatformPlayerSurface(
                  sourceUrl = surfaceSource?.sourceUrl.orEmpty(),
                  sourceAvailable = sourceAvailable,
-@@ -573,7 +575,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -597,7 +599,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                  playWhenReady = shouldPlay && sourceAvailable,
                  initialPositionMs = surfaceSource?.initialPositionMs,
                  initialPositionRequestKey = surfaceSource?.initialPositionRequestKey,
 -                resizeMode = resizeMode,
 +                resizeMode = effectiveResizeMode,
-                 playbackEngine = playbackEngineOverride,
+                 playbackEngine = playbackEngineOverride ?: resolvedAutoEngine,
                  playerControlsState = playerControlsState,
                  onPlayerControlsAction = { action -> handlePlayerControlsAction(action) },
-@@ -633,6 +635,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -660,6 +662,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                      }
                  },
              )
@@ -151,7 +151,7 @@ index f704e8b8..3cdf8e07 100644
          }
  
          AnimatedVisibility(
-@@ -742,7 +745,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(
+@@ -769,7 +772,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(
              playbackSnapshot = playbackSnapshot,
              displayedPositionMs = displayedPositionMs,
              metrics = metrics,
