@@ -1,8 +1,16 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/PersonDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/PersonDetailScreen.kt
-index c0bb9b833..505827d4c 100644
+index c0bb9b833..96d80840d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/PersonDetailScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/PersonDetailScreen.kt
-@@ -109,14 +109,6 @@ fun PersonDetailScreen(
+@@ -74,6 +74,7 @@ import com.nuvio.app.core.ui.skeleton
+ import com.nuvio.app.features.details.components.DetailPosterRailSection
+ import com.nuvio.app.features.details.components.ExpandableDescription
+ import com.nuvio.app.features.home.MetaPreview
++import com.nuvio.app.features.details.components.ownedLabelFor
+ import com.nuvio.app.features.tmdb.TmdbMetadataService
+ import com.nuvio.app.core.poster.withCustomPosterUrls
+ import com.nuvio.app.features.watched.WatchedRepository
+@@ -109,14 +110,6 @@ fun PersonDetailScreen(
          WatchedRepository.uiState
      }.collectAsStateWithLifecycle()
      val fullyWatchedSeriesKeys by WatchedRepository.fullyWatchedSeriesKeys.collectAsStateWithLifecycle()
@@ -17,7 +25,7 @@ index c0bb9b833..505827d4c 100644
      val resolvedAvatarTransitionKey = avatarTransitionKey ?: castAvatarSharedTransitionKey(personId)
  
      LaunchedEffect(personId) {
-@@ -218,6 +210,15 @@ private fun PersonDetailContent(
+@@ -218,6 +211,15 @@ private fun PersonDetailContent(
      sharedTransitionScope: SharedTransitionScope? = null,
      animatedVisibilityScope: AnimatedVisibilityScope? = null,
  ) {
@@ -33,7 +41,7 @@ index c0bb9b833..505827d4c 100644
      val posterCardStyle = rememberPosterCardStyleUiState()
      val isLandscapeShelfMode = posterCardStyle.catalogLandscapeModeEnabled
      val skeletonPosterWidth = if (isLandscapeShelfMode) {
-@@ -419,6 +420,15 @@ private fun WidePersonDetailContent(
+@@ -419,6 +421,15 @@ private fun WidePersonDetailContent(
      sharedTransitionScope: SharedTransitionScope?,
      animatedVisibilityScope: AnimatedVisibilityScope?,
  ) {
