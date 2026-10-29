@@ -1,0 +1,40 @@
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index b73b0406c..efcfafe5f 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -599,6 +599,11 @@ internal class NativePlayerController(
+     }
+ 
+     private fun handlePlayerEvent(type: String, value: Double) {
++        if (type.startsWith("sources.pin:")) { // Nuvio fork: pin stream sources (id rides the type; the bridge only carries a double)
++            com.nuvio.app.features.settings.ForkPrefs.togglePinnedSource(type.removePrefix("sources.pin:"))
++            refreshControlsForEnhance()
++            return
++        }
+         if (type.shouldLogNativeControlEvent()) {
+             log.d { "event received handle=$handle type=$type value=$value" }
+         }
+@@ -630,10 +635,6 @@ internal class NativePlayerController(
+             }
+             "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
+             "autoSyncRetry" -> com.nuvio.app.features.player.DesktopAutoSyncRetry.retry()
+-            "sources.pin" -> { // Nuvio fork: pin stream sources
+-                com.nuvio.app.features.settings.ForkPrefs.togglePinnedSource(value)
+-                refreshControlsForEnhance()
+-            }
+             "enh.sleep" -> {
+                 com.nuvio.app.features.player.SleepTimer.set(value.toInt().coerceAtLeast(0))
+                 refreshControlsForEnhance()
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
+index 52d928865..2f1e86707 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.js
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
+@@ -1910,7 +1910,7 @@ const buildSourceRow = (item, onSelect) => {
+     pin.style.cssText = "cursor:pointer;opacity:" + (item.isPinned ? ".95" : ".45") + ";font-size:15px;padding:2px 4px;";
+     pin.addEventListener("click", event => {
+       event.stopPropagation();
+-      send("sources.pin", String(item.filterId));
++      send("sources.pin:" + String(item.filterId), 0);
+     });
+     row.appendChild(pin);
+   }

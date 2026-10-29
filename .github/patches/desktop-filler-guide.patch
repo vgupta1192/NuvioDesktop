@@ -1,0 +1,192 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
+index de68c345f..f23d6d74f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
+@@ -2656,6 +2656,9 @@ private fun ConfiguredMetaSections(
+                 }
+             }
+             MetaScreenSectionKey.EPISODES -> {
++                if (hasEpisodes && com.nuvio.app.features.details.components.isFillerGuideCandidate(meta.type, meta.genres)) { // Nuvio fork: filler guide
++                    com.nuvio.app.features.details.components.DetailFillerGuide(metaId = meta.id, title = meta.name)
++                }
+                 if (hasEpisodes) {
+                     DetailSeriesContent(
+                         meta = meta,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailFillerGuide.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailFillerGuide.kt
+new file mode 100644
+index 000000000..709ff5ffb
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailFillerGuide.kt
+@@ -0,0 +1,153 @@
++package com.nuvio.app.features.details.components
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.settings.ForkPrefs
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.withContext
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.booleanOrNull
++import kotlinx.serialization.json.intOrNull
++import kotlinx.serialization.json.jsonArray
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import java.net.HttpURLConnection
++import java.net.URL
++import java.net.URLEncoder
++
++private data class FillerResult(val filler: List<Int>, val recap: List<Int>)
++
++private val fillerCache = mutableMapOf<String, FillerResult?>()
++private val fillerJson = Json { ignoreUnknownKeys = true }
++
++/** Nuvio fork: anime filler guide (MyAnimeList via Jikan) for series detail pages. */
++internal fun isFillerGuideCandidate(apiType: String?, genres: List<String>): Boolean {
++    if (apiType?.equals("movie", ignoreCase = true) == true) return false
++    return genres.any { it.equals("Anime", ignoreCase = true) || it.equals("Animation", ignoreCase = true) }
++}
++
++private fun jikanGet(url: String): String {
++    val connection = URL(url).openConnection() as HttpURLConnection
++    connection.connectTimeout = 10_000
++    connection.readTimeout = 15_000
++    return try {
++        connection.inputStream.bufferedReader().use { it.readText() }
++    } finally {
++        connection.disconnect()
++    }
++}
++
++private suspend fun loadFiller(title: String): FillerResult? {
++    synchronized(fillerCache) { if (fillerCache.containsKey(title)) return fillerCache[title] }
++    val result = withContext(Dispatchers.IO) {
++        try {
++            val query = URLEncoder.encode(title, "UTF-8")
++            val search = fillerJson.parseToJsonElement(jikanGet("https://api.jikan.moe/v4/anime?q=$query&limit=1&type=tv"))
++                .jsonObject["data"]?.jsonArray?.firstOrNull() as? JsonObject
++            val malId = search?.get("mal_id")?.jsonPrimitive?.intOrNull?.takeIf { it > 0 }
++            if (malId == null) {
++                null
++            } else {
++                val filler = mutableListOf<Int>()
++                val recap = mutableListOf<Int>()
++                var page = 1
++                while (page <= 12) {
++                    if (page > 1) delay(400)
++                    val root = fillerJson.parseToJsonElement(
++                        jikanGet("https://api.jikan.moe/v4/anime/$malId/episodes?page=$page"),
++                    ).jsonObject
++                    val data = root["data"] as? kotlinx.serialization.json.JsonArray
++                    if (data != null) {
++                        for (element in data) {
++                            val ep = element as? JsonObject ?: continue
++                            val number = ep["mal_id"]?.jsonPrimitive?.intOrNull?.takeIf { it > 0 } ?: continue
++                            if (ep["filler"]?.jsonPrimitive?.booleanOrNull == true) filler += number
++                            if (ep["recap"]?.jsonPrimitive?.booleanOrNull == true) recap += number
++                        }
++                    }
++                    val hasNext = (root["pagination"] as? JsonObject)?.get("has_next_page")?.jsonPrimitive?.booleanOrNull == true
++                    if (!hasNext) break
++                    page++
++                }
++                FillerResult(filler, recap)
++            }
++        } catch (cancelled: CancellationException) {
++            throw cancelled
++        } catch (_: Exception) {
++            null
++        }
++    }
++    synchronized(fillerCache) { fillerCache[title] = result }
++    return result
++}
++
++private fun List<Int>.asRanges(): String {
++    if (isEmpty()) return "none"
++    val sorted = distinct().sorted()
++    val parts = mutableListOf<String>()
++    var start = sorted.first()
++    var prev = start
++    for (n in sorted.drop(1)) {
++        if (n == prev + 1) {
++            prev = n
++            continue
++        }
++        parts += if (start == prev) "$start" else "$start-$prev"
++        start = n
++        prev = n
++    }
++    parts += if (start == prev) "$start" else "$start-$prev"
++    return parts.joinToString(", ")
++}
++
++@Composable
++internal fun DetailFillerGuide(metaId: String, title: String, modifier: Modifier = Modifier) {
++    val enabled by ForkPrefs.fillerGuide.value.collectAsStateWithLifecycle()
++    if (!enabled) return
++    var state by remember(metaId) { mutableStateOf<FillerResult?>(null) }
++    var done by remember(metaId) { mutableStateOf(false) }
++    LaunchedEffect(metaId) {
++        state = loadFiller(title)
++        done = true
++    }
++    val result = state
++    if (!done || result == null || (result.filler.isEmpty() && result.recap.isEmpty())) return
++    Column(
++        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
++        verticalArrangement = Arrangement.spacedBy(6.dp),
++    ) {
++        Text(text = "Filler guide", style = MaterialTheme.typography.titleMedium)
++        Text(
++            text = "Filler episodes: ${result.filler.asRanges()}",
++            style = MaterialTheme.typography.bodyMedium,
++        )
++        if (result.recap.isNotEmpty()) {
++            Text(
++                text = "Recap episodes: ${result.recap.asRanges()}",
++                style = MaterialTheme.typography.bodyMedium,
++                color = MaterialTheme.colorScheme.onSurfaceVariant,
++            )
++        }
++        Text(
++            text = "Numbers follow MyAnimeList and count from the first episode of the show.",
++            style = MaterialTheme.typography.bodySmall,
++            color = MaterialTheme.colorScheme.onSurfaceVariant,
++        )
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+index 7f4b84238..d753ecd37 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -73,6 +73,7 @@ object ForkPrefs {
+     val homeFinishSeries = BoolPref("settings/home_finish_series", true)
+     val homeVideoRowsOnly = BoolPref("settings/home_video_rows_only", true)
+     val privateViewing = BoolPref("settings/private_viewing", false)
++    val fillerGuide = BoolPref("settings/filler_guide", true)
+ 
+     private const val PINNED_SOURCES_KEY = "sources/pinned"
+ 
+@@ -110,5 +111,6 @@ object ForkPrefs {
+         homeFinishSeries.ensureLoaded()
+         homeVideoRowsOnly.ensureLoaded()
+         privateViewing.ensureLoaded()
++        fillerGuide.ensureLoaded()
+     }
+ }
