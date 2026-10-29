@@ -1,5 +1,5 @@
 name: Build NuvioDesktop Jellyfin+LiveTV (upstream release sync)
-# sync-pulse: 0.1.33-alpha 2026-10-30T10:35:00Z
+# sync-pulse: 0.1.33-alpha 2026-10-30T11:20:00Z
 # sync-pulse: 0.1.33-alpha 2026-10-29T19:30:10Z
 # sync-pulse: 0.1.33-alpha 2026-10-29T19:30:10Z
 
@@ -276,7 +276,7 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           # optional-desktop-batch5
-          for P in desktop-owned-marker desktop-crash-logs; do
+          for P in desktop-owned-marker desktop-crash-logs desktop-batch5-fixes; do
             if git apply "fork-src/.github/patches/$P.patch"; then
               echo "applied $P.patch"
             else

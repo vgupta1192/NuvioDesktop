@@ -1,0 +1,76 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/PersonDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/PersonDetailScreen.kt
+index c0bb9b833..505827d4c 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/PersonDetailScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/PersonDetailScreen.kt
+@@ -109,14 +109,6 @@ fun PersonDetailScreen(
+         WatchedRepository.uiState
+     }.collectAsStateWithLifecycle()
+     val fullyWatchedSeriesKeys by WatchedRepository.fullyWatchedSeriesKeys.collectAsStateWithLifecycle()
+-    val ownedLabels by androidx.compose.runtime.remember {
+-        kotlinx.coroutines.flow.combine(
+-            com.nuvio.app.features.library.LibraryRepository.uiState,
+-            com.nuvio.app.features.watchprogress.WatchProgressRepository.uiState,
+-        ) { library, progress ->
+-            com.nuvio.app.features.details.components.buildOwnedLabels(library.items, progress.entries)
+-        }
+-    }.collectAsStateWithLifecycle(emptyMap()) // Nuvio fork: owned marker
+     val resolvedAvatarTransitionKey = avatarTransitionKey ?: castAvatarSharedTransitionKey(personId)
+ 
+     LaunchedEffect(personId) {
+@@ -218,6 +210,15 @@ private fun PersonDetailContent(
+     sharedTransitionScope: SharedTransitionScope? = null,
+     animatedVisibilityScope: AnimatedVisibilityScope? = null,
+ ) {
++    val ownedLabels by androidx.compose.runtime.remember {
++        kotlinx.coroutines.flow.combine(
++            com.nuvio.app.features.library.LibraryRepository.uiState,
++            com.nuvio.app.features.watchprogress.WatchProgressRepository.uiState,
++        ) { library, progress ->
++            com.nuvio.app.features.details.components.buildOwnedLabels(library.items, progress.entries)
++        }
++    }.collectAsStateWithLifecycle(emptyMap()) // Nuvio fork: owned marker
++
+     val posterCardStyle = rememberPosterCardStyleUiState()
+     val isLandscapeShelfMode = posterCardStyle.catalogLandscapeModeEnabled
+     val skeletonPosterWidth = if (isLandscapeShelfMode) {
+@@ -419,6 +420,15 @@ private fun WidePersonDetailContent(
+     sharedTransitionScope: SharedTransitionScope?,
+     animatedVisibilityScope: AnimatedVisibilityScope?,
+ ) {
++    val ownedLabels by androidx.compose.runtime.remember {
++        kotlinx.coroutines.flow.combine(
++            com.nuvio.app.features.library.LibraryRepository.uiState,
++            com.nuvio.app.features.watchprogress.WatchProgressRepository.uiState,
++        ) { library, progress ->
++            com.nuvio.app.features.details.components.buildOwnedLabels(library.items, progress.entries)
++        }
++    }.collectAsStateWithLifecycle(emptyMap()) // Nuvio fork: owned marker
++
+     Row(
+         modifier = Modifier
+             .fillMaxSize()
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+index 3b99c2a0d..856d5c2e0 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+@@ -14,6 +14,7 @@ import androidx.compose.runtime.rememberCoroutineScope
+ import androidx.compose.runtime.saveable.rememberSaveable
+ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.dp
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import com.nuvio.app.core.ui.DialogButton
+ import com.nuvio.app.core.ui.DialogButtons
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.kt
+index ca1029f23..7b0dae81f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.kt
+@@ -1,7 +1,7 @@
+ package com.nuvio.app.features.settings
+ 
+ /** Nuvio fork: platform crash-log access (desktop writes files; mobile returns nothing). */
+-expect object CrashLogPlatform {
++internal expect object CrashLogPlatform {
+     val available: Boolean
+     fun files(): List<String>
+     fun read(name: String): String?
