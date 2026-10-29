@@ -1,0 +1,200 @@
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.android.kt
+new file mode 100644
+index 000000000..283318f43
+--- /dev/null
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.android.kt
+@@ -0,0 +1,8 @@
++package com.nuvio.app.features.settings
++
++internal actual object CrashLogPlatform {
++    actual val available: Boolean = false
++    actual fun files(): List<String> = emptyList()
++    actual fun read(name: String): String? = null
++    actual fun clear() = Unit
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+index cf8a9d46b..3b99c2a0d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+@@ -84,6 +84,62 @@ internal fun LazyListScope.advancedSettingsContent(
+             }
+         }
+     }
++    // Nuvio fork: crash log viewer
++    if (CrashLogPlatform.available) {
++        item {
++            var showCrashLogs by remember { mutableStateOf(false) }
++            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
++            SettingsSection(
++                title = "Crash logs",
++                isTablet = isTablet,
++            ) {
++                SettingsGroup(isTablet = isTablet) {
++                    SettingsNavigationRow(
++                        title = "Crash logs",
++                        description = if (CrashLogPlatform.files().isEmpty()) {
++                            "No crash logs recorded."
++                        } else {
++                            "${CrashLogPlatform.files().size} recorded. The newest is shown; report it if you hit a bug."
++                        },
++                        isTablet = isTablet,
++                        onClick = { showCrashLogs = true },
++                    )
++                }
++            }
++            if (showCrashLogs) {
++                val names = remember(showCrashLogs) { CrashLogPlatform.files() }
++                val latest = names.firstOrNull()?.let { CrashLogPlatform.read(it) }
++                androidx.compose.material3.AlertDialog(
++                    onDismissRequest = { showCrashLogs = false },
++                    confirmButton = {
++                        androidx.compose.material3.TextButton(onClick = {
++                            latest?.let { text ->
++                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(text))
++                            }
++                        }) { Text("Copy latest") }
++                    },
++                    dismissButton = {
++                        androidx.compose.material3.TextButton(onClick = {
++                            CrashLogPlatform.clear()
++                            showCrashLogs = false
++                        }) { Text("Clear all") }
++                    },
++                    title = { Text("Crash logs") },
++                    text = {
++                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
++                            Text(names.joinToString("\n"))
++                            if (latest != null) {
++                                Text(
++                                    text = latest.take(4000),
++                                    style = MaterialTheme.typography.bodySmall,
++                                )
++                            }
++                        }
++                    },
++                )
++            }
++        }
++    }
+     // Nuvio fork: DNS over HTTPS picker
+     item {
+         SettingsSection(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.kt
+new file mode 100644
+index 000000000..ca1029f23
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.kt
+@@ -0,0 +1,9 @@
++package com.nuvio.app.features.settings
++
++/** Nuvio fork: platform crash-log access (desktop writes files; mobile returns nothing). */
++expect object CrashLogPlatform {
++    val available: Boolean
++    fun files(): List<String>
++    fun read(name: String): String?
++    fun clear()
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
+index b9aaa1773..dd80138e2 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
+@@ -62,6 +62,7 @@ fun main(args: Array<String>) {
+     com.nuvio.app.features.player.autosync.AutoSyncPreferencesPlatform.install() // AutoSync hook: mobile-style rows persist on desktop
+     com.nuvio.app.features.player.DesktopPlayerEnhance.install() // Nuvio fork: picture & sound prefs
+     com.nuvio.app.features.settings.installForkPrefs() // Nuvio fork: shared fork prefs
++    com.nuvio.app.features.settings.DesktopCrashLogs.install() // Nuvio fork: crash log capture
+     com.nuvio.app.features.settings.KeyboardPointerHider.install() // Nuvio fork: hide pointer while keyboard browsing
+     configureDesktopQuickJsLibrary()
+     installSeekrDesktopPreferences()
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.desktop.kt
+new file mode 100644
+index 000000000..4aacc0f05
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.desktop.kt
+@@ -0,0 +1,13 @@
++package com.nuvio.app.features.settings
++
++internal actual object CrashLogPlatform {
++    actual val available: Boolean = true
++    actual fun files(): List<String> = DesktopCrashLogs.files().map { it.name }
++    actual fun read(name: String): String? =
++        DesktopCrashLogs.files().firstOrNull { it.name == name }?.let { file ->
++            runCatching { file.readText() }.getOrNull()
++        }
++    actual fun clear() {
++        DesktopCrashLogs.files().forEach { runCatching { it.delete() } }
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DesktopCrashLogs.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DesktopCrashLogs.desktop.kt
+new file mode 100644
+index 000000000..926971803
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DesktopCrashLogs.desktop.kt
+@@ -0,0 +1,53 @@
++package com.nuvio.app.features.settings
++
++import java.io.File
++import java.io.PrintWriter
++import java.io.StringWriter
++import java.time.Instant
++
++/**
++ * Nuvio fork: crash log capture for the desktop app. An uncaught exception handler writes the
++ * stack trace to <data>/crash-logs/crash-<timestamp>.txt (keeping the newest few) and then
++ * delegates to the previous handler so normal crash reporting still runs.
++ */
++internal object DesktopCrashLogs {
++    private const val KEEP = 5
++
++    fun dir(): File {
++        val base = System.getProperty("compose.application.resources.dir")
++            ?.let { File(it).parentFile }
++            ?: File(System.getProperty("user.home"), ".local/share/nuviojellyfintv")
++        return File(base, "crash-logs")
++    }
++
++    fun files(): List<File> =
++        dir().listFiles { f -> f.name.startsWith("crash-") && f.name.endsWith(".txt") }
++            ?.sortedByDescending { it.name }
++            .orEmpty()
++
++    fun install() {
++        val previous = Thread.getDefaultUncaughtExceptionHandler()
++        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
++            runCatching {
++                val d = dir()
++                d.mkdirs()
++                val stamp = Instant.now().toString().replace(":", "-")
++                val out = File(d, "crash-$stamp.txt")
++                val sw = StringWriter()
++                throwable.printStackTrace(PrintWriter(sw))
++                out.writeText(
++                    buildString {
++                        appendLine("time: ${Instant.now()}")
++                        appendLine("thread: ${thread.name}")
++                        appendLine("version: ${System.getProperty("nuvio.version") ?: "unknown"}")
++                        appendLine()
++                        appendLine(sw.toString())
++                    },
++                )
++                // keep only the newest few
++                files().drop(KEEP).forEach { runCatching { it.delete() } }
++            }
++            previous?.uncaughtException(thread, throwable)
++        }
++    }
++}
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.ios.kt
+new file mode 100644
+index 000000000..283318f43
+--- /dev/null
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/CrashLogPlatform.ios.kt
+@@ -0,0 +1,8 @@
++package com.nuvio.app.features.settings
++
++internal actual object CrashLogPlatform {
++    actual val available: Boolean = false
++    actual fun files(): List<String> = emptyList()
++    actual fun read(name: String): String? = null
++    actual fun clear() = Unit
++}

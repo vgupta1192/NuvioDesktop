@@ -1,0 +1,167 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/PersonDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/PersonDetailScreen.kt
+index 2b979232e..c0bb9b833 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/PersonDetailScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/PersonDetailScreen.kt
+@@ -109,6 +109,14 @@ fun PersonDetailScreen(
+         WatchedRepository.uiState
+     }.collectAsStateWithLifecycle()
+     val fullyWatchedSeriesKeys by WatchedRepository.fullyWatchedSeriesKeys.collectAsStateWithLifecycle()
++    val ownedLabels by androidx.compose.runtime.remember {
++        kotlinx.coroutines.flow.combine(
++            com.nuvio.app.features.library.LibraryRepository.uiState,
++            com.nuvio.app.features.watchprogress.WatchProgressRepository.uiState,
++        ) { library, progress ->
++            com.nuvio.app.features.details.components.buildOwnedLabels(library.items, progress.entries)
++        }
++    }.collectAsStateWithLifecycle(emptyMap()) // Nuvio fork: owned marker
+     val resolvedAvatarTransitionKey = avatarTransitionKey ?: castAvatarSharedTransitionKey(personId)
+ 
+     LaunchedEffect(personId) {
+@@ -344,6 +352,7 @@ private fun PersonDetailContent(
+                                     fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
+                                     headerHorizontalPadding = 20.dp,
+                                     onPosterClick = onOpenMeta,
++                                    ownedLabelFor = { item -> ownedLabels.ownedLabelFor(item) },
+                                 )
+                             }
+ 
+@@ -356,6 +365,7 @@ private fun PersonDetailContent(
+                                     fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
+                                     headerHorizontalPadding = 20.dp,
+                                     onPosterClick = onOpenMeta,
++                                    ownedLabelFor = { item -> ownedLabels.ownedLabelFor(item) },
+                                 )
+                             }
+ 
+@@ -368,6 +378,7 @@ private fun PersonDetailContent(
+                                     fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
+                                     headerHorizontalPadding = 20.dp,
+                                     onPosterClick = onOpenMeta,
++                                    ownedLabelFor = { item -> ownedLabels.ownedLabelFor(item) },
+                                 )
+                             }
+ 
+@@ -452,6 +463,7 @@ private fun WidePersonDetailContent(
+                         fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
+                         headerHorizontalPadding = 0.dp,
+                         onPosterClick = onOpenMeta,
++                        ownedLabelFor = { item -> ownedLabels.ownedLabelFor(item) },
+                     )
+                 }
+ 
+@@ -463,6 +475,7 @@ private fun WidePersonDetailContent(
+                         fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
+                         headerHorizontalPadding = 0.dp,
+                         onPosterClick = onOpenMeta,
++                        ownedLabelFor = { item -> ownedLabels.ownedLabelFor(item) },
+                     )
+                 }
+ 
+@@ -474,6 +487,7 @@ private fun WidePersonDetailContent(
+                         fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
+                         headerHorizontalPadding = 0.dp,
+                         onPosterClick = onOpenMeta,
++                        ownedLabelFor = { item -> ownedLabels.ownedLabelFor(item) },
+                     )
+                 }
+             }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailPosterRailSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailPosterRailSection.kt
+index 5502c3b71..154db6b73 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailPosterRailSection.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailPosterRailSection.kt
+@@ -1,5 +1,7 @@
+ package com.nuvio.app.features.details.components
+ 
++import androidx.compose.foundation.background
++import androidx.compose.ui.draw.clip
+ import androidx.compose.foundation.layout.PaddingValues
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.fillMaxWidth
+@@ -48,6 +50,7 @@ fun DetailPosterRailSection(
+     sourceLabel: String? = null,
+     onPosterClick: ((MetaPreview) -> Unit)? = null,
+     onPosterLongClick: ((MetaPreview) -> Unit)? = null,
++    ownedLabelFor: ((MetaPreview) -> String?)? = null, // Nuvio fork: owned marker
+ ) {
+     if (items.isEmpty()) return
+     val posterCardStyle = rememberPosterCardStyleUiState()
+@@ -93,18 +96,34 @@ fun DetailPosterRailSection(
+                 val cardItem = remember(item, localizedBackdrop.url) {
+                     localizedBackdrop.url?.let { item.copy(banner = it) } ?: item
+                 }
+-                HomePosterCard(
+-                    item = cardItem,
+-                    useLandscapeBackdropMode = landscape,
+-                    showLandscapeOverlay = false,
+-                    isWatched = WatchingState.isPosterWatched(
+-                        watchedKeys = watchedKeys,
+-                        item = item,
+-                        fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
+-                    ),
+-                    onClick = onPosterClick?.let { { it(item) } },
+-                    onLongClick = onPosterLongClick?.let { { it(item) } },
+-                )
++                val ownedLabel = ownedLabelFor?.invoke(item) // Nuvio fork: owned marker
++                androidx.compose.foundation.layout.Box {
++                    HomePosterCard(
++                        item = cardItem,
++                        useLandscapeBackdropMode = landscape,
++                        showLandscapeOverlay = false,
++                        isWatched = WatchingState.isPosterWatched(
++                            watchedKeys = watchedKeys,
++                            item = item,
++                            fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
++                        ),
++                        onClick = onPosterClick?.let { { it(item) } },
++                        onLongClick = onPosterLongClick?.let { { it(item) } },
++                    )
++                    if (ownedLabel != null) {
++                        Text(
++                            text = ownedLabel,
++                            style = MaterialTheme.typography.labelSmall,
++                            color = androidx.compose.ui.graphics.Color.White,
++                            modifier = Modifier
++                                .align(androidx.compose.ui.Alignment.BottomStart)
++                                .padding(start = 6.dp, bottom = 6.dp)
++                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
++                                .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.72f))
++                                .padding(horizontal = 6.dp, vertical = 2.dp),
++                        )
++                    }
++                }
+             }
+         }
+ 
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/OwnedTitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/OwnedTitles.kt
+new file mode 100644
+index 000000000..10cb39b60
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/OwnedTitles.kt
+@@ -0,0 +1,27 @@
++package com.nuvio.app.features.details.components
++
++import com.nuvio.app.features.home.MetaPreview
++import com.nuvio.app.features.library.LibraryItem
++import com.nuvio.app.features.watchprogress.WatchProgressEntry
++
++/**
++ * Nuvio fork: "In library" / "Watching" labels for the cast filmography, keyed by id and by
++ * folded title (TMDB credits use TMDB ids while library and progress use other id spaces, so
++ * the title is the practical match). Watching wins over In library.
++ */
++internal fun ownedKeys(id: String, title: String): List<String> =
++    listOf(id, title.lowercase().filter { it.isLetterOrDigit() }).filter { it.isNotBlank() }
++
++internal fun buildOwnedLabels(
++    library: List<LibraryItem>,
++    progress: List<WatchProgressEntry>,
++): Map<String, String> {
++    val labels = HashMap<String, String>()
++    library.forEach { entry -> ownedKeys(entry.id, entry.name).forEach { labels[it] = "In library" } }
++    progress.filterNot { it.isEffectivelyCompleted }
++        .forEach { entry -> ownedKeys(entry.parentMetaId, entry.title).forEach { labels[it] = "Watching" } }
++    return labels
++}
++
++internal fun Map<String, String>.ownedLabelFor(item: MetaPreview): String? =
++    ownedKeys(item.id, item.name).firstNotNullOfOrNull { this[it] }
