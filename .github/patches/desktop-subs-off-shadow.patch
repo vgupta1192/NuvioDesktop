@@ -1,0 +1,73 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
+index ca4838529..fa530b3ab 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
+@@ -244,6 +244,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
+     preferredAudioTargets: List<String>,
+ ) {
+     if (isUserExplicitSubtitleSelection) return
++    if (com.nuvio.app.features.settings.ForkPrefs.subtitlesStartOff.current()) return // Nuvio fork: subtitles start off
+ 
+     val preferredSubtitleLanguage = normalizeLanguageCode(
+         playerSettingsUiState.preferredSubtitleLanguage,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+new file mode 100644
+index 000000000..99a51fa34
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -0,0 +1,31 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++
++/** Nuvio fork: subtitle appearance and startup behaviour toggles (desktop store backed). */
++@Composable
++internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
++    val shadow by ForkPrefs.subtitleShadow.value.collectAsStateWithLifecycle()
++    val subsOff by ForkPrefs.subtitlesStartOff.value.collectAsStateWithLifecycle()
++    SettingsSection(title = "Subtitles", isTablet = isTablet) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsSwitchRow(
++                title = "Subtitle shadow",
++                description = "Draw a soft drop shadow behind subtitle text. Applies to the next video.",
++                checked = shadow,
++                isTablet = isTablet,
++                onCheckedChange = ForkPrefs.subtitleShadow::set,
++            )
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSwitchRow(
++                title = "Subtitles start off",
++                description = "Never turn subtitles on by themselves. You can still pick a track in the player.",
++                checked = subsOff,
++                isTablet = isTablet,
++                onCheckedChange = ForkPrefs.subtitlesStartOff::set,
++            )
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+index 8961e2e59..f54fa6a92 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+@@ -157,6 +157,7 @@ internal fun LazyListScope.playbackSettingsContent(
+     item {
+         PlayerEnhanceSettingsSection(isTablet = isTablet) // Nuvio fork: desktop picture & sound
+         DxRememberSettingsSection(isTablet = isTablet) // Nuvio fork: remember speed + number keys
++        ForkPlayerPrefsSettingsSection(isTablet = isTablet) // Nuvio fork: subtitle shadow + start off
+     }
+ }
+ 
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
+index 61dda8a08..fd5fd0da3 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
+@@ -192,6 +192,7 @@ internal object DesktopPlayerEnhance {
+         applyPictureLocked()
+         applyAudioLocked()
+         if (DxRemember.available && DxRemember.rememberSpeed.value) setLocked("speed", DxRemember.speedToApply().toString()) // Nuvio fork: remember speed
++        setLocked("sub-shadow-offset", if (com.nuvio.app.features.settings.ForkPrefs.subtitleShadow.current()) "3" else "0") // Nuvio fork: subtitle shadow
+     }
+ 
+     private fun applyPictureLocked() {

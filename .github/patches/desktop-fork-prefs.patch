@@ -1,0 +1,115 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+new file mode 100644
+index 000000000..f2273252a
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -0,0 +1,73 @@
++package com.nuvio.app.features.settings
++
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++
++/**
++ * Small fork settings kept in the platform store, shared by several fork features.
++ * The desktop engine installs [Storage] at app start; elsewhere everything stays default.
++ */
++object ForkPrefs {
++    interface Storage {
++        fun getBoolean(key: String): Boolean?
++        fun putBoolean(key: String, value: Boolean)
++        fun getString(key: String): String?
++        fun putString(key: String, value: String)
++    }
++
++    var storage: Storage? = null
++        private set
++
++    class BoolPref(private val key: String, private val default: Boolean) {
++        private val _value = MutableStateFlow(default)
++        val value: StateFlow<Boolean> = _value.asStateFlow()
++
++        fun ensureLoaded() {
++            val stored = storage?.getBoolean(key) ?: return
++            _value.value = stored
++        }
++
++        fun current(): Boolean {
++            ensureLoaded()
++            return _value.value
++        }
++
++        fun set(enabled: Boolean) {
++            _value.value = enabled
++            storage?.putBoolean(key, enabled)
++        }
++    }
++
++    class StringPref(private val key: String, private val default: String) {
++        private val _value = MutableStateFlow(default)
++        val value: StateFlow<String> = _value.asStateFlow()
++
++        fun ensureLoaded() {
++            val stored = storage?.getString(key) ?: return
++            _value.value = stored
++        }
++
++        fun current(): String {
++            ensureLoaded()
++            return _value.value
++        }
++
++        fun set(text: String) {
++            _value.value = text
++            storage?.putString(key, text)
++        }
++    }
++
++    val subtitleShadow = BoolPref("settings/subtitle_shadow", false)
++    val subtitlesStartOff = BoolPref("settings/subtitles_start_off", false)
++    val skipFeedback = BoolPref("settings/skip_feedback", true)
++
++    /** Called once from the desktop engine before any UI reads a pref. */
++    fun install(newStorage: Storage) {
++        storage = newStorage
++        subtitleShadow.ensureLoaded()
++        subtitlesStartOff.ensureLoaded()
++        skipFeedback.ensureLoaded()
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
+index 0107cce5d..66efbf1df 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
+@@ -61,6 +61,7 @@ fun main(args: Array<String>) {
+     SentryInitializer.start()
+     com.nuvio.app.features.player.autosync.AutoSyncPreferencesPlatform.install() // AutoSync hook: mobile-style rows persist on desktop
+     com.nuvio.app.features.player.DesktopPlayerEnhance.install() // Nuvio fork: picture & sound prefs
++    com.nuvio.app.features.settings.installForkPrefs() // Nuvio fork: shared fork prefs
+     configureDesktopQuickJsLibrary()
+     installSeekrDesktopPreferences()
+     configureDesktopChrome()
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/ForkPrefsPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/ForkPrefsPlatform.desktop.kt
+new file mode 100644
+index 000000000..3d2192dce
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/ForkPrefsPlatform.desktop.kt
+@@ -0,0 +1,18 @@
++package com.nuvio.app.features.settings
++
++import com.nuvio.app.core.storage.DesktopStorage
++
++/** Desktop backing store for [ForkPrefs]; called once from Main at app start. */
++internal fun installForkPrefs() {
++    val store = DesktopStorage.store("nuvio_fork_prefs")
++    ForkPrefs.install(object : ForkPrefs.Storage {
++        override fun getBoolean(key: String): Boolean? = store.getString(key)?.let { it == "1" }
++        override fun putBoolean(key: String, value: Boolean) {
++            store.putString(key, if (value) "1" else "0")
++        }
++        override fun getString(key: String): String? = store.getString(key)
++        override fun putString(key: String, value: String) {
++            store.putString(key, value)
++        }
++    })
++}

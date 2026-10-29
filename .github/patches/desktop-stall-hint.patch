@@ -1,0 +1,21 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
+index ee061fd96..ce6249cef 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
+@@ -335,6 +335,16 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
+         if (!playbackSnapshot.isLoading) loadChaptersIfNeeded()
+     }
+ 
++    // Nuvio fork: a long buffering stall suggests picking another stream, once per stall.
++    LaunchedEffect(playbackSnapshot.isLoading, playerController) {
++        if (!playbackSnapshot.isLoading || playerController == null) return@LaunchedEffect
++        delay(20_000L)
++        if (playbackSnapshot.isLoading) {
++            playerNotificationMessage = "Playback is stalling. Open sources and try another stream."
++            playerNotificationToken += 1L
++        }
++    }
++
+     LaunchedEffect(
+         playerController,
+         playbackSnapshot.isLoading,

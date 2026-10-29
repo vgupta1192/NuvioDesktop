@@ -1,0 +1,183 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ImdbEpisodeRatingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ImdbEpisodeRatingsRepository.kt
+index 6a32a8747..091c54c90 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ImdbEpisodeRatingsRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ImdbEpisodeRatingsRepository.kt
+@@ -82,7 +82,14 @@ object ImdbEpisodeRatingsRepository {
+         }
+ 
+         if (tmdbId != null) {
+-            return toRatingsMap(SeriesGraphApi.getSeasonRatings(tmdbId))
++            val graph = toRatingsMap(SeriesGraphApi.getSeasonRatings(tmdbId))
++            if (graph.isNotEmpty()) return graph
++        }
++
++        // Nuvio fork: OMDb fallback with the user's own API key
++        val omdbKey = com.nuvio.app.features.settings.ForkPrefs.omdbKey.current()
++        if (!imdbId.isNullOrBlank() && omdbKey.isNotBlank()) {
++            return OmdbEpisodeRatings.fetch(imdbId, omdbKey)
+         }
+ 
+         return emptyMap()
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/OmdbEpisodeRatings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/OmdbEpisodeRatings.kt
+new file mode 100644
+index 000000000..99857783d
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/OmdbEpisodeRatings.kt
+@@ -0,0 +1,65 @@
++package com.nuvio.app.features.details
++
++import co.touchlab.kermit.Logger
++import com.nuvio.app.features.addons.httpGetText
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.withContext
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.SerialName
++import kotlinx.serialization.json.Json
++
++@Serializable
++private data class OmdbHeadResponse(
++    @SerialName("totalSeasons") val totalSeasons: String? = null,
++    @SerialName("Response") val response: String = "False",
++)
++
++@Serializable
++private data class OmdbEpisodeEntry(
++    @SerialName("Episode") val episode: String? = null,
++    @SerialName("imdbRating") val imdbRating: String? = null,
++)
++
++@Serializable
++private data class OmdbSeasonResponse(
++    @SerialName("Episodes") val episodes: List<OmdbEpisodeEntry> = emptyList(),
++)
++
++/**
++ * Nuvio fork: the user's own OMDb API key as a fallback source for episode ratings, used only
++ * when IMDb (Tapframe) and SeriesGraph have nothing for a series.
++ */
++internal object OmdbEpisodeRatings {
++    private val log = Logger.withTag("OmdbEpisodeRatings")
++    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
++
++    suspend fun fetch(imdbId: String, apiKey: String): Map<Pair<Int, Int>, Double> = withContext(Dispatchers.Default) {
++        if (apiKey.isBlank()) return@withContext emptyMap()
++        val out = mutableMapOf<Pair<Int, Int>, Double>()
++        try {
++            val head = json.decodeFromString<OmdbHeadResponse>(
++                httpGetText("https://www.omdbapi.com/?i=$imdbId&apikey=$apiKey"),
++            )
++            val totalSeasons = head.totalSeasons?.toIntOrNull()
++                ?.takeIf { head.response.equals("True", ignoreCase = true) }
++                ?: return@withContext emptyMap()
++            for (season in 1..minOf(totalSeasons, 40)) {
++                val root = runCatching {
++                    json.decodeFromString<OmdbSeasonResponse>(
++                        httpGetText("https://www.omdbapi.com/?i=$imdbId&Season=$season&apikey=$apiKey"),
++                    )
++                }.getOrNull() ?: continue
++                root.episodes.forEach { ep ->
++                    val number = ep.episode?.toIntOrNull() ?: return@forEach
++                    val rating = ep.imdbRating?.toDoubleOrNull() ?: return@forEach
++                    if (rating > 0.0) out[season to number] = rating
++                }
++            }
++        } catch (cancelled: kotlinx.coroutines.CancellationException) {
++            throw cancelled
++        } catch (e: Exception) {
++            log.w { "OMDb episode ratings failed for $imdbId: ${e.message}" }
++        }
++        out
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index 67f3dfd0d..10ed492ff 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -1,12 +1,19 @@
+ package com.nuvio.app.features.settings
+ 
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.getValue
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.setValue
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ 
+ /** Nuvio fork: subtitle appearance and startup behaviour toggles (desktop store backed). */
+ @Composable
+ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
++    var showOmdbDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+     val shadow by ForkPrefs.subtitleShadow.value.collectAsStateWithLifecycle()
+     val subsOff by ForkPrefs.subtitlesStartOff.value.collectAsStateWithLifecycle()
+     SettingsSection(title = "Subtitles", isTablet = isTablet) {
+@@ -29,6 +36,48 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+         }
+     }
+     val skipFeedback by ForkPrefs.skipFeedback.value.collectAsStateWithLifecycle()
++    SettingsSection(title = "Ratings fallback", isTablet = isTablet) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsNavigationRow(
++                title = "OMDb API key",
++                description = "Optional. Used only when IMDb and SeriesGraph have no ratings for a series.",
++                isTablet = isTablet,
++                trailingContent = {
++                    Text(
++                        if (ForkPrefs.omdbKey.value.value.isBlank()) "Not set" else "Set",
++                        style = MaterialTheme.typography.labelLarge,
++                        color = MaterialTheme.colorScheme.primary,
++                    )
++                },
++                onClick = { showOmdbDialog = true },
++            )
++        }
++    }
++    if (showOmdbDialog) {
++        var draft by remember { mutableStateOf(ForkPrefs.omdbKey.value.value) }
++        androidx.compose.material3.AlertDialog(
++            onDismissRequest = { showOmdbDialog = false },
++            confirmButton = {
++                androidx.compose.material3.TextButton(onClick = {
++                    ForkPrefs.omdbKey.set(draft.trim())
++                    showOmdbDialog = false
++                }) { Text("Save") }
++            },
++            dismissButton = {
++                androidx.compose.material3.TextButton(onClick = { showOmdbDialog = false }) { Text("Cancel") }
++            },
++            title = { Text("OMDb API key") },
++            text = {
++                androidx.compose.material3.OutlinedTextField(
++                    value = draft,
++                    onValueChange = { draft = it },
++                    singleLine = true,
++                    label = { Text("Free key from omdbapi.com/apikey.aspx") },
++                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
++                )
++            },
++        )
++    }
+     SettingsSection(title = "Skipping", isTablet = isTablet) {
+         SettingsGroup(isTablet = isTablet) {
+             SettingsSwitchRow(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+index f2273252a..2afc92325 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -62,6 +62,7 @@ object ForkPrefs {
+     val subtitleShadow = BoolPref("settings/subtitle_shadow", false)
+     val subtitlesStartOff = BoolPref("settings/subtitles_start_off", false)
+     val skipFeedback = BoolPref("settings/skip_feedback", true)
++    val omdbKey = StringPref("settings/omdb_key", "")
+ 
+     /** Called once from the desktop engine before any UI reads a pref. */
+     fun install(newStorage: Storage) {
+@@ -69,5 +70,6 @@ object ForkPrefs {
+         subtitleShadow.ensureLoaded()
+         subtitlesStartOff.ensureLoaded()
+         skipFeedback.ensureLoaded()
++        omdbKey.ensureLoaded()
+     }
+ }

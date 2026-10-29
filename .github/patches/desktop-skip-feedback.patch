@@ -1,0 +1,290 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt
+index 36f5ef695..2ce123eaa 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt
+@@ -15,6 +15,7 @@ import com.nuvio.app.features.p2p.P2pLoadingStatus
+ import com.nuvio.app.features.player.skip.NextEpisodeCard
+ import com.nuvio.app.features.player.skip.NextEpisodeInfo
+ import com.nuvio.app.features.player.skip.SkipIntroButton
++import com.nuvio.app.features.player.skip.SkipFeedbackPrompt
+ import com.nuvio.app.features.player.skip.SkipInterval
+ 
+ @Composable
+@@ -48,6 +49,14 @@ internal fun BoxScope.PlayerPlaybackOverlays(
+     controlsVisible: Boolean,
+     onSkipInterval: (SkipInterval) -> Unit,
+     onDismissSkipInterval: () -> Unit,
++    skipFeedbackInterval: SkipInterval?, // Nuvio fork: skip feedback
++    skipFeedbackNudging: Boolean,
++    durationSec: Double,
++    onSkipFeedbackGood: () -> Unit,
++    onSkipFeedbackWrong: () -> Unit,
++    onSkipFeedbackRewind: () -> Unit,
++    onSkipFeedbackSave: (Double, Double) -> Unit,
++    onSkipFeedbackDismiss: () -> Unit,
+     sliderEdgePadding: Dp,
+     overlayBottomPadding: Dp,
+     isSeries: Boolean,
+@@ -113,6 +122,30 @@ internal fun BoxScope.PlayerPlaybackOverlays(
+         horizontalPadding = metrics.horizontalPadding,
+     )
+ 
++    // Nuvio fork: manual-skip feedback prompt (shows ~4 s after a skip, hides after 8 s)
++    if (skipFeedbackInterval != null) {
++        var ready by androidx.compose.runtime.remember(skipFeedbackInterval) { androidx.compose.runtime.mutableStateOf(false) }
++        androidx.compose.runtime.LaunchedEffect(skipFeedbackInterval) {
++            kotlinx.coroutines.delay(4_000L)
++            ready = true
++        }
++        if (ready) {
++            SkipFeedbackPrompt(
++                interval = skipFeedbackInterval,
++                nudging = skipFeedbackNudging,
++                durationSec = durationSec,
++                onGood = onSkipFeedbackGood,
++                onWrong = onSkipFeedbackWrong,
++                onRewind = onSkipFeedbackRewind,
++                onSave = onSkipFeedbackSave,
++                onDismiss = onSkipFeedbackDismiss,
++                modifier = Modifier
++                    .align(Alignment.BottomEnd)
++                    .padding(end = sliderEdgePadding, bottom = overlayBottomPadding),
++            )
++        }
++    }
++
+     if (!playerControlsLocked) {
+         SkipIntroButton(
+             interval = if (!initialLoadCompleted || pausedOverlayVisible) null else activeSkipInterval,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
+index 38583fa50..59568be0f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
+@@ -248,6 +248,25 @@ internal fun PlayerScreenRuntime.skipInterval(interval: SkipInterval) {
+     scheduleProgressSyncAfterSeek()
+     publishPartyPlayback(positionMs = seekMs)
+     skipIntervalDismissed = true
++    if (com.nuvio.app.features.settings.ForkPrefs.skipFeedback.current()) { // Nuvio fork: skip feedback
++        skipFeedbackInterval = interval
++        skipFeedbackNudging = false
++    }
++}
++
++internal fun PlayerScreenRuntime.clearSkipFeedback() { // Nuvio fork
++    skipFeedbackInterval = null
++    skipFeedbackNudging = false
++}
++
++internal fun PlayerScreenRuntime.saveSkipFeedback(startSec: Double, endSec: Double) { // Nuvio fork
++    val old = skipFeedbackInterval
++    if (old != null) {
++        skipIntervals = skipIntervals.map {
++            if (it == old) it.copy(startTime = startSec, endTime = endSec) else it
++        }
++    }
++    clearSkipFeedback()
+ }
+ 
+ internal fun PlayerScreenRuntime.setPlaybackPlaying(playing: Boolean) {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
+index b38eca5c2..5051f059a 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
+@@ -257,6 +257,9 @@ internal class PlayerScreenRuntime(
+     var lastManualSkipSeekPositions by mutableStateOf<Pair<Long, Long>?>(null)
+     var activeSkipInterval by mutableStateOf<SkipInterval?>(null)
+     var skipIntervalDismissed by mutableStateOf(false)
++    // Nuvio fork: manual-skip feedback prompt state
++    var skipFeedbackInterval by mutableStateOf<com.nuvio.app.features.player.skip.SkipInterval?>(null)
++    var skipFeedbackNudging by mutableStateOf(false)
+     val autoSkippedIntervalKeys = mutableSetOf<String>()
+     var parentalWarnings by mutableStateOf<List<ParentalWarning>>(emptyList())
+     var showParentalGuide by mutableStateOf(false)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
+index 7c711ad72..706baa515 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
+@@ -1832,6 +1832,16 @@ private fun BoxScope.RenderPlaybackOverlays(
+             controlsVisible = controlsVisible,
+             onSkipInterval = { interval -> skipInterval(interval) },
+             onDismissSkipInterval = { skipIntervalDismissed = true },
++            skipFeedbackInterval = skipFeedbackInterval, // Nuvio fork: skip feedback
++            skipFeedbackNudging = skipFeedbackNudging,
++            durationSec = playbackSnapshot.durationMs / 1000.0,
++            onSkipFeedbackGood = { clearSkipFeedback() },
++            onSkipFeedbackWrong = { skipFeedbackNudging = true },
++            onSkipFeedbackRewind = {
++                playerController?.seekTo((playbackSnapshot.positionMs - 5_000L).coerceAtLeast(0L))
++            },
++            onSkipFeedbackSave = { startSec, endSec -> saveSkipFeedback(startSec, endSec) },
++            onSkipFeedbackDismiss = { clearSkipFeedback() },
+             sliderEdgePadding = sliderEdgePadding,
+             overlayBottomPadding = overlayBottomPadding,
+             isSeries = isSeries && !isDesktop,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/SkipFeedbackPrompt.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/SkipFeedbackPrompt.kt
+new file mode 100644
+index 000000000..6418f6bbd
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/SkipFeedbackPrompt.kt
+@@ -0,0 +1,140 @@
++package com.nuvio.app.features.player.skip
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.widthIn
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import kotlinx.coroutines.delay
++
++private const val PROMPT_VISIBLE_MS = 8_000L
++
++internal fun segmentFeedbackLabel(type: String): String = when (type.trim().lowercase()) {
++    "intro", "op", "mixed-op", "opening" -> "intro"
++    "recap" -> "recap"
++    "outro", "ed", "mixed-ed", "credits", "ending", "movie-credits" -> "credits"
++    "preview" -> "preview"
++    else -> "segment"
++}
++
++private fun formatSeconds(sec: Double): String {
++    val total = sec.toLong().coerceAtLeast(0L)
++    val h = total / 3600
++    val m = (total % 3600) / 60
++    val s = total % 60
++    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
++}
++
++/**
++ * Nuvio fork: small prompt about 4 s after a manual skip lands — "Skipped the intro right?" with
++ * Good / Wrong and close, gone after 8 seconds. Wrong opens a nudge panel to move the start and
++ * end before saving. Never pauses playback.
++ */
++@Composable
++internal fun SkipFeedbackPrompt(
++    interval: SkipInterval,
++    nudging: Boolean,
++    durationSec: Double,
++    onGood: () -> Unit,
++    onWrong: () -> Unit,
++    onRewind: () -> Unit,
++    onSave: (Double, Double) -> Unit,
++    onDismiss: () -> Unit,
++    modifier: Modifier = Modifier,
++) {
++    if (!nudging) {
++        LaunchedEffect(interval) {
++            delay(PROMPT_VISIBLE_MS)
++            onDismiss()
++        }
++    }
++    val panel = modifier
++        .clip(RoundedCornerShape(12.dp))
++        .background(Color.Black.copy(alpha = 0.78f))
++    val label = segmentFeedbackLabel(interval.type)
++    if (!nudging) {
++        Row(
++            modifier = panel.padding(horizontal = 14.dp, vertical = 10.dp),
++            verticalAlignment = Alignment.CenterVertically,
++            horizontalArrangement = Arrangement.spacedBy(10.dp),
++        ) {
++            Text("Skipped the $label right?", color = Color.White, fontSize = 14.sp)
++            FeedbackChip("Good", onGood)
++            FeedbackChip("Wrong", onWrong)
++            FeedbackChip("Close", onDismiss)
++        }
++        return
++    }
++    var start by remember(interval) { mutableStateOf(interval.startTime.coerceAtLeast(0.0)) }
++    var end by remember(interval) { mutableStateOf(interval.endTime) }
++    val maxSec = if (durationSec > 0) durationSec else Double.MAX_VALUE
++    Column(
++        modifier = panel.widthIn(max = 460.dp).padding(14.dp),
++        verticalArrangement = Arrangement.spacedBy(10.dp),
++    ) {
++        Text("Fix the $label", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
++        NudgeRow("Start", start) { delta ->
++            start = (start + delta).coerceIn(0.0, (end - 1.0).coerceAtLeast(0.0))
++        }
++        NudgeRow("End", end) { delta ->
++            end = (end + delta).coerceIn(start + 1.0, maxSec)
++        }
++        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
++            FeedbackChip("Rewind 5s", onRewind)
++            FeedbackChip("Cancel", onDismiss)
++            FeedbackChip("Save", { if (end > start) onSave(start, end) })
++        }
++    }
++}
++
++@Composable
++private fun NudgeRow(label: String, valueSec: Double, onNudge: (Double) -> Unit) {
++    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++        Text(
++            "$label ${formatSeconds(valueSec)}",
++            color = Color.White,
++            fontSize = 14.sp,
++            modifier = Modifier.widthIn(min = 110.dp),
++        )
++        listOf(-5.0, -1.0, 1.0, 5.0).forEach { delta ->
++            FeedbackChip(
++                text = if (delta > 0) "+${delta.toInt()}s" else "${delta.toInt()}s",
++                onClick = { onNudge(delta) },
++            )
++        }
++    }
++}
++
++@Composable
++private fun FeedbackChip(text: String, onClick: () -> Unit) {
++    Text(
++        text = text,
++        color = Color.White,
++        fontSize = 13.sp,
++        fontWeight = FontWeight.SemiBold,
++        style = MaterialTheme.typography.labelLarge,
++        modifier = Modifier
++            .clip(RoundedCornerShape(10.dp))
++            .background(Color.White.copy(alpha = 0.16f))
++            .clickable(onClick = onClick)
++            .padding(horizontal = 14.dp, vertical = 8.dp),
++    )
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index 99a51fa34..67f3dfd0d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -28,4 +28,16 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+             )
+         }
+     }
++    val skipFeedback by ForkPrefs.skipFeedback.value.collectAsStateWithLifecycle()
++    SettingsSection(title = "Skipping", isTablet = isTablet) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsSwitchRow(
++                title = "Ask after a manual skip",
++                description = "A small prompt after you skip a segment: was the timing right? Wrong opens a fixer.",
++                checked = skipFeedback,
++                isTablet = isTablet,
++                onCheckedChange = ForkPrefs.skipFeedback::set,
++            )
++        }
++    }
+ }

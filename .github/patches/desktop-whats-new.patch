@@ -1,0 +1,58 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index 10ed492ff..4ec3af20f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -14,6 +14,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ @Composable
+ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+     var showOmdbDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
++    var showWhatsNew by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+     val shadow by ForkPrefs.subtitleShadow.value.collectAsStateWithLifecycle()
+     val subsOff by ForkPrefs.subtitlesStartOff.value.collectAsStateWithLifecycle()
+     SettingsSection(title = "Subtitles", isTablet = isTablet) {
+@@ -36,6 +37,28 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+         }
+     }
+     val skipFeedback by ForkPrefs.skipFeedback.value.collectAsStateWithLifecycle()
++    SettingsSection(title = "About this fork", isTablet = isTablet) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsNavigationRow(
++                title = "What's new in this build",
++                description = "Features added by the Nuvio fork.",
++                isTablet = isTablet,
++                onClick = { showWhatsNew = true },
++            )
++        }
++    }
++    if (showWhatsNew) {
++        androidx.compose.material3.AlertDialog(
++            onDismissRequest = { showWhatsNew = false },
++            confirmButton = {
++                androidx.compose.material3.TextButton(onClick = { showWhatsNew = false }) { Text("Close") }
++            },
++            title = { Text("What's new") },
++            text = {
++                Text(forkWhatsNewChanges.joinToString("\n") { "•  $it" })
++            },
++        )
++    }
+     SettingsSection(title = "Ratings fallback", isTablet = isTablet) {
+         SettingsGroup(isTablet = isTablet) {
+             SettingsNavigationRow(
+@@ -90,3 +113,16 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+         }
+     }
+ }
++
++/** Nuvio fork: the feature list shown under Settings > About this fork > What's new. */
++private val forkWhatsNewChanges = listOf(
++    "dx.bi ports: sound presets (dialogue boost / late night), picture enhance shader, remember playback speed, number keys 0-9 jump",
++    "Subtitle shadow and a subtitles-start-off option",
++    "Sleep timer in the player's enhance panel",
++    "A Good/Wrong prompt after a manual skip, with a timing fixer",
++    "TheIntroDb as a free fallback for skip segments",
++    "Release calendar weeks start on Monday",
++    "Clear image cache in Advanced settings",
++    "OMDb episode ratings fallback with your own API key",
++    "A hint when playback stalls on a stream",
++)

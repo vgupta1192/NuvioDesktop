@@ -1,0 +1,34 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendar.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendar.kt
+index e48524b5f..687add0e1 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendar.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendar.kt
+@@ -491,13 +491,14 @@ private fun LibraryCalendarCard(
+ @Composable
+ private fun LibraryCalendarWeekdayHeader() {
+     val labels = listOf(
+-        stringResource(Res.string.library_calendar_weekday_sun),
++        // Nuvio fork: week starts Monday
+         stringResource(Res.string.library_calendar_weekday_mon),
+         stringResource(Res.string.library_calendar_weekday_tue),
+         stringResource(Res.string.library_calendar_weekday_wed),
+         stringResource(Res.string.library_calendar_weekday_thu),
+         stringResource(Res.string.library_calendar_weekday_fri),
+         stringResource(Res.string.library_calendar_weekday_sat),
++        stringResource(Res.string.library_calendar_weekday_sun),
+     )
+     Row(
+         modifier = Modifier.fillMaxWidth(),
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarData.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarData.kt
+index d2901ecd5..11941028f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarData.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarData.kt
+@@ -118,7 +118,8 @@ internal fun libraryCalendarCells(month: LibraryCalendarMonth): List<LibraryCale
+ 
+ internal fun firstLibraryCalendarWeekdayOffset(year: Int, month: Int): Int {
+     val epochDay = isoEpochDay(LibraryCalendarDate(year, month, 1).iso)
+-    val raw = (epochDay + 4L) % 7L
++    // Monday-first week (Nuvio fork): epochDay 0 is a Thursday, so Monday maps to (epochDay + 3) % 7 == 0.
++    val raw = (epochDay + 3L) % 7L
+     return if (raw < 0L) (raw + 7L).toInt() else raw.toInt()
+ }
+ 

@@ -1,0 +1,120 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
+index ce6249cef..23a640437 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
+@@ -344,6 +344,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
+             playerNotificationToken += 1L
+         }
+     }
++    SleepTimerEffect(playerController) // Nuvio fork: sleep timer
+ 
+     LaunchedEffect(
+         playerController,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SleepTimer.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SleepTimer.kt
+new file mode 100644
+index 000000000..71de6f7fe
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SleepTimer.kt
+@@ -0,0 +1,39 @@
++package com.nuvio.app.features.player
++
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++
++/** Nuvio fork: pause playback after a chosen number of minutes. */
++internal object SleepTimer {
++    val choices: List<Int> = listOf(0, 15, 30, 45, 60, 90)
++
++    private val _minutes = MutableStateFlow(0)
++    val minutes: StateFlow<Int> = _minutes.asStateFlow()
++    private val _token = MutableStateFlow(0)
++    val token: StateFlow<Int> = _token.asStateFlow()
++
++    fun set(minutes: Int) {
++        _minutes.value = minutes
++        _token.value = _token.value + 1
++    }
++
++    fun label(minutes: Int): String = if (minutes <= 0) "Off" else "$minutes min"
++}
++
++/** Pauses the player when the sleep timer runs out; restarts cleanly when the timer changes. */
++@Composable
++internal fun SleepTimerEffect(controller: PlayerEngineController?) {
++    val minutes by SleepTimer.minutes.collectAsStateWithLifecycle()
++    val token by SleepTimer.token.collectAsStateWithLifecycle()
++    LaunchedEffect(controller, token) {
++        if (controller == null || minutes <= 0) return@LaunchedEffect
++        delay(minutes * 60_000L)
++        controller.pause()
++        SleepTimer.set(0)
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
+index fd5fd0da3..423f9c80b 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
+@@ -156,7 +156,7 @@ internal object DesktopPlayerEnhance {
+     fun panelJson(): String = synchronized(gate) {
+         val v = PlayerEnhancePrefs.values.value
+         buildString {
+-            append("{\"smart\":$smartEnhance,\"numberKeys\":${DxRemember.numberKeys.value},\"picture\":{")
++            append("{\"smart\":$smartEnhance,\"numberKeys\":${DxRemember.numberKeys.value},\"sleep\":${com.nuvio.app.features.player.SleepTimer.minutes.value},\"picture\":{")
+             append("\"brightness\":${v.brightness},\"contrast\":${v.contrast},\"saturation\":${v.saturation}")
+             append(",\"gamma\":${v.gamma},\"hue\":${v.hue},\"deband\":${v.deband},\"picEnhance\":${v.picEnhance},\"picEnhanceNames\":[")
+             PlayerEnhancePrefs.picEnhanceNames.joinTo(this, ",") { "\"$it\"" }
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index 9eefd4940..c8b0266bb 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -626,6 +626,10 @@ internal class NativePlayerController(
+             }
+             "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
+             "autoSyncRetry" -> com.nuvio.app.features.player.DesktopAutoSyncRetry.retry()
++            "enh.sleep" -> {
++                com.nuvio.app.features.player.SleepTimer.set(value.toIntOrNull()?.coerceAtLeast(0) ?: 0)
++                refreshControlsForEnhance()
++            }
+             "enh.open", "enh.reset", "enh.quality", "enh.smart",
+             "enh.pic.brightness", "enh.pic.contrast", "enh.pic.saturation", "enh.pic.gamma",
+             "enh.pic.hue", "enh.pic.deband", "enh.audio.gain", "enh.audio.norm", "enh.audio.eq" ->
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
+index b33d314cf..e31fc91fe 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.js
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
+@@ -1283,6 +1283,30 @@ const renderEnhanceModal = () => {
+   const quality = enhance.quality || { selected: -1, options: [] };
+   enhanceBody.textContent = "";
+ 
++  // Nuvio fork: sleep timer chips
++  enhanceSection("Sleep timer");
++  const sleepMinutes = Number(enhance.sleep) || 0;
++  const sleepChoices = [0, 15, 30, 45, 60, 90];
++  const sleepChips = document.createElement("div");
++  sleepChips.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 8px;";
++  sleepChoices.forEach(option => {
++    const chip = document.createElement("button");
++    chip.type = "button";
++    chip.className = `track-row${sleepMinutes === option ? " selected" : ""}`;
++    chip.style.cssText = "flex:0 0 auto;padding:6px 12px;";
++    chip.textContent = option === 0 ? "Off" : `${option} min`;
++    chip.addEventListener("click", event => {
++      event.stopPropagation();
++      send("enh.sleep", option);
++    });
++    sleepChips.appendChild(chip);
++  });
++  enhanceBody.appendChild(sleepChips);
++  const sleepNote = document.createElement("div");
++  sleepNote.className = "enhance-note";
++  sleepNote.textContent = sleepMinutes > 0 ? `Playback pauses in ${sleepMinutes} minutes.` : "Playback keeps going.";
++  enhanceBody.appendChild(sleepNote);
++
+   enhanceSection("Quality");
+   const qualityRows = [{ id: -1, label: "Auto" }].concat(Array.isArray(quality.options) ? quality.options : []);
+   qualityRows.forEach(option => {

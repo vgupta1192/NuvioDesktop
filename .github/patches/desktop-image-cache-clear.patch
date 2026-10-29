@@ -1,0 +1,44 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+index abc108180..2b2083968 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+@@ -84,6 +84,39 @@ internal fun LazyListScope.advancedSettingsContent(
+             }
+         }
+     }
++    // Nuvio fork: clear cached posters/backdrops
++    item {
++        var cleared by remember { mutableStateOf(false) }
++        SettingsSection(
++            title = "Storage",
++            isTablet = isTablet,
++        ) {
++            SettingsGroup(isTablet = isTablet) {
++                SettingsNavigationRow(
++                    title = "Clear image cache",
++                    description = "Remove cached posters and backdrops. They download again when needed.",
++                    isTablet = isTablet,
++                    trailingContent = if (cleared) {
++                        {
++                            Text(
++                                "Cleared",
++                                style = MaterialTheme.typography.labelLarge,
++                                color = MaterialTheme.colorScheme.primary,
++                            )
++                        }
++                    } else {
++                        null
++                    },
++                    onClick = {
++                        val loader = coil3.SingletonImageLoader.get(coil3.compose.LocalPlatformContext.current)
++                        loader.memoryCache?.clear()
++                        loader.diskCache?.clear()
++                        cleared = true
++                    },
++                )
++            }
++        }
++    }
+     if (DesktopRendererSettings.isSupported) {
+         item {
+             val externallyControlled = remember { DesktopRendererSettings.isExternallyControlled }

@@ -1,0 +1,90 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/SkipIntroRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/SkipIntroRepository.kt
+index 45eea90ac..6e2c1830d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/SkipIntroRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/SkipIntroRepository.kt
+@@ -12,7 +12,7 @@ object SkipIntroRepository {
+     private const val NO_ID = "__none__"
+ 
+     private val introDbConfigured: Boolean
+-        get() = IntroDbConfig.URL.isNotBlank()
++        get() = true // Nuvio fork: theIntroDb fallback makes the intro path always available
+ 
+     suspend fun getMovieSkipIntervals(
+         contentId: String?,
+@@ -29,7 +29,8 @@ object SkipIntroRepository {
+         ) ?: return emptyList()
+         val cacheKey = "movie:$imdbId"
+         cache[cacheKey]?.let { return it }
+-        val data = SkipIntroApi.getIntroDbMovieSegments(imdbId) ?: return emptyList()
++        val data = SkipIntroApi.getIntroDbMovieSegments(imdbId)
++            ?: return TheIntroDb.intervals(imdbId, null, null).also { cache[cacheKey] = it } // Nuvio fork: theIntroDb fallback
+         return data.movieSkipIntervals().also { cache[cacheKey] = it }
+     }
+ 
+@@ -201,6 +202,7 @@ object SkipIntroRepository {
+     }
+ 
+     private suspend fun fetchFromIntroDb(imdbId: String, season: Int, episode: Int): List<SkipInterval> {
++        if (IntroDbConfig.URL.isBlank()) return TheIntroDb.intervals(imdbId, season, episode) // Nuvio fork: theIntroDb fallback
+         return try {
+             val data = SkipIntroApi.getIntroDbSegments(imdbId, season, episode)
+             if (data == null) return emptyList()
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/TheIntroDb.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/TheIntroDb.kt
+new file mode 100644
+index 000000000..ffb5bd159
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/TheIntroDb.kt
+@@ -0,0 +1,53 @@
++package com.nuvio.app.features.player.skip
++
++import com.nuvio.app.features.addons.httpGetText
++import kotlinx.coroutines.CancellationException
++import kotlinx.serialization.SerialName
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.json.Json
++
++@Serializable
++private data class TheIntroDbSegment(
++    @SerialName("start_ms") val startMs: Long? = null,
++    @SerialName("end_ms") val endMs: Long? = null,
++)
++
++@Serializable
++private data class TheIntroDbResponse(
++    val intro: List<TheIntroDbSegment> = emptyList(),
++    val recap: List<TheIntroDbSegment> = emptyList(),
++    val credits: List<TheIntroDbSegment> = emptyList(),
++)
++
++/** Free intro, recap and credits timestamps from api.theintrodb.org (no key needed). Nuvio fork. */
++internal object TheIntroDb {
++    private const val BASE = "https://api.theintrodb.org/v2/media"
++    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
++
++    suspend fun intervals(imdbId: String, season: Int?, episode: Int?): List<SkipInterval> {
++        val url = buildString {
++            append(BASE).append("?imdb_id=").append(imdbId)
++            if (season != null && episode != null) append("&season=").append(season).append("&episode=").append(episode)
++        }
++        return try {
++            val data = json.decodeFromString<TheIntroDbResponse>(httpGetText(url))
++            listOfNotNull(
++                data.intro.firstOrNull().toInterval("intro"),
++                data.recap.firstOrNull().toInterval("recap"),
++                data.credits.firstOrNull().toInterval("outro"),
++            )
++        } catch (cancelled: CancellationException) {
++            throw cancelled
++        } catch (_: Exception) {
++            emptyList()
++        }
++    }
++
++    private fun TheIntroDbSegment?.toInterval(type: String): SkipInterval? {
++        if (this == null) return null
++        val start = startMs ?: 0L
++        val end = endMs ?: return null
++        if (end <= start) return null
++        return SkipInterval(startTime = start / 1000.0, endTime = end / 1000.0, type = type, provider = "theintrodb")
++    }
++}
