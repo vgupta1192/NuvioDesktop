@@ -1,0 +1,82 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxWatchStats.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxWatchStats.kt
+index 548c1e578..6afc50c07 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxWatchStats.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxWatchStats.kt
+@@ -100,7 +100,7 @@ internal object DxWatchStats {
+     ) {
+         ensureLoaded()
+         val now = WatchProgressClock.nowEpochMs()
+-        if (!_enabled.value || !isPlaying || PrivateViewing.isEnabled()) {
++        if (!_enabled.value || !isPlaying || com.nuvio.app.features.settings.ForkPrefs.privateViewing.current()) { // Nuvio fork: private viewing pauses stats
+             lastTickMs = 0L
+             return
+         }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DxWatchStatsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DxWatchStatsSettings.kt
+index cda9dcbc5..c36057200 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DxWatchStatsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DxWatchStatsSettings.kt
+@@ -95,7 +95,7 @@ private fun DxWatchStatsDialog(onDismiss: () -> Unit) {
+ 
+     Dialog(
+         onDismissRequest = onDismiss,
+-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
++        properties = DialogProperties(usePlatformDefaultWidth = false),
+     ) {
+         Box(
+             modifier = Modifier
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ProfileInsightsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ProfileInsightsPage.kt
+index f6e449b54..03104e02e 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ProfileInsightsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ProfileInsightsPage.kt
+@@ -392,7 +392,7 @@ private fun ProfileInsightsDialog(
+ 
+     Dialog(
+         onDismissRequest = onDismiss,
+-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
++        properties = DialogProperties(usePlatformDefaultWidth = false),
+     ) {
+         Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+             Column(
+@@ -662,7 +662,7 @@ private fun ProfileInsightsDialog(
+     if (editing && profile != null) {
+         Dialog(
+             onDismissRequest = { editing = false },
+-            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
++            properties = DialogProperties(usePlatformDefaultWidth = false),
+         ) {
+             Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                 ProfileEditScreen(
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index 959958bf8..d167e2c13 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -662,10 +662,6 @@ internal class NativePlayerController(
+     }
+ 
+     // Nuvio fork: live playback stats for the stream-info modal (mpv properties, fail-soft).
+-    @Volatile private var playbackStatsJson: String? = null
+-
+-    private fun playbackStatsSectionJson(): String? = playbackStatsJson
+-
+     private fun refreshPlaybackStats() {
+         val current = handle
+         if (current == 0L) return
+@@ -1451,6 +1447,9 @@ private data class NativeControlsStructureKey(
+     val isInPip: Boolean,
+ )
+ 
++// Nuvio fork: live playback stats state (top-level so the controls JSON builder can read it)
++@Volatile private var playbackStatsJson: String? = null
++
+ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageReady: () -> Unit): String =
+     buildString {
+         append('{')
+@@ -1876,7 +1875,7 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+             }
+             append("]}")
+         }
+-        playbackStatsSectionJson()?.let { stats ->
++        playbackStatsJson?.let { stats ->
+             if (streamInfoSections.isNotEmpty()) append(',')
+             append(stats)
+         }

@@ -1,0 +1,23 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index 68b81a814..da418a30b 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -70,6 +70,18 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+             )
+         }
+     }
++    val privateViewing by ForkPrefs.privateViewing.value.collectAsStateWithLifecycle()
++    SettingsSection(title = "Privacy", isTablet = isTablet) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsSwitchRow(
++                title = "Private viewing",
++                description = "While on, playback is not saved to Continue Watching and not scrobbled to Trakt or Simkl. Per device.",
++                checked = privateViewing,
++                isTablet = isTablet,
++                onCheckedChange = ForkPrefs.privateViewing::set,
++            )
++        }
++    }
+     SettingsSection(title = "About this fork", isTablet = isTablet) {
+         SettingsGroup(isTablet = isTablet) {
+             SettingsNavigationRow(

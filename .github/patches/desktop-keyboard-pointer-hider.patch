@@ -1,0 +1,79 @@
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
+index 66efbf1df..b9aaa1773 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
+@@ -62,6 +62,7 @@ fun main(args: Array<String>) {
+     com.nuvio.app.features.player.autosync.AutoSyncPreferencesPlatform.install() // AutoSync hook: mobile-style rows persist on desktop
+     com.nuvio.app.features.player.DesktopPlayerEnhance.install() // Nuvio fork: picture & sound prefs
+     com.nuvio.app.features.settings.installForkPrefs() // Nuvio fork: shared fork prefs
++    com.nuvio.app.features.settings.KeyboardPointerHider.install() // Nuvio fork: hide pointer while keyboard browsing
+     configureDesktopQuickJsLibrary()
+     installSeekrDesktopPreferences()
+     configureDesktopChrome()
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/KeyboardPointerHider.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/KeyboardPointerHider.desktop.kt
+new file mode 100644
+index 000000000..fadb52b0c
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/KeyboardPointerHider.desktop.kt
+@@ -0,0 +1,61 @@
++package com.nuvio.app.features.settings
++
++import java.awt.AWTEvent
++import java.awt.Cursor
++import java.awt.Toolkit
++import java.awt.event.AWTEventListener
++import java.awt.event.KeyEvent
++import java.awt.event.MouseEvent
++import javax.swing.SwingUtilities
++
++/**
++ * Nuvio fork (dx.bi-inspired): when the viewer navigates with the keyboard, hide the mouse
++ * pointer over the app window; any mouse movement brings it back. Only navigation keys hide
++ * the pointer, so typing stays unaffected.
++ */
++internal object KeyboardPointerHider {
++    private val NAVIGATION_KEYS = setOf(
++        KeyEvent.VK_UP, KeyEvent.VK_DOWN, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT,
++        KeyEvent.VK_PAGE_UP, KeyEvent.VK_PAGE_DOWN, KeyEvent.VK_HOME, KeyEvent.VK_END,
++        KeyEvent.VK_ENTER, KeyEvent.VK_ESCAPE, KeyEvent.VK_TAB,
++    )
++    @Volatile private var installed = false
++    @Volatile private var hiddenWindow: java.awt.Window? = null
++
++    fun install() {
++        if (installed) return
++        installed = true
++        val blankCursor = Toolkit.getDefaultToolkit().createCustomCursor(
++            java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB),
++            java.awt.Point(0, 0),
++            "hidden",
++        )
++        Toolkit.getDefaultToolkit().addAWTEventListener(
++            AWTEventListener { event ->
++                runCatching {
++                    when (event) {
++                        is KeyEvent -> {
++                            if (event.id == KeyEvent.KEY_PRESSED && event.keyCode in NAVIGATION_KEYS) {
++                                val component = event.component ?: return@AWTEventListener
++                                val window = SwingUtilities.getWindowAncestor(component)
++                                if (window != null) {
++                                    window.cursor = blankCursor
++                                    hiddenWindow = window
++                                }
++                            }
++                        }
++                        is MouseEvent -> {
++                            if (event.id == MouseEvent.MOUSE_MOVED || event.id == MouseEvent.MOUSE_DRAGGED) {
++                                hiddenWindow?.let { window ->
++                                    window.cursor = Cursor.getDefaultCursor()
++                                    hiddenWindow = null
++                                }
++                            }
++                        }
++                    }
++                }
++            },
++            AWTEvent.KEY_EVENT_MASK or AWTEvent.MOUSE_MOTION_EVENT_MASK,
++        )
++    }
++}

@@ -1,0 +1,51 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+index d07601f15..08eeecdee 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -72,6 +72,7 @@ object ForkPrefs {
+     val homeAiringWeek = BoolPref("settings/home_airing_week", true)
+     val homeFinishSeries = BoolPref("settings/home_finish_series", true)
+     val homeVideoRowsOnly = BoolPref("settings/home_video_rows_only", true)
++    val privateViewing = BoolPref("settings/private_viewing", false)
+ 
+     /** Raw string storage for larger fork payloads (stats JSON etc.). */
+     fun readRaw(key: String): String? = storage?.getString(key)
+@@ -96,5 +97,6 @@ object ForkPrefs {
+         homeAiringWeek.ensureLoaded()
+         homeFinishSeries.ensureLoaded()
+         homeVideoRowsOnly.ensureLoaded()
++        privateViewing.ensureLoaded()
+     }
+ }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/trakt/TraktScrobbleRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/trakt/TraktScrobbleRepository.kt
+index 1cc9b6546..c0fd2d0ab 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/trakt/TraktScrobbleRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/trakt/TraktScrobbleRepository.kt
+@@ -112,6 +112,7 @@ internal object TraktScrobbleRepository : TrackingScrobbler {
+         action: TrackingScrobbleAction,
+         event: TrackingScrobbleEvent,
+     ) {
++        if (com.nuvio.app.features.settings.ForkPrefs.privateViewing.current()) return // Nuvio fork: private viewing
+         val item = buildItem(event.media) ?: return
+         sendScrobble(
+             profileId = profileId,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
+index 7536a8206..9454d72af 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
+@@ -1158,6 +1158,7 @@ object WatchProgressRepository {
+         snapshot: PlayerPlaybackSnapshot,
+         syncRemote: Boolean = true,
+     ) {
++        if (com.nuvio.app.features.settings.ForkPrefs.privateViewing.current()) return // Nuvio fork: private viewing
+         ensureLoaded()
+         upsert(session = session, snapshot = snapshot, persist = true, syncRemote = syncRemote)
+     }
+@@ -1167,6 +1168,7 @@ object WatchProgressRepository {
+         snapshot: PlayerPlaybackSnapshot,
+         syncRemote: Boolean = true,
+     ) {
++        if (com.nuvio.app.features.settings.ForkPrefs.privateViewing.current()) return // Nuvio fork: private viewing
+         ensureLoaded()
+         upsert(session = session, snapshot = snapshot, persist = true, syncRemote = syncRemote)
+     }

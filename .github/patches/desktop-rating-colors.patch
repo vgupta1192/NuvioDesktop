@@ -1,0 +1,30 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
+index a0a94ebbd..27455e296 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
+@@ -237,7 +237,7 @@ internal fun RatingsRow(
+                 Text(
+                     text = visuals.format(rating.value),
+                     style = ratingTextStyle,
+-                    color = visuals.valueColor,
++                    color = forkRatingValueColor(visuals.source) ?: visuals.valueColor, // Nuvio fork: brand colours
+                 )
+             }
+         }
+@@ -428,3 +428,16 @@ private fun formatOneDecimal(value: Double): String {
+ private fun formatWhole(value: Double): String = value.roundToInt().toString()
+ 
+ private fun formatPercent(value: Double): String = "${value.roundToInt()}%"
++
++/** Nuvio fork: full 8-source brand rating colours (falls back to the theme colour when null). */
++internal fun forkRatingValueColor(source: String): Color? = when (source.lowercase()) {
++    "imdb" -> Color(0xFFF5C518)
++    "tmdb" -> Color(0xFF01B4E4)
++    "trakt" -> Color(0xFFED1C24)
++    "letterboxd" -> Color(0xFF00E054)
++    "mal" -> Color(0xFF2E51A2)
++    "tomatoes", "audience" -> Color(0xFFFA320A)
++    "metacritic" -> Color(0xFFFFCC33)
++    "simkl" -> Color.White
++    else -> null
++}

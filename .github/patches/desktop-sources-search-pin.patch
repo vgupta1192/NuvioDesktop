@@ -1,0 +1,182 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
+index 53e2e904b..fff275a7d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
+@@ -338,6 +338,7 @@ data class PlayerControlSourceItem(
+     val addonLogo: String = "",
+     val showAddonLogo: Boolean = false,
+     val isCurrent: Boolean = false,
++    val isPinned: Boolean = false,
+     val isEnabled: Boolean = true,
+     val badges: List<PlayerControlSourceBadgeItem> = emptyList(),
+     val formattedSize: String = "",
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
+index 706baa515..94afa5ce3 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
+@@ -217,7 +217,8 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+         allLabel = allFilterLabel,
+         selectedFilter = null,
+     )
+-    val sourceItems = buildPlayerControlSourceItems()
++    val pinnedSourceIds = com.nuvio.app.features.settings.ForkPrefs.pinnedSources() // Nuvio fork: pinned sources first
++    val sourceItems = buildPlayerControlSourceItems().sortedByDescending { it.filterId in pinnedSourceIds }
+     val episodeItems = buildPlayerControlEpisodeItems()
+     val episodeSeasons = buildPlayerControlSeasonItems(episodeItems)
+     val episodeStreamFilters = buildPlayerControlEpisodeStreamFilters(
+@@ -225,6 +226,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+         selectedFilter = null,
+     )
+     val episodeStreamItems = buildPlayerControlEpisodeStreamItems()
++        .sortedByDescending { it.filterId in pinnedSourceIds } // Nuvio fork: pinned sources first
+     val playerControlAddonSubtitles = buildPlayerControlAddonSubtitleItems()
+     val playerControlSubtitleSelection = buildPlayerControlSubtitleSelection()
+     val playerControlAutoSyncCues = buildPlayerControlSubtitleCueItems()
+@@ -1481,6 +1483,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSourceItems(): List<PlayerCont
+     val showFileSizeBadges = streamBadgeState.showFileSizeBadges
+     val showAddonLogo = streamBadgeState.showAddonLogo
+     val badgePlacement = streamBadgeState.badgePlacement.name
++    val pinnedSources = com.nuvio.app.features.settings.ForkPrefs.pinnedSources() // Nuvio fork: pinned sources
+     return sourceStreamsState.groups.flatMap { group ->
+         group.streams.map { stream -> group.addonId to stream }
+     }.mapIndexed { index, (filterId, stream) ->
+@@ -1493,6 +1496,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSourceItems(): List<PlayerCont
+             addonLogo = stream.addonLogo.orEmpty(),
+             showAddonLogo = showAddonLogo,
+             isCurrent = isCurrentPlayerControlStream(stream),
++            isPinned = filterId in pinnedSources,
+             isEnabled = stream.isSelectableForPlayback(canResolveDebrid),
+             badges = stream.badges.map {
+                 PlayerControlSourceBadgeItem(
+@@ -1516,6 +1520,7 @@ private fun PlayerScreenRuntime.buildPlayerControlEpisodeStreamItems(): List<Pla
+     val showFileSizeBadges = streamBadgeState.showFileSizeBadges
+     val showAddonLogo = streamBadgeState.showAddonLogo
+     val badgePlacement = streamBadgeState.badgePlacement.name
++    val pinnedSources = com.nuvio.app.features.settings.ForkPrefs.pinnedSources() // Nuvio fork: pinned sources
+     return episodeStreamsRepoState.groups.flatMap { group ->
+         group.streams.map { stream -> group.addonId to stream }
+     }.mapIndexed { index, (filterId, stream) ->
+@@ -1528,6 +1533,7 @@ private fun PlayerScreenRuntime.buildPlayerControlEpisodeStreamItems(): List<Pla
+             addonLogo = stream.addonLogo.orEmpty(),
+             showAddonLogo = showAddonLogo,
+             isCurrent = false,
++            isPinned = filterId in pinnedSources,
+             isEnabled = stream.isSelectableForPlayback(canResolveDebrid),
+             badges = stream.badges.map {
+                 PlayerControlSourceBadgeItem(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+index 08eeecdee..7f4b84238 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -74,6 +74,18 @@ object ForkPrefs {
+     val homeVideoRowsOnly = BoolPref("settings/home_video_rows_only", true)
+     val privateViewing = BoolPref("settings/private_viewing", false)
+ 
++    private const val PINNED_SOURCES_KEY = "sources/pinned"
++
++    /** Stream sources (addon ids) pinned to the top of the sources panel. */
++    fun pinnedSources(): Set<String> =
++        readRaw(PINNED_SOURCES_KEY)?.split("\n")?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
++
++    fun togglePinnedSource(id: String) {
++        val current = pinnedSources()
++        val next = if (id in current) current - id else current + id
++        writeRaw(PINNED_SOURCES_KEY, next.joinToString("\n"))
++    }
++
+     /** Raw string storage for larger fork payloads (stats JSON etc.). */
+     fun readRaw(key: String): String? = storage?.getString(key)
+ 
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index d167e2c13..b73b0406c 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -630,6 +630,10 @@ internal class NativePlayerController(
+             }
+             "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
+             "autoSyncRetry" -> com.nuvio.app.features.player.DesktopAutoSyncRetry.retry()
++            "sources.pin" -> { // Nuvio fork: pin stream sources
++                com.nuvio.app.features.settings.ForkPrefs.togglePinnedSource(value)
++                refreshControlsForEnhance()
++            }
+             "enh.sleep" -> {
+                 com.nuvio.app.features.player.SleepTimer.set(value.toInt().coerceAtLeast(0))
+                 refreshControlsForEnhance()
+@@ -1989,6 +1993,8 @@ private fun StringBuilder.appendSourceItemJson(item: PlayerControlSourceItem) {
+     append(',')
+     appendJsonField("isCurrent", item.isCurrent)
+     append(',')
++    appendJsonField("isPinned", item.isPinned)
++    append(',')
+     appendJsonField("isEnabled", item.isEnabled)
+     append(',')
+     appendJsonField("formattedSize", item.formattedSize)
+diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
+index e31fc91fe..52d928865 100644
+--- a/composeApp/src/desktopMain/resources/player-ui/controls.js
++++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
+@@ -1902,6 +1902,19 @@ const buildSourceRow = (item, onSelect) => {
+     onSelect(item);
+   });
+ 
++  if (item.filterId) { // Nuvio fork: pin source to top
++    const pin = document.createElement("span");
++    pin.className = "stream-pin";
++    pin.textContent = item.isPinned ? "\u2605" : "\u2606";
++    pin.title = item.isPinned ? "Unpin source" : "Pin source to top";
++    pin.style.cssText = "cursor:pointer;opacity:" + (item.isPinned ? ".95" : ".45") + ";font-size:15px;padding:2px 4px;";
++    pin.addEventListener("click", event => {
++      event.stopPropagation();
++      send("sources.pin", String(item.filterId));
++    });
++    row.appendChild(pin);
++  }
++
+   const copy = document.createElement("span");
+   copy.className = "track-copy";
+ 
+@@ -2077,8 +2090,29 @@ const requestSourceVirtualRender = () => {
+   sourceVirtualRenderRaf = window.requestAnimationFrame(renderSourceVirtualRows);
+ };
+ 
++// Nuvio fork: stream search box on the sources panel
++let sourceSearchText = "";
++let sourceSearchInput = null;
++const ensureSourceSearchInput = () => {
++  if (sourceSearchInput || !sourceList || !sourceList.parentElement) return;
++  const input = document.createElement("input");
++  input.type = "text";
++  input.className = "source-search-input";
++  input.placeholder = "Search streams...";
++  input.style.cssText = "width:100%;box-sizing:border-box;margin:0 0 8px;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;font-size:14px;outline:none;";
++  input.addEventListener("input", () => {
++    sourceSearchText = input.value;
++    sourceList.scrollTop = 0;
++    renderSourceModal(true);
++  });
++  input.addEventListener("keydown", event => event.stopPropagation());
++  sourceList.parentElement.insertBefore(input, sourceList);
++  sourceSearchInput = input;
++};
++
+ const renderSourceModal = (modalOpened = false) => {
+   sourcePanelTitle.textContent = state.sourcesPanelTitle || "Sources";
++  if (sourceSearchInput && sourceSearchInput.value !== sourceSearchText) sourceSearchInput.value = sourceSearchText;
+   sourceReloadButton.textContent = state.reloadLabel || "Reload";
+   sourceCloseButton.textContent = state.panelCloseLabel || "Close";
+   sourceContextLabel.textContent = state.episodeText || state.title || "";
+@@ -2107,6 +2141,14 @@ const renderSourceModal = (modalOpened = false) => {
+   if (sourceFilterId) {
+     items = items.filter(item => String(item.filterId || "") === sourceFilterId);
+   }
++  const query = (sourceSearchText || "").trim().toLowerCase(); // Nuvio fork: stream search
++  if (query) {
++    items = items.filter(item =>
++      String(item.label || "").toLowerCase().includes(query) ||
++      String(item.subtitle || "").toLowerCase().includes(query) ||
++      String(item.addonName || "").toLowerCase().includes(query));
++  }
++  ensureSourceSearchInput();
+   if (items.length === 0) {
+     sourceVirtualItems = [];
+     sourceVirtualSpacer = null;
