@@ -1,0 +1,263 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
+new file mode 100644
+index 000000000..50f68ca77
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
+@@ -0,0 +1,165 @@
++package com.nuvio.app.features.home
++
++import androidx.compose.foundation.layout.padding
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.Dp
++import androidx.compose.ui.unit.dp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.core.time.daysUntilEpisodeRelease
++import com.nuvio.app.features.catalog.CatalogTarget
++import com.nuvio.app.features.details.MetaDetailsRepository
++import com.nuvio.app.features.home.components.HomeCatalogRowSection
++import com.nuvio.app.features.library.LibraryItem
++import com.nuvio.app.features.library.LibraryRepository
++import com.nuvio.app.features.library.loadLibraryCalendar
++import com.nuvio.app.features.profiles.ProfileRepository
++import com.nuvio.app.features.settings.ForkPrefs
++import com.nuvio.app.features.watchprogress.CurrentDateProvider
++import com.nuvio.app.features.watchprogress.WatchProgressRepository
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.flow.flowOn
++import kotlinx.coroutines.withTimeoutOrNull
++
++private fun LibraryItem.toForkPreview() = MetaPreview(
++    id = id,
++    type = type,
++    name = name,
++    poster = poster,
++    banner = banner,
++    logo = logo,
++    posterShape = posterShape,
++    description = description,
++    releaseInfo = releaseInfo,
++    imdbRating = imdbRating,
++    genres = genres,
++    rawPosterUrl = rawPosterUrl,
++    landscapePoster = landscapePoster,
++)
++
++private fun forkSection(key: String, title: String, items: List<MetaPreview>) = HomeCatalogSection(
++    key = key,
++    title = title,
++    subtitle = "",
++    addonName = "",
++    target = CatalogTarget.Library(contentType = "series", sectionType = key),
++    items = items,
++)
++
++/** Extra Home rows built from the saved library: up next tonight, airing this week, finish a series. */
++@Composable
++internal fun ForkHomeLibraryRows(
++    sectionPadding: Dp,
++    onPosterClick: ((MetaPreview) -> Unit)?,
++) {
++    LaunchedEffect(Unit) {
++        ForkPrefs.homeUpNextTonight.ensureLoaded()
++        ForkPrefs.homeAiringWeek.ensureLoaded()
++        ForkPrefs.homeFinishSeries.ensureLoaded()
++    }
++    val showTonight by ForkPrefs.homeUpNextTonight.value.collectAsStateWithLifecycle()
++    val showWeek by ForkPrefs.homeAiringWeek.value.collectAsStateWithLifecycle()
++    val showFinish by ForkPrefs.homeFinishSeries.value.collectAsStateWithLifecycle()
++    val libraryState by LibraryRepository.uiState.collectAsStateWithLifecycle()
++    val progress by WatchProgressRepository.uiState.collectAsStateWithLifecycle()
++    val profileId = ProfileRepository.activeProfileId
++
++    var tonight by remember { mutableStateOf<List<MetaPreview>>(emptyList()) }
++    var week by remember { mutableStateOf<List<MetaPreview>>(emptyList()) }
++    var finish by remember { mutableStateOf<List<MetaPreview>>(emptyList()) }
++
++    val seriesItems = libraryState.items.filter { it.type.trim().lowercase() in setOf("series", "show", "tv") }
++
++    LaunchedEffect(seriesItems.map { it.id }, profileId, showTonight, showWeek) {
++        if (!showTonight && !showWeek) {
++            tonight = emptyList()
++            week = emptyList()
++            return@LaunchedEffect
++        }
++        if (seriesItems.isEmpty()) return@LaunchedEffect
++        loadLibraryCalendar(seriesItems, profileId).flowOn(Dispatchers.Default).collect { snapshot ->
++            val today = CurrentDateProvider.todayIsoDate()
++            val events = snapshot.eventsByDate.values.flatten().filter { it.key.startsWith("episode:") }
++            val dayOffsets = events.mapNotNull { event ->
++                daysUntilEpisodeRelease(today, event.rawReleaseInfo)?.let { event to it }
++            }
++            tonight = dayOffsets.filter { it.second == 0 }
++                .map { it.first.item }.distinctBy { it.id }.map { it.toForkPreview() }
++            week = dayOffsets.filter { it.second in 1..7 }
++                .sortedBy { it.second }
++                .map { it.first.item }.distinctBy { it.id }.map { it.toForkPreview() }
++        }
++    }
++
++    LaunchedEffect(progress.entries.size, showFinish) {
++        if (!showFinish) {
++            finish = emptyList()
++            return@LaunchedEffect
++        }
++        val completedBySeries = progress.entries
++            .filter { it.isCompleted && it.seasonNumber != null && it.episodeNumber != null && it.seasonNumber > 0 }
++            .groupBy { it.parentMetaId }
++            .mapValues { (_, list) -> list.map { it.seasonNumber to it.episodeNumber }.toSet().size }
++        val lastTouch = progress.entries.groupBy { it.parentMetaId }.mapValues { (_, list) -> list.maxOf { it.lastUpdatedEpochMs } }
++        val candidates = completedBySeries.entries
++            .filter { it.value >= 3 }
++            .sortedByDescending { lastTouch[it.key] ?: 0L }
++            .take(12)
++        val result = mutableListOf<MetaPreview>()
++        for ((seriesId, watchedCount) in candidates) {
++            val entry = progress.entries.firstOrNull { it.parentMetaId == seriesId } ?: continue
++            val meta = withTimeoutOrNull(15_000L) {
++                runCatching { MetaDetailsRepository.fetch(entry.parentMetaType, seriesId) }.getOrNull()
++            } ?: continue
++            val today = CurrentDateProvider.todayIsoDate()
++            val aired = meta.videos.count { video ->
++                (video.season ?: 0) > 0 && (video.episode ?: 0) > 0 &&
++                    (daysUntilEpisodeRelease(today, video.released)?.let { it <= 0 } ?: false)
++            }
++            if (aired == 0) continue
++            val ratio = watchedCount.toFloat() / aired.toFloat()
++            if (ratio >= 0.6f && ratio < 1f) {
++                result += MetaPreview(
++                    id = seriesId,
++                    type = entry.parentMetaType,
++                    name = meta.name,
++                    poster = meta.poster ?: entry.poster,
++                    banner = meta.background ?: entry.background,
++                    logo = meta.logo ?: entry.logo,
++                )
++                finish = result.toList()
++            }
++        }
++        finish = result.toList()
++    }
++
++    if (showTonight && tonight.isNotEmpty()) {
++        HomeCatalogRowSection(
++            section = forkSection("fork_up_next_tonight", "Up next tonight", tonight),
++            modifier = Modifier.padding(bottom = 12.dp),
++            sectionPadding = sectionPadding,
++            onPosterClick = onPosterClick,
++        )
++    }
++    if (showWeek && week.isNotEmpty()) {
++        HomeCatalogRowSection(
++            section = forkSection("fork_airing_week", "Airing this week", week),
++            modifier = Modifier.padding(bottom = 12.dp),
++            sectionPadding = sectionPadding,
++            onPosterClick = onPosterClick,
++        )
++    }
++    if (showFinish && finish.isNotEmpty()) {
++        HomeCatalogRowSection(
++            section = forkSection("fork_finish_series", "Finish a series", finish),
++            modifier = Modifier.padding(bottom = 12.dp),
++            sectionPadding = sectionPadding,
++            onPosterClick = onPosterClick,
++        )
++    }
++}
+\ No newline at end of file
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
+index 5bbc7d835..2d71335df 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
+@@ -1180,6 +1180,10 @@ fun HomeScreen(
+                         disintegrationRequest = continueWatchingDisintegrationRequest,
+                     )
+ 
++                    item(key = "fork_home_library_rows", contentType = "fork_rows") { // Nuvio fork: extra home rows
++                        ForkHomeLibraryRows(sectionPadding = homeSectionPadding, onPosterClick = onPosterClick)
++                    }
++
+                     keyedEnabledHomeItems.forEach { keyedSettingsItem ->
+                         val settingsItem = keyedSettingsItem.value
+                         if (settingsItem.isCollection) {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index d3624c575..d85bd2f2c 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -40,6 +40,27 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+     SettingsSection(title = "Home", isTablet = isTablet) {
+         SettingsGroup(isTablet = isTablet) {
+             HeroRotationSpeedRow(isTablet = isTablet)
++            SettingsGroupDivider(isTablet = isTablet)
++            HomeRowToggle(
++                title = "Up next tonight",
++                description = "Saved series with an episode releasing today.",
++                pref = ForkPrefs.homeUpNextTonight,
++                isTablet = isTablet,
++            )
++            SettingsGroupDivider(isTablet = isTablet)
++            HomeRowToggle(
++                title = "Airing this week",
++                description = "Saved series with an episode releasing in the next 7 days.",
++                pref = ForkPrefs.homeAiringWeek,
++                isTablet = isTablet,
++            )
++            SettingsGroupDivider(isTablet = isTablet)
++            HomeRowToggle(
++                title = "Finish a series",
++                description = "Suggests a saved series you are most of the way through.",
++                pref = ForkPrefs.homeFinishSeries,
++                isTablet = isTablet,
++            )
+         }
+     }
+     SettingsSection(title = "About this fork", isTablet = isTablet) {
+@@ -131,3 +152,20 @@ private val forkWhatsNewChanges = listOf(
+     "OMDb episode ratings fallback with your own API key",
+     "A hint when playback stalls on a stream",
+ )
++
++@Composable
++private fun HomeRowToggle(
++    title: String,
++    description: String,
++    pref: ForkPrefs.BoolPref,
++    isTablet: Boolean,
++) {
++    val checked by pref.value.collectAsStateWithLifecycle()
++    SettingsSwitchRow(
++        title = title,
++        description = description,
++        checked = checked,
++        isTablet = isTablet,
++        onCheckedChange = pref::set,
++    )
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+index 5bc4d1abe..73d5e18c7 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -68,6 +68,9 @@ object ForkPrefs {
+     val watchedTitles = StringPref("settings/dx_watched_titles", "Show")
+     val introSound = BoolPref("settings/dx_intro_enabled", false)
+     val uiSounds = BoolPref("settings/dx_ui_sounds_enabled", false)
++    val homeUpNextTonight = BoolPref("settings/home_up_next_tonight", true)
++    val homeAiringWeek = BoolPref("settings/home_airing_week", true)
++    val homeFinishSeries = BoolPref("settings/home_finish_series", true)
+ 
+     /** Called once from the desktop engine before any UI reads a pref. */
+     fun install(newStorage: Storage) {
+@@ -81,5 +84,8 @@ object ForkPrefs {
+         watchedTitles.ensureLoaded()
+         introSound.ensureLoaded()
+         uiSounds.ensureLoaded()
++        homeUpNextTonight.ensureLoaded()
++        homeAiringWeek.ensureLoaded()
++        homeFinishSeries.ensureLoaded()
+     }
+ }

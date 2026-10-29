@@ -1,0 +1,140 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
+index d5e1f95da..b532897de 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
+@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.key
+ import androidx.compose.runtime.LaunchedEffect
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.remember
+@@ -161,9 +162,11 @@ fun HomeHeroSection(
+         }
+     }
+ 
++    val heroRotationIntervalMs by com.nuvio.app.features.settings.HeroRotationSpeed.intervalMs.collectAsStateWithLifecycle() // Nuvio fork: rotation speed
+     ScreenActivityEffect(autoScrollPage, items.size) { active ->
+         if (!active || items.size <= 1) return@ScreenActivityEffect
+-        delay(HERO_AUTO_SCROLL_INTERVAL_MS)
++        if (heroRotationIntervalMs <= 0L) return@ScreenActivityEffect // Nuvio fork: rotation off
++        delay(heroRotationIntervalMs)
+         while (pagerState.isScrollInProgress) {
+             delay(100L)
+         }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index 4ec3af20f..d3624c575 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -37,6 +37,11 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+         }
+     }
+     val skipFeedback by ForkPrefs.skipFeedback.value.collectAsStateWithLifecycle()
++    SettingsSection(title = "Home", isTablet = isTablet) {
++        SettingsGroup(isTablet = isTablet) {
++            HeroRotationSpeedRow(isTablet = isTablet)
++        }
++    }
+     SettingsSection(title = "About this fork", isTablet = isTablet) {
+         SettingsGroup(isTablet = isTablet) {
+             SettingsNavigationRow(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+index f27e50376..da6372f0b 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -64,6 +64,7 @@ object ForkPrefs {
+     val skipFeedback = BoolPref("settings/skip_feedback", true)
+     val omdbKey = StringPref("settings/omdb_key", "")
+     val dohProvider = StringPref("settings/doh_provider", "off")
++    val heroRotationMs = StringPref("settings/hero_rotation_ms", "8000")
+ 
+     /** Called once from the desktop engine before any UI reads a pref. */
+     fun install(newStorage: Storage) {
+@@ -73,5 +74,6 @@ object ForkPrefs {
+         skipFeedback.ensureLoaded()
+         omdbKey.ensureLoaded()
+         dohProvider.ensureLoaded()
++        heroRotationMs.ensureLoaded()
+     }
+ }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HeroRotationSpeed.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HeroRotationSpeed.kt
+new file mode 100644
+index 000000000..bbdbafb07
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HeroRotationSpeed.kt
+@@ -0,0 +1,74 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.core.ui.DialogButton
++import com.nuvio.app.core.ui.DialogButtons
++import com.nuvio.app.core.ui.DialogOption
++import com.nuvio.app.core.ui.DialogSurface
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++
++/** Nuvio fork: how fast the rotating billboard on Home moves on by itself. 0 = off (swipe only). */
++object HeroRotationSpeed {
++    const val DEFAULT_MS = 8_000L
++    val choices: List<Long> = listOf(0L, 4_000L, 6_000L, 8_000L, 12_000L)
++
++    private val _intervalMs = MutableStateFlow(DEFAULT_MS)
++    val intervalMs: StateFlow<Long> = _intervalMs.asStateFlow()
++
++    fun ensureLoaded() {
++        val stored = ForkPrefs.heroRotationMs.current().toLongOrNull()
++        if (stored != null && stored in choices) _intervalMs.value = stored
++    }
++
++    fun set(ms: Long) {
++        _intervalMs.value = ms
++        ForkPrefs.heroRotationMs.set(ms.toString())
++    }
++
++    fun label(ms: Long): String = if (ms <= 0L) "Off" else "${ms / 1000} seconds"
++}
++
++@Composable
++internal fun HeroRotationSpeedRow(isTablet: Boolean) {
++    LaunchedEffect(Unit) { HeroRotationSpeed.ensureLoaded() }
++    val interval by HeroRotationSpeed.intervalMs.collectAsStateWithLifecycle()
++    var show by remember { mutableStateOf(false) }
++    SettingsNavigationRow(
++        title = "Billboard rotation speed",
++        description = HeroRotationSpeed.label(interval),
++        isTablet = isTablet,
++        onClick = { show = true },
++    )
++    if (show) {
++        DialogSurface(
++            onDismissRequest = { show = false },
++            title = "Billboard rotation speed",
++        ) {
++            HeroRotationSpeed.choices.forEach { ms ->
++                DialogOption(
++                    text = HeroRotationSpeed.label(ms),
++                    description = if (ms == 0L) "Only moves when you swipe" else null,
++                    selected = interval == ms,
++                    onClick = {
++                        HeroRotationSpeed.set(ms)
++                        show = false
++                    },
++                    modifier = Modifier.fillMaxWidth(),
++                )
++            }
++            DialogButtons {
++                DialogButton(text = "Done", onClick = { show = false })
++            }
++        }
++    }
++}

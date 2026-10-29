@@ -1,0 +1,55 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
+index c09ac18c4..466a3c3fe 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
+@@ -193,6 +193,13 @@ object HomeRepository {
+             .mapNotNull { definition ->
+                 val preference = preferences[definition.key]
+                 if (preference?.enabled == false) return@mapNotNull null
++                if ( // Nuvio fork: home shows movie/series/anime rows only
++                    com.nuvio.app.features.settings.ForkPrefs.homeVideoRowsOnly.current() &&
++                    definition.type.isNotBlank() &&
++                    definition.type.lowercase() !in setOf("movie", "series", "anime", "collections", "tv")
++                ) {
++                    return@mapNotNull null
++                }
+ 
+                 val section = cachedSections[definition.cacheKey]
+                     ?.withPosterOverlay()
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index d85bd2f2c..68b81a814 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -61,6 +61,13 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+                 pref = ForkPrefs.homeFinishSeries,
+                 isTablet = isTablet,
+             )
++            SettingsGroupDivider(isTablet = isTablet)
++            HomeRowToggle(
++                title = "Video rows only",
++                description = "Hide home rows that are not movies, series or anime (channels, collections feeds).",
++                pref = ForkPrefs.homeVideoRowsOnly,
++                isTablet = isTablet,
++            )
+         }
+     }
+     SettingsSection(title = "About this fork", isTablet = isTablet) {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+index 73d5e18c7..99ab665e8 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -71,6 +71,7 @@ object ForkPrefs {
+     val homeUpNextTonight = BoolPref("settings/home_up_next_tonight", true)
+     val homeAiringWeek = BoolPref("settings/home_airing_week", true)
+     val homeFinishSeries = BoolPref("settings/home_finish_series", true)
++    val homeVideoRowsOnly = BoolPref("settings/home_video_rows_only", true)
+ 
+     /** Called once from the desktop engine before any UI reads a pref. */
+     fun install(newStorage: Storage) {
+@@ -87,5 +88,6 @@ object ForkPrefs {
+         homeUpNextTonight.ensureLoaded()
+         homeAiringWeek.ensureLoaded()
+         homeFinishSeries.ensureLoaded()
++        homeVideoRowsOnly.ensureLoaded()
+     }
+ }

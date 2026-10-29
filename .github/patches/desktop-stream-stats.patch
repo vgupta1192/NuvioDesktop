@@ -1,0 +1,96 @@
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index 482893c16..959958bf8 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -72,6 +72,10 @@ internal class NativePlayerController(
+     private val releaseTimeoutMs: Long = 10_000L,
+     private val onCreateWaitCompleted: () -> Unit = {},
+ ) : PlayerEngineController {
++    init {
++        startPlaybackStatsPoller() // Nuvio fork: live playback stats for the stream-info modal
++    }
++
+     private companion object {
+         val json = Json { ignoreUnknownKeys = true }
+         val log = Logger.withTag("NativePlayerControls")
+@@ -657,6 +661,56 @@ internal class NativePlayerController(
+         }
+     }
+ 
++    // Nuvio fork: live playback stats for the stream-info modal (mpv properties, fail-soft).
++    @Volatile private var playbackStatsJson: String? = null
++
++    private fun playbackStatsSectionJson(): String? = playbackStatsJson
++
++    private fun refreshPlaybackStats() {
++        val current = handle
++        if (current == 0L) return
++        fun prop(name: String): String? =
++            runCatching { NativePlayerBridge.propGetString(current, name) }.getOrNull()
++        fun dbl(name: String) = prop(name)?.toDoubleOrNull()
++        fun item(label: String, value: String?): String? = value?.let {
++            "{\"label\":\"$label\",\"value\":${it.toJsonString()}}"
++        }
++        val items = listOfNotNull(
++            item("Cache speed", dbl("cache-speed")?.takeIf { it > 0.0 }?.let { String.format("%.1fx", it) }),
++            item("Buffered", dbl("demuxer-cache-duration")?.takeIf { it > 0.0 }?.let { String.format("%.1f s", it) }),
++            item("Video bitrate", dbl("video-bitrate")?.takeIf { it > 0.0 }?.let { String.format("%.0f kbps", it / 1000.0) }),
++            item("Audio bitrate", dbl("audio-bitrate")?.takeIf { it > 0.0 }?.let { String.format("%.0f kbps", it / 1000.0) }),
++            item("FPS", dbl("container-fps")?.takeIf { it > 0.0 }?.let { String.format("%.2f", it) }),
++            item("A/V sync", dbl("avsync")?.let { String.format("%+.3f s", it) }),
++            item("Dropped frames", (prop("vo-drop-frame-count") ?: prop("decoder-drop-frame-count"))?.takeIf { it != "0" && it.isNotBlank() }),
++        )
++        val json = if (items.isEmpty()) null else
++            "{\"title\":\"Playback stats\",\"items\":[" + items.joinToString(",") + "]}"
++        if (json != playbackStatsJson) {
++            playbackStatsJson = json
++            SwingUtilities.invokeLater {
++                lastSentControlsStructureKey = null
++                updateControls(controlsState)
++            }
++        }
++    }
++
++    private fun startPlaybackStatsPoller() {
++        val poller = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
++            Thread(r, "nuvio-playback-stats").apply { isDaemon = true }
++        }
++        poller.scheduleWithFixedDelay({
++            try {
++                val current = handle
++                if (current == 0L) return@scheduleWithFixedDelay
++                val paused = runCatching { NativePlayerBridge.propGetString(current, "paused") }.getOrNull()
++                if (paused == "true") return@scheduleWithFixedDelay
++                refreshPlaybackStats()
++            } catch (_: Throwable) {
++            }
++        }, 2, 2, java.util.concurrent.TimeUnit.SECONDS)
++    }
++
+     private fun refreshControlsForEnhance() {
+         SwingUtilities.invokeLater {
+             lastSentControlsStructureKey = null
+@@ -1804,7 +1858,10 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+         append(',')
+         appendJsonField("streamInfoLabel", streamInfoLabel)
+         append(',')
+-        appendJsonArrayField("streamInfoSections", streamInfoSections) { section ->
++        // Nuvio fork: build the sections array inline so the live playback-stats section can ride last
++        append("\"streamInfoSections\":[")
++        streamInfoSections.forEachIndexed { sIndex, section ->
++            if (sIndex > 0) append(',')
+             append("{\"title\":").append(section.title.toJsonString())
+             append(",\"logo\":").append((section.logo ?: "").toJsonString())
+             append(",\"name\":").append((section.name ?: "").toJsonString())
+@@ -1819,6 +1876,11 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+             }
+             append("]}")
+         }
++        playbackStatsSectionJson()?.let { stats ->
++            if (streamInfoSections.isNotEmpty()) append(',')
++            append(stats)
++        }
++        append(']')
+         append(",\"enhance\":")
+         append(com.nuvio.app.features.player.DesktopPlayerEnhance.panelJson())
+         append(",\"party\":")
