@@ -98,10 +98,10 @@ index 00000000..80ec52f7
 +/** Wide-bars Live TV channel (see [isWideBarsChannel]); false everywhere else. Read by the sampling loop. */
 +internal val LocalLiveTvWideBars = compositionLocalOf { false }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-index 3abd99be..0945c43f 100644
+index 98e64ada..38583fa5 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-@@ -354,6 +354,12 @@ private fun PlayerScreenRuntime.handleDoubleTapSeek(
+@@ -355,6 +355,12 @@ private fun PlayerScreenRuntime.handleDoubleTapSeek(
  }
  
  internal fun PlayerScreenRuntime.cycleResizeMode() {
@@ -115,18 +115,18 @@ index 3abd99be..0945c43f 100644
      resizeMode = nextMode
      lastSyncedSettingsResizeMode = nextMode
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 56b6fd48..5b3d4fbe 100644
+index f704e8b8..3cdf8e07 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxScope
- import androidx.compose.foundation.layout.fillMaxSize
- import androidx.compose.material3.MaterialTheme
+@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.runtime.Composable
 +import androidx.compose.runtime.CompositionLocalProvider
  import androidx.compose.runtime.DisposableEffect
  import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.ui.graphics.Color
-@@ -526,6 +527,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -561,6 +562,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
          if (renderPlayerSurface) {
              val surfaceSource = currentPlayerSurfaceSource
              val sourceAvailable = surfaceSource != null
@@ -134,7 +134,7 @@ index 56b6fd48..5b3d4fbe 100644
              PlatformPlayerSurface(
                  sourceUrl = surfaceSource?.sourceUrl.orEmpty(),
                  sourceAvailable = sourceAvailable,
-@@ -538,7 +540,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -573,7 +575,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                  playWhenReady = shouldPlay && sourceAvailable,
                  initialPositionMs = surfaceSource?.initialPositionMs,
                  initialPositionRequestKey = surfaceSource?.initialPositionRequestKey,
@@ -143,7 +143,7 @@ index 56b6fd48..5b3d4fbe 100644
                  playbackEngine = playbackEngineOverride,
                  playerControlsState = playerControlsState,
                  onPlayerControlsAction = { action -> handlePlayerControlsAction(action) },
-@@ -598,6 +600,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -633,6 +635,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                      }
                  },
              )
@@ -151,7 +151,7 @@ index 56b6fd48..5b3d4fbe 100644
          }
  
          AnimatedVisibility(
-@@ -685,7 +688,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,
+@@ -742,7 +745,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(
              playbackSnapshot = playbackSnapshot,
              displayedPositionMs = displayedPositionMs,
              metrics = metrics,
