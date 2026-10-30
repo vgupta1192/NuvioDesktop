@@ -1,0 +1,120 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsComponents.kt
+index ef9a29996..af7674fda 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsComponents.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsComponents.kt
+@@ -213,19 +213,21 @@ internal fun SettingsSection(
+ ) {
+     val tokens = MaterialTheme.nuvio
+     Column {
+-        Row(
+-            modifier = Modifier.fillMaxWidth(),
+-            horizontalArrangement = Arrangement.SpaceBetween,
+-            verticalAlignment = Alignment.CenterVertically,
+-        ) {
+-            NuvioSectionLabel(text = title)
++        if (title.isNotBlank()) { // Nuvio fork: blank title = no header row (wide layout hides dup labels)
+             Row(
+-                horizontalArrangement = Arrangement.End,
++                modifier = Modifier.fillMaxWidth(),
++                horizontalArrangement = Arrangement.SpaceBetween,
+                 verticalAlignment = Alignment.CenterVertically,
+-                content = actions,
+-            )
++            ) {
++                NuvioSectionLabel(text = title)
++                Row(
++                    horizontalArrangement = Arrangement.End,
++                    verticalAlignment = Alignment.CenterVertically,
++                    content = actions,
++                )
++            }
++            Spacer(modifier = Modifier.height(if (isTablet) tokens.spacing.listGap else NuvioTokens.Space.s10))
+         }
+-        Spacer(modifier = Modifier.height(if (isTablet) tokens.spacing.listGap else NuvioTokens.Space.s10))
+         content()
+     }
+ }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
+index 1f427904e..d4a2f1f79 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
+@@ -85,20 +85,24 @@ internal fun LazyListScope.settingsRootContent(
+     showAdvancedSection: Boolean = true,
+     showSupportersContributorsPage: Boolean = true,
+     showAttribution: Boolean = true,
++    showForkSection: Boolean = true, // Nuvio fork: fork cards only under General on the wide layout
++    showSectionTitles: Boolean = true, // Nuvio fork: wide layout hides titles that duplicate the sidebar
+ ) {
+-    item {
+-        DxSoundsSettingsSection(isTablet = isTablet) // Nuvio fork: sounds hook
+-    }
+-    item {
+-        DxWatchStatsSettingsSection(isTablet = isTablet) // Nuvio fork: watch stats hook
+-    }
+-    item {
+-        ProfileInsightsRootCard(isTablet = isTablet, onSwitchProfile = onSwitchProfileClick) // Nuvio fork: profile insights hook
++    if (showForkSection) {
++        item {
++            ProfileInsightsRootCard(isTablet = isTablet, onSwitchProfile = onSwitchProfileClick) // Nuvio fork: profile insights panel at the top
++        }
++        item {
++            DxSoundsSettingsSection(isTablet = isTablet) // Nuvio fork: sounds hook
++        }
++        item {
++            DxWatchStatsSettingsSection(isTablet = isTablet) // Nuvio fork: watch stats hook
++        }
+     }
+     if (showAccountSection) {
+         item {
+             SettingsSection(
+-                title = stringResource(Res.string.compose_settings_root_account_section),
++                title = if (showSectionTitles) stringResource(Res.string.compose_settings_root_account_section) else "",
+                 isTablet = isTablet,
+             ) {
+                 SettingsGroup(isTablet = isTablet) {
+@@ -144,7 +148,7 @@ internal fun LazyListScope.settingsRootContent(
+     if (showGeneralSection) {
+         item {
+             SettingsSection(
+-                title = stringResource(Res.string.compose_settings_root_general_section),
++                title = if (showSectionTitles) stringResource(Res.string.compose_settings_root_general_section) else "",
+                 isTablet = isTablet,
+             ) {
+                 SettingsGroup(isTablet = isTablet) {
+@@ -207,7 +211,7 @@ internal fun LazyListScope.settingsRootContent(
+         item {
+             val uriHandler = LocalUriHandler.current
+             SettingsSection(
+-                title = stringResource(Res.string.compose_settings_root_about_section),
++                title = if (showSectionTitles) stringResource(Res.string.compose_settings_root_about_section) else "",
+                 isTablet = isTablet,
+             ) {
+                 SettingsGroup(isTablet = isTablet) {
+@@ -265,12 +269,12 @@ internal fun LazyListScope.settingsRootContent(
+     if (showAdvancedSection) {
+         item {
+             SettingsSection(
+-                title = stringResource(Res.string.compose_settings_root_advanced_section),
++                title = if (showSectionTitles) stringResource(Res.string.compose_settings_root_advanced_section) else "",
+                 isTablet = isTablet,
+             ) {
+                 SettingsGroup(isTablet = isTablet) {
+                     SettingsNavigationRow(
+-                        title = stringResource(Res.string.compose_settings_page_advanced),
++                        title = if (showSectionTitles) stringResource(Res.string.compose_settings_page_advanced) else "",
+                         description = stringResource(Res.string.compose_settings_root_advanced_description),
+                         icon = Icons.Rounded.Tune,
+                         isTablet = isTablet,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
+index 4010f5aab..093d61d63 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
+@@ -1213,6 +1213,8 @@ private fun TabletSettingsScreen(
+                                         showAboutSection = activeCategory == SettingsCategory.About,
+                                         showAttribution = false,
+                                         showAdvancedSection = activeCategory == SettingsCategory.Advanced,
++                                        showForkSection = activeCategory == SettingsCategory.General, // Nuvio fork: fork cards only under General
++                                        showSectionTitles = false, // Nuvio fork: sidebar already shows the category name
+                                         showSupportersContributorsPage = AppFeaturePolicy.supportersContributorsPageEnabled,
+                                     )
+                                 }
