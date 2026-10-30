@@ -1,0 +1,188 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
+index 27455e296..a9ffd510d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
+@@ -78,6 +78,16 @@ fun DetailMetaInfo(
+     showOverallRatings: Boolean = true,
+     isMdbListActive: Boolean = false,
+ ) {
++    if (com.nuvio.app.features.settings.ForkPrefs.nuvioRead.current()) { // Nuvio fork: Nuvio Read card
++        ForkNuvioReadCard(
++            meta = meta,
++            modifier = modifier,
++            horizontalScrollPadding = horizontalScrollPadding,
++            showOverallRatings = showOverallRatings,
++            isMdbListActive = isMdbListActive,
++        )
++        return
++    }
+     Column(
+         modifier = modifier
+             .fillMaxWidth()
+@@ -441,3 +451,117 @@ internal fun forkRatingValueColor(source: String): Color? = when (source.lowerca
+     "simkl" -> Color.White
+     else -> null
+ }
++
++/** Nuvio fork: a calmer, reader-style detail card (pills, ratings, credits, story). */
++@Composable
++private fun ForkNuvioReadCard(
++    meta: MetaDetails,
++    modifier: Modifier,
++    horizontalScrollPadding: Dp,
++    showOverallRatings: Boolean,
++    isMdbListActive: Boolean,
++) {
++    val pills = buildList {
++        formatMetaReleaseLineForDetails(meta)?.let(::add)
++        formatRuntimeForDisplay(meta.runtime)?.let(::add)
++        meta.ageRating?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
++        meta.imdbRating
++            ?.takeIf { showOverallRatings && !isMdbListActive }
++            ?.takeIf { raw -> raw.toDoubleOrNull()?.let { it > 0.0 } == true }
++            ?.let { add("IMDb $it") }
++    }
++    val description = meta.description?.trim()?.takeIf { it.isNotBlank() }
++    val onSurface = MaterialTheme.colorScheme.onSurface
++    androidx.compose.material3.Surface(
++        modifier = modifier
++            .fillMaxWidth()
++            .padding(horizontal = horizontalScrollPadding)
++            .animateContentSize(),
++        shape = RoundedCornerShape(28.dp),
++        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
++        border = androidx.compose.foundation.BorderStroke(1.dp, onSurface.copy(alpha = 0.10f)),
++    ) {
++        Column(
++            modifier = Modifier
++                .background(
++                    androidx.compose.ui.graphics.Brush.verticalGradient(
++                        listOf(onSurface.copy(alpha = 0.055f), Color.Transparent),
++                    ),
++                )
++                .padding(16.dp),
++            verticalArrangement = Arrangement.spacedBy(14.dp),
++        ) {
++            if (pills.isNotEmpty()) {
++                Row(
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .horizontalScroll(rememberScrollState()),
++                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                    verticalAlignment = Alignment.CenterVertically,
++                ) {
++                    pills.forEach { pill ->
++                        androidx.compose.material3.Surface(
++                            shape = RoundedCornerShape(999.dp),
++                            color = onSurface.copy(alpha = 0.07f),
++                            border = androidx.compose.foundation.BorderStroke(1.dp, onSurface.copy(alpha = 0.11f)),
++                        ) {
++                            Text(
++                                text = pill,
++                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
++                                style = MaterialTheme.typography.labelMedium,
++                                color = onSurface,
++                                fontWeight = FontWeight.SemiBold,
++                                maxLines = 1,
++                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
++                            )
++                        }
++                    }
++                }
++            }
++            if (isMdbListActive && meta.externalRatings.isNotEmpty()) {
++                DetailRatingsRow(
++                    ratings = meta.externalRatings,
++                    horizontalScrollPadding = 0.dp,
++                )
++            }
++            if (meta.director.isNotEmpty()) {
++                MetaLabelValueRow(
++                    label = stringResource(Res.string.details_director),
++                    value = meta.director.joinToString(", "),
++                )
++            }
++            if (meta.writer.isNotEmpty()) {
++                MetaLabelValueRow(
++                    label = stringResource(Res.string.details_writer),
++                    value = meta.writer.joinToString(", "),
++                )
++            }
++            if (description != null) {
++                androidx.compose.material3.Surface(
++                    modifier = Modifier.fillMaxWidth(),
++                    shape = RoundedCornerShape(22.dp),
++                    color = onSurface.copy(alpha = 0.055f),
++                    border = androidx.compose.foundation.BorderStroke(1.dp, onSurface.copy(alpha = 0.08f)),
++                ) {
++                    Column(
++                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
++                        verticalArrangement = Arrangement.spacedBy(8.dp),
++                    ) {
++                        Text(
++                            text = "Story",
++                            style = MaterialTheme.typography.labelMedium,
++                            color = MaterialTheme.colorScheme.primary,
++                            fontWeight = FontWeight.SemiBold,
++                            maxLines = 1,
++                        )
++                        ExpandableDescription(
++                            text = description,
++                            collapsedMaxLines = 4,
++                            style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 23.sp),
++                        )
++                    }
++                }
++            }
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index 33235d31f..c8f8b353f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -133,6 +133,7 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+     }
+     val privateViewing by ForkPrefs.privateViewing.value.collectAsStateWithLifecycle()
+     val autoAddTorbox by ForkPrefs.autoAddTorbox.value.collectAsStateWithLifecycle()
++    val nuvioRead by ForkPrefs.nuvioRead.value.collectAsStateWithLifecycle()
+     SettingsSection(title = "Streams", isTablet = isTablet) {
+         SettingsGroup(isTablet = isTablet) {
+             SettingsSwitchRow(
+@@ -144,6 +145,17 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+             )
+         }
+     }
++    SettingsSection(title = "Details page", isTablet = isTablet) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsSwitchRow(
++                title = "Nuvio Read card",
++                description = "Show credits, ratings and the story in a calm reader card on the detail page.",
++                checked = nuvioRead,
++                isTablet = isTablet,
++                onCheckedChange = ForkPrefs.nuvioRead::set,
++            )
++        }
++    }
+     SettingsSection(title = "Privacy", isTablet = isTablet) {
+         SettingsGroup(isTablet = isTablet) {
+             SettingsSwitchRow(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+index 950330b42..e11f00495 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -77,6 +77,7 @@ object ForkPrefs {
+     val secondSubtitle = BoolPref("settings/second_subtitle", false)
+     val secondSubtitleLang = StringPref("settings/second_subtitle_lang", "")
+     val autoAddTorbox = BoolPref("settings/auto_add_torbox", false)
++    val nuvioRead = BoolPref("settings/nuvio_read", false)
+ 
+     private const val PINNED_SOURCES_KEY = "sources/pinned"
+ 
+@@ -118,5 +119,6 @@ object ForkPrefs {
+         secondSubtitle.ensureLoaded()
+         secondSubtitleLang.ensureLoaded()
+         autoAddTorbox.ensureLoaded()
++        nuvioRead.ensureLoaded()
+     }
+ }
