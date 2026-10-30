@@ -1,3 +1,45 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index 235b9f313..33235d31f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -132,6 +132,18 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+         }
+     }
+     val privateViewing by ForkPrefs.privateViewing.value.collectAsStateWithLifecycle()
++    val autoAddTorbox by ForkPrefs.autoAddTorbox.value.collectAsStateWithLifecycle()
++    SettingsSection(title = "Streams", isTablet = isTablet) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsSwitchRow(
++                title = "Add uncached streams to TorBox",
++                description = "When a debrid stream is not cached, send it to TorBox in the background so it caches for next time.",
++                checked = autoAddTorbox,
++                isTablet = isTablet,
++                onCheckedChange = ForkPrefs.autoAddTorbox::set,
++            )
++        }
++    }
+     SettingsSection(title = "Privacy", isTablet = isTablet) {
+         SettingsGroup(isTablet = isTablet) {
+             SettingsSwitchRow(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+index 7cd8f4c65..950330b42 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -76,6 +76,7 @@ object ForkPrefs {
+     val fillerGuide = BoolPref("settings/filler_guide", true)
+     val secondSubtitle = BoolPref("settings/second_subtitle", false)
+     val secondSubtitleLang = StringPref("settings/second_subtitle_lang", "")
++    val autoAddTorbox = BoolPref("settings/auto_add_torbox", false)
+ 
+     private const val PINNED_SOURCES_KEY = "sources/pinned"
+ 
+@@ -116,5 +117,6 @@ object ForkPrefs {
+         fillerGuide.ensureLoaded()
+         secondSubtitle.ensureLoaded()
+         secondSubtitleLang.ensureLoaded()
++        autoAddTorbox.ensureLoaded()
+     }
+ }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/debrid/DirectDebridStreamPreparer.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/debrid/DirectDebridStreamPreparer.kt
 index c349f4ef4..c057d4f7f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/debrid/DirectDebridStreamPreparer.kt
