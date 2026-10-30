@@ -1,7 +1,7 @@
 name: Build NuvioDesktop Jellyfin+LiveTV (upstream release sync)
-# sync-pulse: 0.1.33-alpha 2026-10-31T03:10:00Z
-# sync-pulse: 0.1.33-alpha 2026-10-31T03:10:00Z
-# sync-pulse: 0.1.33-alpha 2026-10-31T03:10:00Z
+# sync-pulse: 0.1.33-alpha 2026-10-31T03:35:00Z
+# sync-pulse: 0.1.33-alpha 2026-10-31T03:35:00Z
+# sync-pulse: 0.1.33-alpha 2026-10-31T03:35:00Z
 
 on:
   push:
@@ -276,7 +276,7 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           # optional-desktop-batch5
-          for P in desktop-torbox-offer desktop-nuvio-read-card desktop-episode-rating-fixes desktop-owned-marker desktop-crash-logs desktop-batch5-fixes desktop-features-hub desktop-features-hub-fixes desktop-settings-layout desktop-features-hub-fixes2 desktop-features-consolidate desktop-wetrakr; do
+          for P in desktop-torbox-offer desktop-nuvio-read-card desktop-episode-rating-fixes desktop-owned-marker desktop-crash-logs desktop-batch5-fixes desktop-features-hub desktop-features-hub-fixes desktop-settings-layout desktop-features-hub-fixes2 desktop-features-consolidate desktop-wetrakr desktop-feedback-3; do
             if git apply "fork-src/.github/patches/$P.patch"; then
               echo "applied $P.patch"
             else
@@ -333,6 +333,7 @@ jobs:
             'NUVIO_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5NzY2MDkyLCJleHAiOjE5NDc0NDYwOTJ9.XB5a12DpW9Uf11QARCv4AAfYHGyk4qRq2Oi_7t8t7X0' \
             'NUVIO_SUPABASE_FALLBACK_URL=' \
             'SIMKL_CLIENT_ID=cf7f2a335cfcd9759fa01d752d9cf8f42fb4fa1a4e4ff08fe4cafb84ec836621' \
+            'MDBLIST_CLIENT_ID=37RRuqIIBQbBsHmxcdl3RGRMhrpTK8FdFxAGltS0' \
             'TMDB_API_KEY=af624aa414c84ad32d55d5ac45feae76' \
             'NUVIO_ANDROID_DISTRIBUTION=full' \
             'NUVIO_IOS_DISTRIBUTION=appstore' \

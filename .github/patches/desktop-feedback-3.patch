@@ -1,0 +1,436 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
+index 63e4df666..c11472ea8 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
+@@ -1,5 +1,7 @@
+ package com.nuvio.app.core.ui
+ 
++import com.nuvio.app.features.settings.ForkPrefs
++
+ import com.nuvio.app.core.build.AppFeaturePolicy
+ import com.nuvio.app.features.details.HeroTrailerAudioState
+ import com.nuvio.app.features.details.MetaScreenSettingsRepository
+@@ -300,38 +302,55 @@ object PosterCardStyleRepository {
+             json.decodeFromString<StoredPosterCardStylePreferences>(payload)
+         }.getOrNull()
+ 
+-        _uiState.value = if (stored != null) {
+-            val widthDp = stored.widthDp.takeIf { it > 0 } ?: DefaultPosterCardWidthDp
+-            val heightDp = stored.heightDp.takeIf { it > 0 } ?: ((widthDp * 3) / 2)
+-            val cornerRadiusDp = stored.cornerRadiusDp.coerceAtLeast(0)
++        var storedMigrated = stored
++        if (storedMigrated != null && ForkPrefs.readRaw("trailer_defaults_v2_applied").isNullOrBlank()) {
++            // Nuvio fork: one-time upgrade — trailers default on for installs saved before the flip.
++            storedMigrated = storedMigrated.copy(
++                hoverPreviewTrailerEnabled = true,
++                netflixPrevTrailerEnabled = true,
++            )
++            runCatching {
++                PosterCardStyleStorage.savePayload(
++                    json.encodeToString(
++                        StoredPosterCardStylePreferences.serializer(),
++                        storedMigrated,
++                    ),
++                )
++            }
++            ForkPrefs.writeRaw("trailer_defaults_v2_applied", "1")
++        }
++        _uiState.value = if (storedMigrated != null) {
++            val widthDp = storedMigrated.widthDp.takeIf { it > 0 } ?: DefaultPosterCardWidthDp
++            val heightDp = storedMigrated.heightDp.takeIf { it > 0 } ?: ((widthDp * 3) / 2)
++            val cornerRadiusDp = storedMigrated.cornerRadiusDp.coerceAtLeast(0)
+             PosterCardStyleUiState(
+                 widthDp = widthDp,
+                 heightDp = heightDp,
+                 cornerRadiusDp = cornerRadiusDp,
+-                catalogLandscapeModeEnabled = stored.catalogLandscapeModeEnabled,
+-                hideLabelsEnabled = stored.hideLabelsEnabled,
+-                hoverPreviewEnabled = stored.hoverPreviewEnabled,
++                catalogLandscapeModeEnabled = storedMigrated.catalogLandscapeModeEnabled,
++                hideLabelsEnabled = storedMigrated.hideLabelsEnabled,
++                hoverPreviewEnabled = storedMigrated.hoverPreviewEnabled,
+                 hoverPreviewOpenDelayMillis = normalizeHoverPreviewOpenDelayMillis(
+-                    stored.hoverPreviewOpenDelayMillis,
++                    storedMigrated.hoverPreviewOpenDelayMillis,
+                 ),
+-                hoverPreviewTrailerEnabled = stored.hoverPreviewTrailerEnabled,
+-                hoverPreviewTrailerSoundEnabled = stored.hoverPreviewTrailerSoundEnabled,
++                hoverPreviewTrailerEnabled = storedMigrated.hoverPreviewTrailerEnabled,
++                hoverPreviewTrailerSoundEnabled = storedMigrated.hoverPreviewTrailerSoundEnabled,
+                 hoverPreviewTrailerStartSeconds = normalizeHoverPreviewTrailerStartSeconds(
+-                    stored.hoverPreviewTrailerStartSeconds,
++                    storedMigrated.hoverPreviewTrailerStartSeconds,
+                 ),
+-                netflixStyleEnabled = stored.netflixStyleEnabled,
+-                netflixPrevHoverEnabled = stored.netflixPrevHoverEnabled,
+-                netflixPrevOpenDelayMillis = stored.netflixPrevOpenDelayMillis,
+-                netflixPrevTrailerEnabled = stored.netflixPrevTrailerEnabled,
+-                netflixPrevTrailerSoundEnabled = stored.netflixPrevTrailerSoundEnabled,
+-                netflixPrevCwStyle = stored.netflixPrevCwStyle,
+-                liveTvNetflixStyleEnabled = stored.liveTvNetflixStyleEnabled,
+-                liveTvNetflixPrevEnabled = stored.liveTvNetflixPrevEnabled,
+-                netflixPrevHeroTrailer = stored.netflixPrevHeroTrailer,
+-                netflixPrevHeroMuted = stored.netflixPrevHeroMuted,
+-                alwaysShowLandscapeClearlogo = stored.alwaysShowLandscapeClearlogo,
++                netflixStyleEnabled = storedMigrated.netflixStyleEnabled,
++                netflixPrevHoverEnabled = storedMigrated.netflixPrevHoverEnabled,
++                netflixPrevOpenDelayMillis = storedMigrated.netflixPrevOpenDelayMillis,
++                netflixPrevTrailerEnabled = storedMigrated.netflixPrevTrailerEnabled,
++                netflixPrevTrailerSoundEnabled = storedMigrated.netflixPrevTrailerSoundEnabled,
++                netflixPrevCwStyle = storedMigrated.netflixPrevCwStyle,
++                liveTvNetflixStyleEnabled = storedMigrated.liveTvNetflixStyleEnabled,
++                liveTvNetflixPrevEnabled = storedMigrated.liveTvNetflixPrevEnabled,
++                netflixPrevHeroTrailer = storedMigrated.netflixPrevHeroTrailer,
++                netflixPrevHeroMuted = storedMigrated.netflixPrevHeroMuted,
++                alwaysShowLandscapeClearlogo = storedMigrated.alwaysShowLandscapeClearlogo,
+                 animatedArtworkMode = AnimatedArtworkMode.entries
+-                    .firstOrNull { it.name == stored.animatedArtworkMode }
++                    .firstOrNull { it.name == storedMigrated.animatedArtworkMode }
+                     ?: AnimatedArtworkMode.Always,
+             )
+         } else {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
+index 6b70bdfac..fe3ce31b9 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
+@@ -44,17 +44,44 @@ object ExtraEpisodeRatings {
+         return out
+     }
+ 
+-    /** TMDB per-episode ratings from the series-graph API (keyed by the TMDB id). */
++    /**
++     * TMDB per-episode ratings straight from the TMDB API (the series-graph/tapframe third
++     * party APIs are not configured on desktop builds). Discovers the season count first so
++     * only the seasons that exist are fetched.
++     */
+     private suspend fun fetchTmdb(tmdbId: Int): Map<Pair<Int, Int>, Double> = withContext(Dispatchers.Default) {
+         try {
+-            val seasons = SeriesGraphApi.getSeasonRatings(tmdbId)
++            val apiKey = com.nuvio.app.features.tmdb.TmdbSettingsRepository.effectiveApiKey()
++            if (apiKey.isBlank()) return@withContext emptyMap()
++            val show = json.parseToJsonElement(
++                httpRequestRaw(
++                    method = "GET",
++                    url = "https://api.themoviedb.org/3/tv/$tmdbId?api_key=$apiKey",
++                    headers = mapOf("Accept" to "application/json"),
++                    body = "",
++                ).body,
++            ).jsonObject
++            val totalSeasons = show["number_of_seasons"]?.jsonPrimitive?.intOrNull?.takeIf { it > 0 }
++                ?.coerceAtMost(30)
++                ?: return@withContext emptyMap()
+             val out = HashMap<Pair<Int, Int>, Double>()
+-            seasons.forEach { season ->
+-                val s = season.episodes?.firstOrNull()?.seasonNumber ?: return@forEach
+-                season.episodes.orEmpty().forEach { episode ->
+-                    val e = episode.episodeNumber ?: return@forEach
+-                    val rating = episode.voteAverage?.takeIf { it > 0.0 } ?: return@forEach
+-                    out[s to e] = rating
++            for (season in 1..totalSeasons) {
++                val root = runCatching {
++                    json.parseToJsonElement(
++                        httpRequestRaw(
++                            method = "GET",
++                            url = "https://api.themoviedb.org/3/tv/$tmdbId/season/$season?api_key=$apiKey",
++                            headers = mapOf("Accept" to "application/json"),
++                            body = "",
++                        ).body,
++                    ).jsonObject
++                }.getOrNull() ?: continue
++                val episodes = root["episodes"] as? kotlinx.serialization.json.JsonArray ?: continue
++                for (element in episodes) {
++                    val ep = element as? JsonObject ?: continue
++                    val number = ep["episode_number"]?.jsonPrimitive?.intOrNull ?: continue
++                    val rating = ep["vote_average"]?.jsonPrimitive?.doubleOrNull?.takeIf { it > 0.0 } ?: continue
++                    out[season to number] = rating
+                 }
+             }
+             out
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaScreenSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaScreenSettingsRepository.kt
+index 605e25a13..7c18de653 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaScreenSettingsRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaScreenSettingsRepository.kt
+@@ -1,5 +1,7 @@
+ package com.nuvio.app.features.details
+ 
++import com.nuvio.app.features.settings.ForkPrefs
++
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.asStateFlow
+@@ -238,7 +240,14 @@ object MetaScreenSettingsRepository {
+             if (parsed != null) {
+                 backgroundMode = MetaScreenBackgroundMode.parse(parsed.backgroundMode)
+                     ?: MetaScreenBackgroundMode.fromLegacyCinematic(parsed.cinematicBackground)
+-                heroTrailerPlayback = parsed.heroTrailerPlayback
++                heroTrailerPlayback = if (
++                    parsed.heroTrailerPlayback ||
++                    ForkPrefs.readRaw("trailer_defaults_v2_applied").isNullOrBlank().not()
++                ) {
++                    parsed.heroTrailerPlayback
++                } else {
++                    true // Nuvio fork: one-time upgrade — hero trailer defaults on
++                }
+                 tabLayout = parsed.tabLayout
+                 episodeCardStyle = MetaEpisodeCardStyle.parse(parsed.episodeCardStyle)
+                     ?: MetaEpisodeCardStyle.Horizontal
+@@ -256,6 +265,7 @@ object MetaScreenSettingsRepository {
+         normalizePreferences()
+         publish()
+         persist()
++        ForkPrefs.writeRaw("trailer_defaults_v2_applied", "1") // Nuvio fork: mark upgraded
+     }
+ 
+     fun onProfileChanged() {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
+index 7e24e1661..365c26f8a 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
+@@ -127,6 +127,7 @@ internal enum class TrackingBrand(val displayName: String) {
+     SIMKL("Simkl"),
+     MDBLIST("MDBList"),
+     TMDB("TMDB"),
++    WETRAKR("WeTrakr"),
+ }
+ 
+ internal enum class TrackingConnectionCardMode {
+@@ -143,6 +144,7 @@ internal fun isTrackingBrandAvailable(
+ ): Boolean = when (brand) {
+     TrackingBrand.NUVIO,
+     TrackingBrand.TMDB,
++    TrackingBrand.WETRAKR,
+     -> true
+     TrackingBrand.TRAKT -> traktConnected
+     TrackingBrand.SIMKL -> simklConnected
+@@ -733,6 +735,7 @@ private fun TrackingDisconnectDialog(
+                 TrackingBrand.MDBLIST -> stringResource(Res.string.settings_mdblist_disconnect_description)
+                 TrackingBrand.NUVIO,
+                 TrackingBrand.TMDB,
++                TrackingBrand.WETRAKR,
+                 -> stringResource(
+                     Res.string.settings_tracking_disconnect_description,
+                     brand.displayName,
+@@ -792,6 +795,12 @@ internal fun TrackingBrandGlyph(
+             modifier = modifier,
+             tint = MaterialTheme.nuvio.colors.accent,
+         )
++        TrackingBrand.WETRAKR -> Icon(
++            imageVector = Icons.Rounded.Sync,
++            contentDescription = contentDescription,
++            modifier = modifier,
++            tint = Color(0xFFFFE729),
++        )
+     }
+ }
+ 
+@@ -800,12 +809,22 @@ private fun TrackingBrandWordmark(
+     brand: TrackingBrand,
+     contentDescription: String,
+ ) {
++    if (brand == TrackingBrand.WETRAKR) {
++        Text(
++            text = "WeTrakr",
++            style = MaterialTheme.typography.headlineSmall,
++            fontWeight = FontWeight.Bold,
++            color = Color(0xFFFFE729),
++        )
++        return
++    }
+     val painter: Painter = when (brand) {
+         TrackingBrand.TRAKT -> traktBrandPainter(TraktBrandAsset.Wordmark)
+         TrackingBrand.SIMKL -> simklBrandPainter(SimklBrandAsset.Wordmark)
+         TrackingBrand.MDBLIST -> integrationLogoPainter(IntegrationLogo.MdbList)
+         TrackingBrand.NUVIO,
+         TrackingBrand.TMDB,
++        TrackingBrand.WETRAKR,
+         -> return
+     }
+     Image(
+@@ -821,6 +840,7 @@ private fun TrackingBrandWordmark(
+             TrackingBrand.MDBLIST -> Modifier.width(130.dp).height(32.dp)
+             TrackingBrand.NUVIO,
+             TrackingBrand.TMDB,
++            TrackingBrand.WETRAKR,
+             -> Modifier
+         },
+         contentScale = ContentScale.Fit,
+@@ -838,6 +858,9 @@ private fun TrackingBrand.cardBrush(): Brush = when (this) {
+     TrackingBrand.MDBLIST -> Brush.linearGradient(
+         colors = listOf(Color(0xFF173D69), Color(0xFF225C97), Color(0xFF16385D)),
+     )
++    TrackingBrand.WETRAKR -> Brush.linearGradient(
++        colors = listOf(Color(0xFF13161D), Color(0xFF2D2B1F), Color(0xFF14181F)),
++    )
+     TrackingBrand.NUVIO,
+     TrackingBrand.TMDB,
+     -> Brush.linearGradient(colors = listOf(Color(0xFF242424), Color(0xFF111111)))
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/WeTrakrProviderCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/WeTrakrProviderCard.kt
+index d7047ae7c..49f419193 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/WeTrakrProviderCard.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/WeTrakrProviderCard.kt
+@@ -1,129 +1,51 @@
+ package com.nuvio.app.features.settings
+ 
+-import androidx.compose.foundation.layout.Arrangement
+-import androidx.compose.foundation.layout.Column
+-import androidx.compose.foundation.layout.Row
+-import androidx.compose.foundation.layout.fillMaxWidth
+-import androidx.compose.foundation.layout.padding
+-import androidx.compose.material3.MaterialTheme
+-import androidx.compose.material3.Text
+-import androidx.compose.material3.TextButton
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.getValue
+-import androidx.compose.runtime.rememberCoroutineScope
+-import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+-import androidx.compose.ui.text.font.FontWeight
+-import androidx.compose.ui.unit.dp
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+-import com.nuvio.app.core.ui.DialogButton
+-import com.nuvio.app.core.ui.DialogButtons
+-import com.nuvio.app.core.ui.DialogSurface
+ import com.nuvio.app.features.tracking.WeTrakrRepository
+-import kotlinx.coroutines.launch
+ 
+-/** Nuvio fork: WeTrakr account card — device-code sign-in, live scrobbling and history writes. */
++/** Nuvio fork: WeTrakr panel — device-code sign-in, live scrobbling and history writes. */
+ @Composable
+ internal fun WeTrakrProviderCard(modifier: Modifier = Modifier) {
+-    androidx.compose.runtime.LaunchedEffect(Unit) { WeTrakrRepository.ensureLoaded() }
++    LaunchedEffect(Unit) { WeTrakrRepository.ensureLoaded() }
+     val state by WeTrakrRepository.state.collectAsStateWithLifecycle()
+-    val scope = rememberCoroutineScope()
+-    fun dismiss() = scope.launch { WeTrakrRepository.cancelConnect() }
+ 
+-    Column(
+-        modifier = modifier
+-            .fillMaxWidth()
+-            .padding(vertical = 4.dp),
+-        verticalArrangement = Arrangement.spacedBy(6.dp),
+-    ) {
+-        Row(
+-            modifier = Modifier.fillMaxWidth(),
+-            horizontalArrangement = Arrangement.SpaceBetween,
+-            verticalAlignment = Alignment.CenterVertically,
+-        ) {
+-            Column {
+-                Text(
+-                    text = "WeTrakr",
+-                    style = MaterialTheme.typography.titleMedium,
+-                    fontWeight = FontWeight.SemiBold,
+-                )
+-                val statusText = when {
+-                    state.isConnected -> state.username?.let { "Connected as $it" } ?: "Connected"
+-                    state.busy || state.userCode != null -> "Waiting for sign-in…"
+-                    else -> "Scrobbling and watched-history sync."
+-                }
+-                Text(
+-                    text = statusText,
+-                    style = MaterialTheme.typography.bodySmall,
+-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+-                )
+-            }
+-            Row(verticalAlignment = Alignment.CenterVertically) {
+-                if (state.isConnected) {
+-                    TextButton(onClick = { WeTrakrRepository.disconnect() }) { Text("Disconnect") }
+-                } else {
+-                    TextButton(onClick = { WeTrakrRepository.connect() }, enabled = !state.busy) {
+-                        Text("Connect")
+-                    }
+-                }
+-            }
+-        }
+-        state.error?.let { error ->
+-            Text(
+-                text = error,
+-                style = MaterialTheme.typography.bodySmall,
+-                color = MaterialTheme.colorScheme.error,
+-            )
+-        }
++    val mode = when {
++        state.isConnected -> TrackingConnectionCardMode.CONNECTED
++        state.userCode != null -> TrackingConnectionCardMode.AWAITING_APPROVAL
++        else -> TrackingConnectionCardMode.DISCONNECTED
+     }
+ 
+-    if (state.userCode != null || state.busy) {
+-        DialogSurface(
+-            onDismissRequest = { dismiss() },
+-            title = "Connect WeTrakr",
+-        ) {
+-            Column(
+-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+-                verticalArrangement = Arrangement.spacedBy(10.dp),
+-            ) {
+-                val userCode = state.userCode
+-                if (userCode != null) {
+-                    Text(
+-                        text = "1. Open",
+-                        style = MaterialTheme.typography.labelLarge,
+-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+-                    )
+-                    Text(
+-                        text = state.verificationUrl ?: "https://wetrakr.com/activate",
+-                        style = MaterialTheme.typography.bodyLarge,
+-                        fontWeight = FontWeight.SemiBold,
+-                        color = MaterialTheme.colorScheme.primary,
+-                    )
+-                    Text(
+-                        text = "2. Enter this code:",
+-                        style = MaterialTheme.typography.labelLarge,
+-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+-                    )
+-                    Text(
+-                        text = userCode,
+-                        style = MaterialTheme.typography.headlineMedium,
+-                        fontWeight = FontWeight.Bold,
+-                    )
+-                    Text(
+-                        text = "The app keeps checking until you finish, then connects automatically.",
+-                        style = MaterialTheme.typography.bodySmall,
+-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+-                    )
+-                } else {
+-                    Text("Contacting WeTrakr…")
+-                }
+-            }
+-            DialogButtons {
+-                DialogButton(
+-                    text = "Cancel",
+-                    onClick = { dismiss() },
+-                )
+-            }
+-        }
+-    }
++    TrackingProviderCard(
++        brand = TrackingBrand.WETRAKR,
++        mode = mode,
++        credentialsConfigured = true,
++        isLoading = state.busy,
++        connectedLabel = state.username?.let { "Connected as $it" } ?: "Connected",
++        connectedDescription = "Playback is scrobbled to WeTrakr and your watched history stays in sync.",
++        signInDescription = "Sign in to scrobble playback and sync your WeTrakr watched history.",
++        finishSignInLabel = "Finish signing in",
++        approvalDescription = "Open the activation page on any browser and enter this code.",
++        connectLabel = "Connect",
++        openLoginLabel = "Open activation page",
++        disconnectLabel = "Disconnect",
++        missingCredentialsMessage = "",
++        approvalCode = state.userCode,
++        approvalUrl = state.verificationUrl,
++        approvalCodeCopiedMessage = "Code copied to the clipboard",
++        errorMessage = state.error,
++        websiteLabel = "wetrakr.com",
++        websiteUrl = "https://wetrakr.com",
++        onConnectRequested = {
++            WeTrakrRepository.connect()
++            null
++        },
++        onResumeAuthorization = { WeTrakrRepository.state.value.verificationUrl },
++        onCancelAuthorization = { WeTrakrRepository.cancelConnect() },
++        onDisconnect = { WeTrakrRepository.disconnect() },
++        modifier = modifier,
++    )
+ }
