@@ -1,0 +1,888 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/tracking/TrackingProviderBootstrap.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/tracking/TrackingProviderBootstrap.kt
+index a4af5d7a5..0b80c2bd4 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/tracking/TrackingProviderBootstrap.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/tracking/TrackingProviderBootstrap.kt
+@@ -18,6 +18,7 @@ import com.nuvio.app.features.watching.sync.TraktWatchedSyncAdapter
+ 
+ fun ensureTrackingProvidersRegistered() {
+     MdbListTracker.register()
++    TrackingProviderRegistry.registerScrobbler(com.nuvio.app.features.tracking.WeTrakrRepository) // Nuvio fork: WeTrakr
+     TraktAuthRepository.descriptor
+     TraktScrobbleRepository.ensureRegistered()
+     SimklAuthRepository.descriptor
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+index 856d5c2e0..d59838031 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+@@ -85,107 +85,6 @@ internal fun LazyListScope.advancedSettingsContent(
+             }
+         }
+     }
+-    // Nuvio fork: crash log viewer
+-    if (CrashLogPlatform.available) {
+-        item {
+-            var showCrashLogs by remember { mutableStateOf(false) }
+-            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+-            SettingsSection(
+-                title = "Crash logs",
+-                isTablet = isTablet,
+-            ) {
+-                SettingsGroup(isTablet = isTablet) {
+-                    SettingsNavigationRow(
+-                        title = "Crash logs",
+-                        description = if (CrashLogPlatform.files().isEmpty()) {
+-                            "No crash logs recorded."
+-                        } else {
+-                            "${CrashLogPlatform.files().size} recorded. The newest is shown; report it if you hit a bug."
+-                        },
+-                        isTablet = isTablet,
+-                        onClick = { showCrashLogs = true },
+-                    )
+-                }
+-            }
+-            if (showCrashLogs) {
+-                val names = remember(showCrashLogs) { CrashLogPlatform.files() }
+-                val latest = names.firstOrNull()?.let { CrashLogPlatform.read(it) }
+-                androidx.compose.material3.AlertDialog(
+-                    onDismissRequest = { showCrashLogs = false },
+-                    confirmButton = {
+-                        androidx.compose.material3.TextButton(onClick = {
+-                            latest?.let { text ->
+-                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(text))
+-                            }
+-                        }) { Text("Copy latest") }
+-                    },
+-                    dismissButton = {
+-                        androidx.compose.material3.TextButton(onClick = {
+-                            CrashLogPlatform.clear()
+-                            showCrashLogs = false
+-                        }) { Text("Clear all") }
+-                    },
+-                    title = { Text("Crash logs") },
+-                    text = {
+-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+-                            Text(names.joinToString("\n"))
+-                            if (latest != null) {
+-                                Text(
+-                                    text = latest.take(4000),
+-                                    style = MaterialTheme.typography.bodySmall,
+-                                )
+-                            }
+-                        }
+-                    },
+-                )
+-            }
+-        }
+-    }
+-    // Nuvio fork: DNS over HTTPS picker
+-    item {
+-        SettingsSection(
+-            title = "Network",
+-            isTablet = isTablet,
+-        ) {
+-            SettingsGroup(isTablet = isTablet) {
+-                DohSettingsRow(isTablet = isTablet)
+-            }
+-        }
+-    }
+-    // Nuvio fork: clear cached posters/backdrops
+-    item {
+-        var cleared by remember { mutableStateOf(false) }
+-        SettingsSection(
+-            title = "Storage",
+-            isTablet = isTablet,
+-        ) {
+-            SettingsGroup(isTablet = isTablet) {
+-                val imageLoaderContext = coil3.compose.LocalPlatformContext.current
+-                SettingsNavigationRow(
+-                    title = "Clear image cache",
+-                    description = "Remove cached posters and backdrops. They download again when needed.",
+-                    isTablet = isTablet,
+-                    trailingContent = if (cleared) {
+-                        {
+-                            Text(
+-                                "Cleared",
+-                                style = MaterialTheme.typography.labelLarge,
+-                                color = MaterialTheme.colorScheme.primary,
+-                            )
+-                        }
+-                    } else {
+-                        null
+-                    },
+-                    onClick = {
+-                        val loader = coil3.SingletonImageLoader.get(imageLoaderContext)
+-                        loader.memoryCache?.clear()
+-                        loader.diskCache?.clear()
+-                        cleared = true
+-                    },
+-                )
+-            }
+-        }
+-    }
+     if (DesktopRendererSettings.isSupported) {
+         item {
+             val externallyControlled = remember { DesktopRendererSettings.isExternallyControlled }
+@@ -430,3 +329,107 @@ private fun SentryInfoSection(
+         )
+     }
+ }
++
++@Composable
++internal fun ForkDohSettingsSection(isTablet: Boolean) {
++SettingsSection(
++        title = "Network",
++        isTablet = isTablet,
++    ) {
++        SettingsGroup(isTablet = isTablet) {
++            DohSettingsRow(isTablet = isTablet)
++        }
++    }
++}
++
++@Composable
++internal fun ForkImageCacheSection(isTablet: Boolean) {
++var cleared by remember { mutableStateOf(false) }
++    SettingsSection(
++        title = "Storage",
++        isTablet = isTablet,
++    ) {
++        SettingsGroup(isTablet = isTablet) {
++            val imageLoaderContext = coil3.compose.LocalPlatformContext.current
++            SettingsNavigationRow(
++                title = "Clear image cache",
++                description = "Remove cached posters and backdrops. They download again when needed.",
++                isTablet = isTablet,
++                trailingContent = if (cleared) {
++                    {
++                        Text(
++                            "Cleared",
++                            style = MaterialTheme.typography.labelLarge,
++                            color = MaterialTheme.colorScheme.primary,
++                        )
++                    }
++                } else {
++                    null
++                },
++                onClick = {
++                    val loader = coil3.SingletonImageLoader.get(imageLoaderContext)
++                    loader.memoryCache?.clear()
++                    loader.diskCache?.clear()
++                    cleared = true
++                },
++            )
++        }
++    }
++}
++
++@Composable
++internal fun ForkCrashLogsSection(isTablet: Boolean) {
++if (CrashLogPlatform.available) {
++        var showCrashLogs by remember { mutableStateOf(false) }
++        val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
++        SettingsSection(
++            title = "Crash logs",
++            isTablet = isTablet,
++        ) {
++            SettingsGroup(isTablet = isTablet) {
++                SettingsNavigationRow(
++                    title = "Crash logs",
++                    description = if (CrashLogPlatform.files().isEmpty()) {
++                        "No crash logs recorded."
++                    } else {
++                        "${CrashLogPlatform.files().size} recorded. The newest is shown; report it if you hit a bug."
++                    },
++                    isTablet = isTablet,
++                    onClick = { showCrashLogs = true },
++                )
++            }
++        }
++        if (showCrashLogs) {
++            val names = remember(showCrashLogs) { CrashLogPlatform.files() }
++            val latest = names.firstOrNull()?.let { CrashLogPlatform.read(it) }
++            androidx.compose.material3.AlertDialog(
++                onDismissRequest = { showCrashLogs = false },
++                confirmButton = {
++                    androidx.compose.material3.TextButton(onClick = {
++                        latest?.let { text ->
++                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(text))
++                        }
++                    }) { Text("Copy latest") }
++                },
++                dismissButton = {
++                    androidx.compose.material3.TextButton(onClick = {
++                        CrashLogPlatform.clear()
++                        showCrashLogs = false
++                    }) { Text("Clear all") }
++                },
++                title = { Text("Crash logs") },
++                text = {
++                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
++                        Text(names.joinToString("\n"))
++                        if (latest != null) {
++                            Text(
++                                text = latest.take(4000),
++                                style = MaterialTheme.typography.bodySmall,
++                            )
++                        }
++                    }
++                },
++            )
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ContentDiscoverySettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ContentDiscoverySettingsPage.kt
+index 418100d01..21d6c6663 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ContentDiscoverySettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ContentDiscoverySettingsPage.kt
+@@ -27,9 +27,6 @@ internal fun LazyListScope.contentDiscoveryContent(
+     onPluginsClick: () -> Unit,
+     onMediaServersClick: () -> Unit,
+ ) {
+-    item {
+-        DxWatchedTitlesSettingsSection(isTablet = isTablet) // Nuvio fork: watched titles hook
+-    }
+     item {
+         val recentSearchesEnabled by remember {
+             SearchHistoryRepository.ensureLoaded()
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
+index 99d8563a9..ccc42c411 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
+@@ -2,25 +2,30 @@ package com.nuvio.app.features.settings
+ 
+ import androidx.compose.foundation.lazy.LazyListScope
+ 
+-/** Nuvio fork: one page gathering every fork feature toggle. */
++/** Nuvio fork: one page gathering every fork feature setting. */
+ internal fun LazyListScope.featuresSettingsContent(isTablet: Boolean) {
+     item {
+         ForkPlayerPrefsSettingsSection(isTablet = isTablet)
+     }
++    item {
++        DxRememberSettingsSection(isTablet = isTablet)
++    }
+     item {
+         DxWatchedTitlesSettingsSection(isTablet = isTablet)
+     }
+     item {
+-        DxWatchStatsSettingsSection(isTablet = isTablet)
++        ForkDohSettingsSection(isTablet = isTablet)
+     }
+     item {
+-        DxSoundsSettingsSection(isTablet = isTablet)
++        ForkImageCacheSection(isTablet = isTablet)
++    }
++    item {
++        ForkCrashLogsSection(isTablet = isTablet)
+     }
+     item {
+-        SettingsSection(title = "Network", isTablet = isTablet) {
+-            SettingsGroup(isTablet = isTablet) {
+-                DohSettingsRow(isTablet = isTablet)
+-            }
+-        }
++        DxWatchStatsSettingsSection(isTablet = isTablet)
++    }
++    item {
++        DxSoundsSettingsSection(isTablet = isTablet)
+     }
+ }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+index f54fa6a92..fa90d0f94 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+@@ -156,8 +156,6 @@ internal fun LazyListScope.playbackSettingsContent(
+     }
+     item {
+         PlayerEnhanceSettingsSection(isTablet = isTablet) // Nuvio fork: desktop picture & sound
+-        DxRememberSettingsSection(isTablet = isTablet) // Nuvio fork: remember speed + number keys
+-        ForkPlayerPrefsSettingsSection(isTablet = isTablet) // Nuvio fork: subtitle shadow + start off
+     }
+ }
+ 
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
+index d4a2f1f79..708a02312 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
+@@ -92,12 +92,6 @@ internal fun LazyListScope.settingsRootContent(
+         item {
+             ProfileInsightsRootCard(isTablet = isTablet, onSwitchProfile = onSwitchProfileClick) // Nuvio fork: profile insights panel at the top
+         }
+-        item {
+-            DxSoundsSettingsSection(isTablet = isTablet) // Nuvio fork: sounds hook
+-        }
+-        item {
+-            DxWatchStatsSettingsSection(isTablet = isTablet) // Nuvio fork: watch stats hook
+-        }
+     }
+     if (showAccountSection) {
+         item {
+@@ -274,7 +268,7 @@ internal fun LazyListScope.settingsRootContent(
+             ) {
+                 SettingsGroup(isTablet = isTablet) {
+                     SettingsNavigationRow(
+-                        title = if (showSectionTitles) stringResource(Res.string.compose_settings_page_advanced) else "",
++                        title = stringResource(Res.string.compose_settings_page_advanced),
+                         description = stringResource(Res.string.compose_settings_root_advanced_description),
+                         icon = Icons.Rounded.Tune,
+                         isTablet = isTablet,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
+index 0ce8b0a95..7e24e1661 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
+@@ -204,6 +204,7 @@ internal fun TrackingProviderCards(
+             modifier = Modifier.fillMaxWidth(),
+         )
+         MdbListProviderCard(Modifier.fillMaxWidth())
++        WeTrakrProviderCard(Modifier.fillMaxWidth()) // Nuvio fork: WeTrakr
+     }
+ 
+     if (showSyncInfo) {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/WeTrakrProviderCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/WeTrakrProviderCard.kt
+new file mode 100644
+index 000000000..d7047ae7c
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/WeTrakrProviderCard.kt
+@@ -0,0 +1,129 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.dp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.core.ui.DialogButton
++import com.nuvio.app.core.ui.DialogButtons
++import com.nuvio.app.core.ui.DialogSurface
++import com.nuvio.app.features.tracking.WeTrakrRepository
++import kotlinx.coroutines.launch
++
++/** Nuvio fork: WeTrakr account card — device-code sign-in, live scrobbling and history writes. */
++@Composable
++internal fun WeTrakrProviderCard(modifier: Modifier = Modifier) {
++    androidx.compose.runtime.LaunchedEffect(Unit) { WeTrakrRepository.ensureLoaded() }
++    val state by WeTrakrRepository.state.collectAsStateWithLifecycle()
++    val scope = rememberCoroutineScope()
++    fun dismiss() = scope.launch { WeTrakrRepository.cancelConnect() }
++
++    Column(
++        modifier = modifier
++            .fillMaxWidth()
++            .padding(vertical = 4.dp),
++        verticalArrangement = Arrangement.spacedBy(6.dp),
++    ) {
++        Row(
++            modifier = Modifier.fillMaxWidth(),
++            horizontalArrangement = Arrangement.SpaceBetween,
++            verticalAlignment = Alignment.CenterVertically,
++        ) {
++            Column {
++                Text(
++                    text = "WeTrakr",
++                    style = MaterialTheme.typography.titleMedium,
++                    fontWeight = FontWeight.SemiBold,
++                )
++                val statusText = when {
++                    state.isConnected -> state.username?.let { "Connected as $it" } ?: "Connected"
++                    state.busy || state.userCode != null -> "Waiting for sign-in…"
++                    else -> "Scrobbling and watched-history sync."
++                }
++                Text(
++                    text = statusText,
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                )
++            }
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                if (state.isConnected) {
++                    TextButton(onClick = { WeTrakrRepository.disconnect() }) { Text("Disconnect") }
++                } else {
++                    TextButton(onClick = { WeTrakrRepository.connect() }, enabled = !state.busy) {
++                        Text("Connect")
++                    }
++                }
++            }
++        }
++        state.error?.let { error ->
++            Text(
++                text = error,
++                style = MaterialTheme.typography.bodySmall,
++                color = MaterialTheme.colorScheme.error,
++            )
++        }
++    }
++
++    if (state.userCode != null || state.busy) {
++        DialogSurface(
++            onDismissRequest = { dismiss() },
++            title = "Connect WeTrakr",
++        ) {
++            Column(
++                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
++                verticalArrangement = Arrangement.spacedBy(10.dp),
++            ) {
++                val userCode = state.userCode
++                if (userCode != null) {
++                    Text(
++                        text = "1. Open",
++                        style = MaterialTheme.typography.labelLarge,
++                        color = MaterialTheme.colorScheme.onSurfaceVariant,
++                    )
++                    Text(
++                        text = state.verificationUrl ?: "https://wetrakr.com/activate",
++                        style = MaterialTheme.typography.bodyLarge,
++                        fontWeight = FontWeight.SemiBold,
++                        color = MaterialTheme.colorScheme.primary,
++                    )
++                    Text(
++                        text = "2. Enter this code:",
++                        style = MaterialTheme.typography.labelLarge,
++                        color = MaterialTheme.colorScheme.onSurfaceVariant,
++                    )
++                    Text(
++                        text = userCode,
++                        style = MaterialTheme.typography.headlineMedium,
++                        fontWeight = FontWeight.Bold,
++                    )
++                    Text(
++                        text = "The app keeps checking until you finish, then connects automatically.",
++                        style = MaterialTheme.typography.bodySmall,
++                        color = MaterialTheme.colorScheme.onSurfaceVariant,
++                    )
++                } else {
++                    Text("Contacting WeTrakr…")
++                }
++            }
++            DialogButtons {
++                DialogButton(
++                    text = "Cancel",
++                    onClick = { dismiss() },
++                )
++            }
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/TrackingProvider.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/TrackingProvider.kt
+index 6218fb193..3f42ebd13 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/TrackingProvider.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/TrackingProvider.kt
+@@ -19,7 +19,8 @@ enum class TrackingProviderId(
+ ) {
+     TRAKT("trakt", "Trakt"),
+     SIMKL("simkl", "Simkl"),
+-    MDBLIST("mdblist", "MDBList");
++    MDBLIST("mdblist", "MDBList"),
++    WETRAKR("wetrakr", "WeTrakr");  // Nuvio fork
+ 
+     companion object {
+         fun fromStorage(value: String?): TrackingProviderId? =
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/WeTrakrRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/WeTrakrRepository.kt
+new file mode 100644
+index 000000000..b60f8d6bc
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/WeTrakrRepository.kt
+@@ -0,0 +1,393 @@
++package com.nuvio.app.features.tracking
++
++import co.touchlab.kermit.Logger
++import com.nuvio.app.features.addons.httpRequestRaw
++import com.nuvio.app.features.settings.ForkPrefs
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.update
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.JsonPrimitive
++import kotlinx.serialization.json.buildJsonObject
++import kotlinx.serialization.json.intOrNull
++import kotlinx.serialization.json.jsonArray
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import kotlinx.serialization.json.longOrNull
++import kotlinx.serialization.json.put
++
++data class WeTrakrUiState(
++    val isConnected: Boolean = false,
++    val username: String? = null,
++    val userCode: String? = null,
++    val verificationUrl: String? = null,
++    val busy: Boolean = false,
++    val error: String? = null,
++)
++
++/**
++ * Nuvio fork (ported from the TV fork): WeTrakr account with device-code sign-in, live
++ * scrobbling and watched-history writes. Reads (library/progress/ratings) are not part of
++ * the port. Auth is stored through [ForkPrefs] raw storage.
++ */
++object WeTrakrRepository : TrackingScrobbler {
++    private val log = Logger.withTag("WeTrakr")
++    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
++    private val refreshMutex = Mutex()
++    private val writeMutex = Mutex()
++    private var pollJob: Job? = null
++
++    private val mutableState = MutableStateFlow(loadState())
++    val state: StateFlow<WeTrakrUiState> = mutableState.asStateFlow()
++
++    override val providerId: TrackingProviderId = TrackingProviderId.WETRAKR
++
++    fun ensureLoaded() {
++        mutableState.value = loadState()
++    }
++
++    fun connect() {
++        if (mutableState.value.isConnected || pollJob?.isActive == true) return
++        mutableState.update { it.copy(busy = true, error = null) }
++        pollJob = scope.launch {
++            try {
++                val device = requestDeviceCode()
++                mutableState.update { it.copy(busy = false, userCode = device.userCode, verificationUrl = device.verificationUrl) }
++                pollForTokens(device)
++            } catch (cancelled: CancellationException) {
++                throw cancelled
++            } catch (e: Exception) {
++                mutableState.update { it.copy(busy = false, userCode = null, verificationUrl = null, error = e.message ?: "WeTrakr request failed") }
++            }
++        }
++    }
++
++    fun cancelConnect() {
++        cancelPolling()
++        mutableState.update { it.copy(busy = false, userCode = null, verificationUrl = null) }
++    }
++
++    fun disconnect() {
++        cancelPolling()
++        val auth = readAuth()
++        writeAuth(null)
++        mutableState.value = WeTrakrUiState()
++        if (auth?.refreshToken != null) {
++            scope.launch {
++                runCatching {
++                    send("POST", "/oauth/logout", buildJsonObject { put("refresh_token", auth.refreshToken) }, auth.accessToken)
++                }
++            }
++        }
++    }
++
++    override suspend fun scrobble(
++        profileId: Int,
++        action: TrackingScrobbleAction,
++        event: TrackingScrobbleEvent,
++    ) {
++        if (!mutableState.value.isConnected || !event.progressPercent.isFinite()) return
++        val media = event.media
++        val ids = mediaIds(media) ?: return
++        val isMovie = media.kind == TrackingMediaKind.MOVIE
++        val episode = media.episode
++        if (!isMovie && episode == null) return
++        val body = buildJsonObject {
++            if (isMovie) {
++                put("movie", titleObject(media, ids))
++            } else {
++                put("show", titleObject(media, ids))
++                put("episode", buildJsonObject {
++                    put("season", episode?.season ?: 1)
++                    put("number", episode?.number ?: 1)
++                })
++            }
++            put("progress", event.progressPercent.coerceIn(0.0, 100.0))
++        }
++        authorizedPost("/scrobble/${action.wireValue}", body)
++    }
++
++    suspend fun addToHistory(items: Collection<TrackingHistoryItem>): TrackingMutationResult {
++        if (!mutableState.value.isConnected) return TrackingMutationResult(items.size)
++        val document = historyDocument(items.map { it.media to it.watchedAtEpochMs })
++            ?: return TrackingMutationResult(items.size, items.size)
++        writeMutex.withLock { authorizedPost("/sync/tracking", document) }
++        return TrackingMutationResult(items.size)
++    }
++
++    suspend fun removeFromHistory(items: Collection<TrackingMediaReference>): TrackingMutationResult {
++        if (!mutableState.value.isConnected) return TrackingMutationResult(0)
++        val document = historyDocument(items.map { it to null })
++            ?: return TrackingMutationResult(items.size, items.size)
++        writeMutex.withLock { authorizedPost("/sync/tracking/remove/all", document) }
++        return TrackingMutationResult(items.size)
++    }
++
++    // --- internals ---
++
++    private fun historyDocument(entries: List<Pair<TrackingMediaReference, Long?>>): JsonObject? {
++        val movies = mutableListOf<kotlinx.serialization.json.JsonElement>()
++        val shows = linkedMapOf<String, Pair<MutableMap<String, kotlinx.serialization.json.JsonElement>, MutableMap<Int, MutableMap<Int, Long?>>>>()
++        entries.forEach { (media, watchedAt) ->
++            val ids = mediaIds(media) ?: return@forEach
++            if (media.kind == TrackingMediaKind.MOVIE) {
++                movies += buildJsonObject {
++                    put("ids", ids)
++                    put("status", WATCHED)
++                    watchedAt?.let { put("tracked_at", isoTimestamp(it)) }
++                }
++                return@forEach
++            }
++            val episode = media.episode ?: return@forEach
++            val key = ids.toString()
++            val show = shows.getOrPut(key) {
++                buildJsonObject {
++                    put("ids", ids)
++                    put("status", WATCHED)
++                } to linkedMapOf()
++            }
++            show.second.getOrPut(episode.season ?: 1) { linkedMapOf() }[episode.number] = watchedAt
++        }
++        if (movies.isEmpty() && shows.isEmpty()) return null
++        val showArray = shows.values.map { (show, seasons) ->
++            buildJsonObject {
++                put("ids", (show["ids"] as JsonObject))
++                put("status", WATCHED)
++                put("seasons", kotlinx.serialization.json.JsonArray(
++                    seasons.toSortedMap().map { (season, episodes) ->
++                        buildJsonObject {
++                            put("number", season)
++                            put("episodes", kotlinx.serialization.json.JsonArray(
++                                episodes.toSortedMap().map { (number, watchedAt) ->
++                                    buildJsonObject {
++                                        put("number", number)
++                                        put("status", WATCHED)
++                                        watchedAt?.let { put("tracked_at", isoTimestamp(it)) }
++                                    }
++                                },
++                            ))
++                        }
++                    },
++                ))
++            }
++        }
++        return buildJsonObject {
++            put("movies", kotlinx.serialization.json.JsonArray(movies))
++            put("shows", kotlinx.serialization.json.JsonArray(showArray))
++        }
++    }
++
++    private fun mediaIds(media: TrackingMediaReference): JsonObject? {
++        val obj = buildJsonObject {
++            media.ids.imdb?.takeIf(String::isNotBlank)?.let { put("imdb", it) }
++            media.ids.tmdb?.let { put("tmdb", it) }
++            media.ids.tvdb?.toLongOrNull()?.let { put("tvdb", it) }
++        }
++        return obj.takeIf { it.isNotEmpty() }
++    }
++
++    private fun titleObject(media: TrackingMediaReference, ids: JsonObject): JsonObject = buildJsonObject {
++        media.title?.takeIf(String::isNotBlank)?.let { put("title", it) }
++        media.year?.let { put("year", it) }
++        put("ids", ids)
++    }
++
++    private fun isoTimestamp(epochMs: Long): String =
++        java.time.Instant.ofEpochMilli(epochMs).toString().replace("\\.\\d{3}Z$".toRegex(), "Z")
++
++    // --- auth ---
++
++    private data class DeviceCode(val deviceCode: String, val userCode: String, val verificationUrl: String, val intervalSeconds: Long, val expiresAtEpochMs: Long)
++    private data class StoredAuth(val accessToken: String?, val refreshToken: String?, val expiresAtEpochMs: Long?, val username: String?)
++    private data class Response(val status: Int, val body: String)
++
++    private suspend fun requestDeviceCode(): DeviceCode {
++        val response = send("POST", "/oauth/device/code", buildJsonObject { put("client_id", CLIENT_ID) }, null)
++        if (response.status !in 200..299) {
++            throw IllegalStateException(if (response.status == 429) "WeTrakr is rate limiting requests, try again shortly" else "WeTrakr sign-in is unavailable (${response.status})")
++        }
++        val root = json.parseToJsonElement(response.body).jsonObject
++        val userCode = root.str("user_code") ?: throw IllegalStateException("WeTrakr sent no code")
++        val deviceCode = root.str("device_code") ?: throw IllegalStateException("WeTrakr sent no code")
++        val url = root.str("verification_url") ?: root.str("verification_uri") ?: DEFAULT_VERIFICATION_URL
++        val interval = (root["interval"]?.jsonPrimitive?.longOrNull ?: 5L).coerceIn(1L, 60L)
++        val expiresIn = (root["expires_in"]?.jsonPrimitive?.longOrNull ?: 600L).coerceIn(60L, 3_600L)
++        return DeviceCode(deviceCode, userCode, url, interval, System.currentTimeMillis() + expiresIn * 1_000L)
++    }
++
++    private suspend fun pollForTokens(device: DeviceCode) {
++        var interval = device.intervalSeconds
++        while (System.currentTimeMillis() < device.expiresAtEpochMs) {
++            delay(interval * 1_000L)
++            val response = send(
++                "POST",
++                "/oauth/device/token",
++                buildJsonObject {
++                    put("code", device.deviceCode)
++                    put("device_code", device.deviceCode)
++                    put("client_id", CLIENT_ID)
++                },
++                null,
++            )
++            when {
++                response.status in 200..299 -> {
++                    val auth = parseTokens(response.body)
++                    if (auth == null) {
++                        finishConnect("WeTrakr sent an invalid sign-in response")
++                    } else {
++                        writeAuth(auth)
++                        mutableState.value = WeTrakrUiState(isConnected = true, username = auth.username)
++                    }
++                    return
++                }
++                response.status == 429 -> interval = (interval + 5L).coerceAtMost(60L)
++                response.status == 400 -> {
++                    val code = errorCode(response.body)
++                    when {
++                        code.contains("slow", ignoreCase = true) -> interval = (interval + 5L).coerceAtMost(60L)
++                        code.contains("expired", ignoreCase = true) -> return finishConnect("The code expired. Start again.")
++                        code.contains("denied", ignoreCase = true) -> return finishConnect("Sign-in was denied.")
++                        else -> Unit
++                    }
++                }
++                response.status == 410 -> return finishConnect("The code expired. Start again.")
++                response.status == 418 -> return finishConnect("Sign-in was denied.")
++                response.status in 500..599 -> Unit
++                else -> return finishConnect("WeTrakr sign-in failed (${response.status})")
++            }
++        }
++        finishConnect("The code expired. Start again.")
++    }
++
++    private fun finishConnect(error: String) {
++        mutableState.update { it.copy(busy = false, userCode = null, verificationUrl = null, error = error) }
++    }
++
++    private fun cancelPolling() {
++        pollJob?.cancel()
++        pollJob = null
++    }
++
++    private fun errorCode(body: String): String = runCatching {
++        val root = json.parseToJsonElement(body).jsonObject
++        (root["error"] as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() && !it.startsWith("{") }
++            ?: (root["error"] as? JsonObject)?.get("code")?.jsonPrimitive?.content
++            ?: root["code"]?.jsonPrimitive?.content
++    }.getOrNull().orEmpty()
++
++    private fun parseTokens(body: String): StoredAuth? = runCatching {
++        val root = json.parseToJsonElement(body).jsonObject
++        val access = root.str("access_token") ?: return null
++        val refresh = (root.str("refresh_token") ?: root.str("new_refresh_token")) ?: return null
++        val expiresIn = root["expires_in"]?.jsonPrimitive?.longOrNull ?: 0L
++        val expiresAt = if (expiresIn > 0L) System.currentTimeMillis() + expiresIn * 1_000L else null
++        val username = root.str("username") ?: (root["user"] as? JsonObject)?.str("username")
++        StoredAuth(access, refresh, expiresAt, username)
++    }.getOrNull()
++
++    private fun JsonObject.str(key: String): String? =
++        (this[key] as? JsonPrimitive)?.content?.takeIf(String::isNotBlank)
++
++    private fun StoredAuth.toJson(): String = buildJsonObject {
++        put("access", accessToken.orEmpty())
++        put("refresh", refreshToken.orEmpty())
++        expiresAtEpochMs?.let { put("expiresAt", it) }
++        username?.let { put("username", it) }
++    }.toString()
++
++    private fun readAuth(): StoredAuth? = runCatching {
++        val raw = ForkPrefs.readRaw(AUTH_KEY) ?: return null
++        val root = json.parseToJsonElement(raw).jsonObject
++        StoredAuth(
++            accessToken = root.str("access"),
++            refreshToken = root.str("refresh"),
++            expiresAtEpochMs = root["expiresAt"]?.jsonPrimitive?.longOrNull,
++            username = root.str("username"),
++        )
++    }.getOrNull()
++
++    private fun writeAuth(auth: StoredAuth?) {
++        ForkPrefs.writeRaw(AUTH_KEY, auth?.toJson() ?: "")
++    }
++
++    private fun loadState(): WeTrakrUiState {
++        val auth = readAuth()
++        return WeTrakrUiState(isConnected = auth?.refreshToken != null, username = auth?.username)
++    }
++
++    private suspend fun accessToken(forceRefresh: Boolean): String? = refreshMutex.withLock {
++        val auth = readAuth() ?: return null
++        val expired = auth.expiresAtEpochMs?.let { it - System.currentTimeMillis() <= REFRESH_MARGIN_MS } == true
++        if (!forceRefresh && !expired && auth.accessToken != null) return auth.accessToken
++        val refresh = auth.refreshToken ?: return null
++        val response = send("POST", "/oauth/token/refresh", buildJsonObject { put("refresh_token", refresh) }, null)
++        when {
++            response.status in 200..299 -> {
++                val renewed = parseTokens(response.body) ?: return null
++                val merged = renewed.copy(username = renewed.username ?: auth.username)
++                writeAuth(merged)
++                merged.accessToken
++            }
++            response.status == 400 || response.status == 401 -> {
++                writeAuth(null)
++                mutableState.value = WeTrakrUiState(error = "WeTrakr sign-in was revoked. Connect again.")
++                null
++            }
++            else -> auth.accessToken.takeIf { !forceRefresh }
++        }
++    }
++
++    private suspend fun authorizedPost(path: String, body: JsonObject): Response? {
++        var token = accessToken(forceRefresh = false) ?: return null
++        var response = send("POST", path, body, token)
++        if (response.status == 401) {
++            token = accessToken(forceRefresh = true) ?: return null
++            response = send("POST", path, body, token)
++        }
++        if (response.status == 404) return response
++        if (response.status !in 200..299) throw IllegalStateException("WeTrakr $path failed (${response.status})")
++        return response
++    }
++
++    private suspend fun send(method: String, path: String, body: JsonObject?, token: String?): Response =
++        withContext(Dispatchers.Default) {
++            val response = httpRequestRaw(
++                method = method,
++                url = API_BASE_URL + path,
++                headers = buildMap {
++                    put("Accept", "application/json")
++                    put("User-Agent", USER_AGENT)
++                    put("wetrakr-api-key", CLIENT_ID)
++                    put("wetrakr-api-version", API_VERSION)
++                    put("Content-Type", "application/json")
++                    token?.let { put("Authorization", "Bearer $it") }
++                },
++                body = body?.toString().orEmpty(),
++            )
++            Response(response.status, response.body)
++        }
++
++    private const val AUTH_KEY = "wetrakr/auth"
++
++    private companion object {
++        const val CLIENT_ID = "193cadea493eaf3f7f4cdcbba020f577"
++        const val API_BASE_URL = "https://api.wetrakr.com"
++        const val API_VERSION = "1"
++        const val DEFAULT_VERIFICATION_URL = "https://wetrakr.com/activate"
++        const val USER_AGENT = "NuvioDesktop"
++        const val WATCHED = "watched"
++        const val REFRESH_MARGIN_MS = 120_000L
++    }
++}
