@@ -1,0 +1,187 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index da418a30b..235b9f313 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -1,6 +1,10 @@
+ package com.nuvio.app.features.settings
+ 
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.ui.unit.dp
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
+@@ -14,6 +18,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ @Composable
+ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+     var showOmdbDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
++    var showSecondLangDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
++    val secondSub by ForkPrefs.secondSubtitle.value.collectAsStateWithLifecycle()
++    val secondSubLang by ForkPrefs.secondSubtitleLang.value.collectAsStateWithLifecycle()
+     var showWhatsNew by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+     val shadow by ForkPrefs.subtitleShadow.value.collectAsStateWithLifecycle()
+     val subsOff by ForkPrefs.subtitlesStartOff.value.collectAsStateWithLifecycle()
+@@ -34,8 +41,62 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+                 isTablet = isTablet,
+                 onCheckedChange = ForkPrefs.subtitlesStartOff::set,
+             )
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSwitchRow(
++                title = "Second subtitle",
++                description = "Shows a second subtitle language at the top of the picture, next to the normal one.",
++                checked = secondSub,
++                isTablet = isTablet,
++                onCheckedChange = ForkPrefs.secondSubtitle::set,
++            )
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsNavigationRow(
++                title = "Second subtitle language",
++                description = "Used when the video offers subtitles in this language. Applies within a few seconds.",
++                isTablet = isTablet,
++                trailingContent = {
++                    Text(
++                        secondSubLang.ifBlank { "Off" },
++                        style = MaterialTheme.typography.labelLarge,
++                        color = MaterialTheme.colorScheme.primary,
++                    )
++                },
++                onClick = { showSecondLangDialog = true },
++                enabled = secondSub,
++            )
+         }
+     }
++    if (showSecondLangDialog) {
++        androidx.compose.material3.AlertDialog(
++            onDismissRequest = { showSecondLangDialog = false },
++            confirmButton = {
++                androidx.compose.material3.TextButton(onClick = { showSecondLangDialog = false }) { Text("Done") }
++            },
++            title = { Text("Second subtitle language") },
++            text = {
++                Column {
++                    LanguageOptionRow(
++                        "Off",
++                        "",
++                        selected = secondSubLang.isBlank(),
++                    ) {
++                        ForkPrefs.secondSubtitleLang.set("")
++                        showSecondLangDialog = false
++                    }
++                    secondSubtitleLanguageChoices.forEach { code ->
++                        LanguageOptionRow(
++                            secondSubtitleLanguageName(code),
++                            code,
++                            selected = secondSubLang == code,
++                        ) {
++                            ForkPrefs.secondSubtitleLang.set(code)
++                            showSecondLangDialog = false
++                        }
++                    }
++                }
++            },
++        )
++    }
+     val skipFeedback by ForkPrefs.skipFeedback.value.collectAsStateWithLifecycle()
+     SettingsSection(title = "Home", isTablet = isTablet) {
+         SettingsGroup(isTablet = isTablet) {
+@@ -188,3 +249,31 @@ private fun HomeRowToggle(
+         onCheckedChange = pref::set,
+     )
+ }
++
++private val secondSubtitleLanguageChoices = listOf(
++    "en", "es", "fr", "de", "it", "pt", "ru", "ja", "ko", "zh", "ar", "hi", "tr", "nl", "pl",
++)
++
++private val secondSubtitleLanguageNames = mapOf(
++    "en" to "English", "es" to "Spanish", "fr" to "French", "de" to "German", "it" to "Italian",
++    "pt" to "Portuguese", "ru" to "Russian", "ja" to "Japanese", "ko" to "Korean", "zh" to "Chinese",
++    "ar" to "Arabic", "hi" to "Hindi", "tr" to "Turkish", "nl" to "Dutch", "pl" to "Polish",
++)
++
++private fun secondSubtitleLanguageName(code: String): String =
++    secondSubtitleLanguageNames[code] ?: code
++
++@Composable
++private fun LanguageOptionRow(label: String, code: String, selected: Boolean, onClick: () -> Unit) {
++    androidx.compose.foundation.layout.Row(
++        modifier = Modifier
++            .fillMaxWidth()
++            .clickable(onClick = onClick)
++            .padding(vertical = 8.dp),
++        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
++        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
++    ) {
++        androidx.compose.material3.RadioButton(selected = selected, onClick = onClick)
++        Text(label)
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+index d753ecd37..7cd8f4c65 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -74,6 +74,8 @@ object ForkPrefs {
+     val homeVideoRowsOnly = BoolPref("settings/home_video_rows_only", true)
+     val privateViewing = BoolPref("settings/private_viewing", false)
+     val fillerGuide = BoolPref("settings/filler_guide", true)
++    val secondSubtitle = BoolPref("settings/second_subtitle", false)
++    val secondSubtitleLang = StringPref("settings/second_subtitle_lang", "")
+ 
+     private const val PINNED_SOURCES_KEY = "sources/pinned"
+ 
+@@ -112,5 +114,7 @@ object ForkPrefs {
+         homeVideoRowsOnly.ensureLoaded()
+         privateViewing.ensureLoaded()
+         fillerGuide.ensureLoaded()
++        secondSubtitle.ensureLoaded()
++        secondSubtitleLang.ensureLoaded()
+     }
+ }
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index efcfafe5f..1039f7797 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -696,6 +696,33 @@ internal class NativePlayerController(
+         }
+     }
+ 
++    // Nuvio fork: second subtitle line via mpv secondary-sid (top of the picture).
++    private fun applySecondarySubtitle() {
++        val current = handle.takeIf { it != 0L } ?: return
++        runCatching {
++            val prefs = com.nuvio.app.features.settings.ForkPrefs
++            val wanted = prefs.secondSubtitleLang.current().trim()
++                .takeIf { prefs.secondSubtitle.current() && it.isNotBlank() }
++            val desired = if (wanted == null) {
++                "no"
++            } else {
++                val tracks = decodeTracks { NativePlayerBridge.subtitleTracksJson(current) }
++                val primarySid = runCatching { NativePlayerBridge.propGetString(current, "sid") }.getOrNull()
++                val match = tracks.firstOrNull { track ->
++                    track.id != primarySid && track.id.toIntOrNull() != 0 && (
++                        track.language.lowercase().startsWith(wanted.lowercase()) ||
++                            track.label.lowercase().contains(wanted.lowercase())
++                        )
++                }
++                match?.id ?: "no"
++            }
++            val applied = runCatching { NativePlayerBridge.propGetString(current, "secondary-sid") }.getOrNull()
++            if (applied != desired) {
++                NativePlayerBridge.propSetString(current, "secondary-sid", desired)
++            }
++        }
++    }
++
+     private fun startPlaybackStatsPoller() {
+         val poller = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+             Thread(r, "nuvio-playback-stats").apply { isDaemon = true }
+@@ -707,6 +734,7 @@ internal class NativePlayerController(
+                 val paused = runCatching { NativePlayerBridge.propGetString(current, "paused") }.getOrNull()
+                 if (paused == "true") return@scheduleWithFixedDelay
+                 refreshPlaybackStats()
++                applySecondarySubtitle() // Nuvio fork: keep the second-subtitle line in step
+             } catch (_: Throwable) {
+             }
+         }, 2, 2, java.util.concurrent.TimeUnit.SECONDS)

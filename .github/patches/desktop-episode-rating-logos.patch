@@ -1,0 +1,328 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
+new file mode 100644
+index 000000000..74d26f8c2
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
+@@ -0,0 +1,97 @@
++package com.nuvio.app.features.details
++
++import co.touchlab.kermit.Logger
++import com.nuvio.app.features.addons.httpGetText
++import com.nuvio.app.features.addons.httpGetTextWithHeaders
++import com.nuvio.app.features.player.skip.SimklIdResolver
++import com.nuvio.app.features.simkl.SimklConfig
++import com.nuvio.app.features.trakt.TraktConfig
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.withContext
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.doubleOrNull
++import kotlinx.serialization.json.intOrNull
++import kotlinx.serialization.json.jsonArray
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++
++/**
++ * Nuvio fork: per-source episode ratings ("Simkl", "Trakt") keyed by (season, episode), shown
++ * as small logo badges on episode cards next to the IMDb rating.
++ */
++object ExtraEpisodeRatings {
++    private val log = Logger.withTag("ExtraEpisodeRatings")
++    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
++    private val cache = HashMap<String, Map<String, Map<Pair<Int, Int>, Double>>>()
++
++    suspend fun fetch(imdbId: String): Map<String, Map<Pair<Int, Int>, Double>> {
++        cache[imdbId]?.let { return it }
++        val simkl = fetchSimkl(imdbId)
++        val trakt = fetchTrakt(imdbId)
++        val out = buildMap {
++            if (simkl.isNotEmpty()) put("Simkl", simkl)
++            if (trakt.isNotEmpty()) put("Trakt", trakt)
++        }
++        if (out.isNotEmpty()) cache[imdbId] = out
++        return out
++    }
++
++    private suspend fun fetchSimkl(imdbId: String): Map<Pair<Int, Int>, Double> = withContext(Dispatchers.Default) {
++        if (SimklConfig.CLIENT_ID.isBlank()) return@withContext emptyMap()
++        try {
++            val ids = SimklIdResolver.resolveIds("imdb", imdbId, "series") ?: return@withContext emptyMap()
++            val url = "https://api.simkl.com/${ids.type}/episodes/${ids.simklId}?extended=full" +
++                "&client_id=${SimklConfig.CLIENT_ID}&app-name=nuvio&app-version=1.0"
++            val body = httpGetText(url)
++            val arr = json.parseToJsonElement(body).jsonArray
++            val out = HashMap<Pair<Int, Int>, Double>()
++            for (element in arr) {
++                val ep = element as? JsonObject ?: continue
++                if ((ep["type"]?.jsonPrimitive?.content ?: "episode") != "episode") continue
++                val s = ep["season"]?.jsonPrimitive?.intOrNull ?: continue
++                val e = ep["episode"]?.jsonPrimitive?.intOrNull ?: continue
++                if (s < 0 || e < 0) continue
++                val rating = ((ep["ratings"] as? JsonObject)?.get("simkl" ) as? JsonObject)
++                    ?.get("rating")?.jsonPrimitive?.doubleOrNull
++                    ?: ep["rating"]?.jsonPrimitive?.doubleOrNull
++                if (rating != null && rating > 0.0) out[s to e] = rating
++            }
++            out
++        } catch (cancelled: kotlinx.coroutines.CancellationException) {
++            throw cancelled
++        } catch (e: Exception) {
++            log.w { "Simkl episode ratings failed for $imdbId: ${e.message}" }
++            emptyMap()
++        }
++    }
++
++    private suspend fun fetchTrakt(imdbId: String): Map<Pair<Int, Int>, Double> = withContext(Dispatchers.Default) {
++        if (TraktConfig.CLIENT_ID.isBlank()) return@withContext emptyMap()
++        try {
++            val body = httpGetTextWithHeaders(
++                "https://api.trakt.tv/shows/$imdbId/seasons?extended=episodes,full",
++                mapOf("trakt-api-key" to TraktConfig.CLIENT_ID, "trakt-api-version" to "2"),
++            )
++            val seasons = json.parseToJsonElement(body).jsonArray
++            val out = HashMap<Pair<Int, Int>, Double>()
++            for (seasonElement in seasons) {
++                val season = seasonElement as? JsonObject ?: continue
++                val s = season["number"]?.jsonPrimitive?.intOrNull ?: continue
++                val eps = season["episodes"] as? kotlinx.serialization.json.JsonArray ?: continue
++                for (epElement in eps) {
++                    val ep = epElement as? JsonObject ?: continue
++                    val e = ep["number"]?.jsonPrimitive?.intOrNull ?: continue
++                    val rating = ep["rating"]?.jsonPrimitive?.doubleOrNull ?: continue
++                    if (rating > 0.0) out[s to e] = rating
++                }
++            }
++            out
++        } catch (cancelled: kotlinx.coroutines.CancellationException) {
++            throw cancelled
++        } catch (e: Exception) {
++            log.w { "Trakt episode ratings failed for $imdbId: ${e.message}" }
++            emptyMap()
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
+index f23d6d74f..42353c5d8 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
+@@ -299,6 +299,7 @@ fun MetaDetailsScreen(
+     }
+     val trackingListsUpdateFailedMessage = stringResource(Res.string.tracking_lists_update_failed)
+     var episodeImdbRatings by remember(type, id) { mutableStateOf<Map<Pair<Int, Int>, Double>>(emptyMap()) }
++    var episodeExtraRatings by remember(type, id) { mutableStateOf<Map<String, Map<Pair<Int, Int>, Double>>>(emptyMap()) } // Nuvio fork
+     var deferredMetaWorkAllowed by remember(type, id) { mutableStateOf(false) }
+ 
+     LaunchedEffect(
+@@ -422,6 +423,10 @@ fun MetaDetailsScreen(
+             imdbId = imdbId,
+             tmdbId = tmdbId,
+         )
++        // Nuvio fork: Simkl/Trakt episode ratings as logo badges
++        episodeExtraRatings = imdbId?.takeIf { it.isNotBlank() }
++            ?.let { runCatching { ExtraEpisodeRatings.fetch(it) }.getOrDefault(emptyMap()) }
++            ?: emptyMap()
+     }
+ 
+     LaunchedEffect(type, id, displayedMeta, uiState.isLoading, autoLoadAttempted) {
+@@ -1371,6 +1376,7 @@ fun MetaDetailsScreen(
+                                     commentsPageCount = commentsPageCount,
+                                     commentsError = commentsError,
+                                     episodeImdbRatings = episodeImdbRatings,
++                                    episodeExtraRatings = episodeExtraRatings, // Nuvio fork
+                                     episodeListGroupedEpisodes = episodeListGroupedEpisodes,
+                                     episodeListSeasons = episodeListSeasons,
+                                     episodeListCurrentSeason = currentEpisodeListSeason,
+@@ -1543,6 +1549,7 @@ fun MetaDetailsScreen(
+                                     commentsPageCount = commentsPageCount,
+                                     commentsError = commentsError,
+                                     episodeImdbRatings = episodeImdbRatings,
++                                    episodeExtraRatings = episodeExtraRatings, // Nuvio fork
+                                     episodeListGroupedEpisodes = episodeListGroupedEpisodes,
+                                     episodeListSeasons = episodeListSeasons,
+                                     episodeListCurrentSeason = currentEpisodeListSeason,
+@@ -2323,6 +2330,7 @@ private fun LazyListScope.configuredMetaSectionItems(
+                     commentsPageCount = commentsPageCount,
+                     commentsError = commentsError,
+                     episodeImdbRatings = episodeImdbRatings,
++                    episodeExtraRatings = episodeExtraRatings, // Nuvio fork
+                     onRetryComments = onRetryComments,
+                     onLoadMoreComments = onLoadMoreComments,
+                     onCommentClick = onCommentClick,
+@@ -2387,6 +2395,7 @@ private fun LazyListScope.configuredMetaSectionItems(
+                     progressByVideoId = progressByVideoId,
+                     watchedKeys = watchedKeys,
+                     episodeRatings = episodeImdbRatings,
++                    episodeExtraRatings = episodeExtraRatings, // Nuvio fork
+                     episodeRatingsVisibility = settings.episodeRatingsVisibility,
+                     blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                     onEpisodeClick = onEpisodeClick,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
+index 2f1a4fd2f..4f628673d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
+@@ -58,6 +58,14 @@ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.Dp
++import androidx.compose.foundation.layout.Row
++import androidx.compose.ui.layout.ContentScale
++import androidx.compose.ui.layout.layout
++import androidx.compose.ui.res.painterResource
++import nuvio.composeapp.generated.resources.Res
++import nuvio.composeapp.generated.resources.rating_trakt
++import nuvio.composeapp.generated.resources.simkl_logo_glyph
++import java.util.Locale
+ import androidx.compose.ui.unit.dp
+ import androidx.compose.ui.unit.sp
+ import com.nuvio.app.core.ui.NuvioAsyncImage as AsyncImage
+@@ -109,6 +117,7 @@ fun DetailSeriesContent(
+     progressByVideoId: Map<String, WatchProgressEntry> = emptyMap(),
+     watchedKeys: Set<String> = emptySet(),
+     episodeRatings: Map<Pair<Int, Int>, Double> = emptyMap(),
++    episodeExtraRatings: Map<String, Map<Pair<Int, Int>, Double>> = emptyMap(), // Nuvio fork
+     episodeRatingsVisibility: EpisodeRatingsVisibility = EpisodeRatingsVisibility.SHOW_ALL,
+     blurUnwatchedEpisodes: Boolean = false,
+     onEpisodeClick: ((MetaVideo) -> Unit)? = null,
+@@ -268,11 +277,15 @@ fun DetailSeriesContent(
+                                     episodeNumber = episode.episode,
+                                     fallbackVideoId = episode.id,
+                                 )
++                                val extraForEpisode = episodeExtraRatings.mapNotNull { (name, map) -> // Nuvio fork
++                                    episode.seasonEpisodeKey()?.let { key -> map[key]?.takeIf { it > 0.0 }?.let { name to it } }
++                                }
+                                 EpisodeListCard(
+                                     video = episode,
+                                     fallbackImage = meta.background ?: meta.poster,
+                                     progressEntry = progressByVideoId[episodeVideoId],
+                                     imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
++                                    extraRatings = extraForEpisode,
+                                     isWatched = progressByVideoId[episodeVideoId]?.isEffectivelyCompleted == true ||
+                                         WatchingState.isEpisodeWatched(
+                                             watchedKeys = watchedKeys,
+@@ -339,6 +352,7 @@ internal fun DetailSeriesListEpisode(
+     progressByVideoId: Map<String, WatchProgressEntry>,
+     watchedKeys: Set<String>,
+     episodeRatings: Map<Pair<Int, Int>, Double>,
++    episodeExtraRatings: Map<String, Map<Pair<Int, Int>, Double>> = emptyMap(), // Nuvio fork
+     episodeRatingsVisibility: EpisodeRatingsVisibility,
+     blurUnwatchedEpisodes: Boolean,
+     onEpisodeClick: ((MetaVideo) -> Unit)?,
+@@ -353,11 +367,15 @@ internal fun DetailSeriesListEpisode(
+             episodeNumber = episode.episode,
+             fallbackVideoId = episode.id,
+         )
++        val extraForEpisode = episodeExtraRatings.mapNotNull { (name, map) -> // Nuvio fork
++            episode.seasonEpisodeKey()?.let { key -> map[key]?.takeIf { it > 0.0 }?.let { name to it } }
++        }
+         EpisodeListCard(
+             video = episode,
+             fallbackImage = meta.background ?: meta.poster,
+             progressEntry = progressByVideoId[episodeVideoId],
+             imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
++            extraRatings = extraForEpisode,
+             isWatched = progressByVideoId[episodeVideoId]?.isEffectivelyCompleted == true ||
+                 WatchingState.isEpisodeWatched(
+                     watchedKeys = watchedKeys,
+@@ -735,6 +753,7 @@ private fun EpisodeHorizontalRow(
+     fallbackImage: String?,
+     progressByVideoId: Map<String, WatchProgressEntry>,
+     episodeRatings: Map<Pair<Int, Int>, Double>,
++    episodeExtraRatings: Map<String, Map<Pair<Int, Int>, Double>> = emptyMap(), // Nuvio fork
+     episodeRatingsVisibility: EpisodeRatingsVisibility,
+     blurUnwatchedEpisodes: Boolean,
+     preferredEpisodeNumber: Int? = null,
+@@ -783,8 +802,13 @@ private fun EpisodeHorizontalRow(
+                 episodeNumber = episode.episode,
+                 fallbackVideoId = episode.id,
+             )
++            val extraKey = episode.season to episode.episode // Nuvio fork: extra ratings
++            val extraForEpisode = episodeExtraRatings.mapNotNull { (name, map) ->
++                map[extraKey]?.takeIf { it > 0.0 }?.let { name to it }
++            }
+             EpisodeHorizontalCard(
+                 video = episode,
++                extraRatings = extraForEpisode,
+                 fallbackImage = fallbackImage,
+                 progressEntry = progressByVideoId[episodeVideoId],
+                 imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
+@@ -812,6 +836,7 @@ private fun EpisodeHorizontalCard(
+     fallbackImage: String?,
+     progressEntry: WatchProgressEntry?,
+     imdbRating: Double?,
++    extraRatings: List<Pair<String, Double>> = emptyList(), // Nuvio fork
+     isWatched: Boolean,
+     episodeRatingsVisibility: EpisodeRatingsVisibility,
+     blurUnwatchedEpisodes: Boolean,
+@@ -957,6 +982,11 @@ private fun EpisodeHorizontalCard(
+                             textSize = metrics.metaTextSize,
+                         )
+                     }
++                    EpisodeExtraRatingBadges( // Nuvio fork
++                        extras = extraRatings,
++                        logoHeight = metrics.imdbLogoHeight,
++                        textSize = metrics.metaTextSize,
++                    )
+                     Spacer(modifier = Modifier.weight(1f))
+                     formattedDate?.let { date ->
+                         Text(
+@@ -1199,6 +1229,7 @@ private fun EpisodeListCard(
+     fallbackImage: String?,
+     progressEntry: WatchProgressEntry?,
+     imdbRating: Double?,
++    extraRatings: List<Pair<String, Double>> = emptyList(), // Nuvio fork
+     isWatched: Boolean,
+     episodeRatingsVisibility: EpisodeRatingsVisibility,
+     blurUnwatchedEpisodes: Boolean,
+@@ -1332,6 +1363,11 @@ private fun EpisodeListCard(
+                                 textSize = sizing.metaTextSize,
+                             )
+                         }
++                        EpisodeExtraRatingBadges( // Nuvio fork
++                            extras = extraRatings,
++                            logoHeight = 12.dp,
++                            textSize = sizing.metaTextSize,
++                        )
+                     }
+                 }
+ 
+@@ -1543,3 +1579,40 @@ private fun formatEpisodeRating(rating: Double): String {
+     val tenth = (roundedTenths % 10).absoluteValue
+     return "$whole.$tenth"
+ }
++
++/** Nuvio fork: small logo + value badges for the non-IMDb episode rating sources. */
++@Composable
++private fun EpisodeExtraRatingBadges(
++    extras: List<Pair<String, Double>>,
++    logoHeight: Dp,
++    textSize: androidx.compose.ui.unit.TextUnit,
++) {
++    extras.forEach { (source, value) ->
++        androidx.compose.foundation.layout.Row(
++            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
++            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(3.dp),
++        ) {
++            when (source) {
++                "Simkl" -> androidx.compose.foundation.Image(
++                    painter = painterResource(Res.drawable.simkl_logo_glyph),
++                    contentDescription = source,
++                    modifier = Modifier.height(logoHeight),
++                    contentScale = ContentScale.Fit,
++                )
++                "Trakt" -> androidx.compose.foundation.Image(
++                    painter = painterResource(Res.drawable.rating_trakt),
++                    contentDescription = source,
++                    modifier = Modifier.height(logoHeight),
++                    contentScale = ContentScale.Fit,
++                )
++                else -> Text(source, style = MaterialTheme.typography.labelSmall.copy(fontSize = textSize))
++            }
++            Text(
++                text = String.format(Locale.US, "%.1f", value),
++                style = MaterialTheme.typography.labelSmall.copy(fontSize = textSize),
++                color = Color.White.copy(alpha = 0.85f),
++                maxLines = 1,
++            )
++        }
++    }
++}
