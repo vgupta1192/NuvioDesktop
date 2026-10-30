@@ -1,0 +1,316 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+index 856d5c2e0..d59838031 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+@@ -85,107 +85,6 @@ internal fun LazyListScope.advancedSettingsContent(
+             }
+         }
+     }
+-    // Nuvio fork: crash log viewer
+-    if (CrashLogPlatform.available) {
+-        item {
+-            var showCrashLogs by remember { mutableStateOf(false) }
+-            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+-            SettingsSection(
+-                title = "Crash logs",
+-                isTablet = isTablet,
+-            ) {
+-                SettingsGroup(isTablet = isTablet) {
+-                    SettingsNavigationRow(
+-                        title = "Crash logs",
+-                        description = if (CrashLogPlatform.files().isEmpty()) {
+-                            "No crash logs recorded."
+-                        } else {
+-                            "${CrashLogPlatform.files().size} recorded. The newest is shown; report it if you hit a bug."
+-                        },
+-                        isTablet = isTablet,
+-                        onClick = { showCrashLogs = true },
+-                    )
+-                }
+-            }
+-            if (showCrashLogs) {
+-                val names = remember(showCrashLogs) { CrashLogPlatform.files() }
+-                val latest = names.firstOrNull()?.let { CrashLogPlatform.read(it) }
+-                androidx.compose.material3.AlertDialog(
+-                    onDismissRequest = { showCrashLogs = false },
+-                    confirmButton = {
+-                        androidx.compose.material3.TextButton(onClick = {
+-                            latest?.let { text ->
+-                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(text))
+-                            }
+-                        }) { Text("Copy latest") }
+-                    },
+-                    dismissButton = {
+-                        androidx.compose.material3.TextButton(onClick = {
+-                            CrashLogPlatform.clear()
+-                            showCrashLogs = false
+-                        }) { Text("Clear all") }
+-                    },
+-                    title = { Text("Crash logs") },
+-                    text = {
+-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+-                            Text(names.joinToString("\n"))
+-                            if (latest != null) {
+-                                Text(
+-                                    text = latest.take(4000),
+-                                    style = MaterialTheme.typography.bodySmall,
+-                                )
+-                            }
+-                        }
+-                    },
+-                )
+-            }
+-        }
+-    }
+-    // Nuvio fork: DNS over HTTPS picker
+-    item {
+-        SettingsSection(
+-            title = "Network",
+-            isTablet = isTablet,
+-        ) {
+-            SettingsGroup(isTablet = isTablet) {
+-                DohSettingsRow(isTablet = isTablet)
+-            }
+-        }
+-    }
+-    // Nuvio fork: clear cached posters/backdrops
+-    item {
+-        var cleared by remember { mutableStateOf(false) }
+-        SettingsSection(
+-            title = "Storage",
+-            isTablet = isTablet,
+-        ) {
+-            SettingsGroup(isTablet = isTablet) {
+-                val imageLoaderContext = coil3.compose.LocalPlatformContext.current
+-                SettingsNavigationRow(
+-                    title = "Clear image cache",
+-                    description = "Remove cached posters and backdrops. They download again when needed.",
+-                    isTablet = isTablet,
+-                    trailingContent = if (cleared) {
+-                        {
+-                            Text(
+-                                "Cleared",
+-                                style = MaterialTheme.typography.labelLarge,
+-                                color = MaterialTheme.colorScheme.primary,
+-                            )
+-                        }
+-                    } else {
+-                        null
+-                    },
+-                    onClick = {
+-                        val loader = coil3.SingletonImageLoader.get(imageLoaderContext)
+-                        loader.memoryCache?.clear()
+-                        loader.diskCache?.clear()
+-                        cleared = true
+-                    },
+-                )
+-            }
+-        }
+-    }
+     if (DesktopRendererSettings.isSupported) {
+         item {
+             val externallyControlled = remember { DesktopRendererSettings.isExternallyControlled }
+@@ -430,3 +329,107 @@ private fun SentryInfoSection(
+         )
+     }
+ }
++
++@Composable
++internal fun ForkDohSettingsSection(isTablet: Boolean) {
++SettingsSection(
++        title = "Network",
++        isTablet = isTablet,
++    ) {
++        SettingsGroup(isTablet = isTablet) {
++            DohSettingsRow(isTablet = isTablet)
++        }
++    }
++}
++
++@Composable
++internal fun ForkImageCacheSection(isTablet: Boolean) {
++var cleared by remember { mutableStateOf(false) }
++    SettingsSection(
++        title = "Storage",
++        isTablet = isTablet,
++    ) {
++        SettingsGroup(isTablet = isTablet) {
++            val imageLoaderContext = coil3.compose.LocalPlatformContext.current
++            SettingsNavigationRow(
++                title = "Clear image cache",
++                description = "Remove cached posters and backdrops. They download again when needed.",
++                isTablet = isTablet,
++                trailingContent = if (cleared) {
++                    {
++                        Text(
++                            "Cleared",
++                            style = MaterialTheme.typography.labelLarge,
++                            color = MaterialTheme.colorScheme.primary,
++                        )
++                    }
++                } else {
++                    null
++                },
++                onClick = {
++                    val loader = coil3.SingletonImageLoader.get(imageLoaderContext)
++                    loader.memoryCache?.clear()
++                    loader.diskCache?.clear()
++                    cleared = true
++                },
++            )
++        }
++    }
++}
++
++@Composable
++internal fun ForkCrashLogsSection(isTablet: Boolean) {
++if (CrashLogPlatform.available) {
++        var showCrashLogs by remember { mutableStateOf(false) }
++        val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
++        SettingsSection(
++            title = "Crash logs",
++            isTablet = isTablet,
++        ) {
++            SettingsGroup(isTablet = isTablet) {
++                SettingsNavigationRow(
++                    title = "Crash logs",
++                    description = if (CrashLogPlatform.files().isEmpty()) {
++                        "No crash logs recorded."
++                    } else {
++                        "${CrashLogPlatform.files().size} recorded. The newest is shown; report it if you hit a bug."
++                    },
++                    isTablet = isTablet,
++                    onClick = { showCrashLogs = true },
++                )
++            }
++        }
++        if (showCrashLogs) {
++            val names = remember(showCrashLogs) { CrashLogPlatform.files() }
++            val latest = names.firstOrNull()?.let { CrashLogPlatform.read(it) }
++            androidx.compose.material3.AlertDialog(
++                onDismissRequest = { showCrashLogs = false },
++                confirmButton = {
++                    androidx.compose.material3.TextButton(onClick = {
++                        latest?.let { text ->
++                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(text))
++                        }
++                    }) { Text("Copy latest") }
++                },
++                dismissButton = {
++                    androidx.compose.material3.TextButton(onClick = {
++                        CrashLogPlatform.clear()
++                        showCrashLogs = false
++                    }) { Text("Clear all") }
++                },
++                title = { Text("Crash logs") },
++                text = {
++                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
++                        Text(names.joinToString("\n"))
++                        if (latest != null) {
++                            Text(
++                                text = latest.take(4000),
++                                style = MaterialTheme.typography.bodySmall,
++                            )
++                        }
++                    }
++                },
++            )
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ContentDiscoverySettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ContentDiscoverySettingsPage.kt
+index 418100d01..21d6c6663 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ContentDiscoverySettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ContentDiscoverySettingsPage.kt
+@@ -27,9 +27,6 @@ internal fun LazyListScope.contentDiscoveryContent(
+     onPluginsClick: () -> Unit,
+     onMediaServersClick: () -> Unit,
+ ) {
+-    item {
+-        DxWatchedTitlesSettingsSection(isTablet = isTablet) // Nuvio fork: watched titles hook
+-    }
+     item {
+         val recentSearchesEnabled by remember {
+             SearchHistoryRepository.ensureLoaded()
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
+index 99d8563a9..ccc42c411 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
+@@ -2,25 +2,30 @@ package com.nuvio.app.features.settings
+ 
+ import androidx.compose.foundation.lazy.LazyListScope
+ 
+-/** Nuvio fork: one page gathering every fork feature toggle. */
++/** Nuvio fork: one page gathering every fork feature setting. */
+ internal fun LazyListScope.featuresSettingsContent(isTablet: Boolean) {
+     item {
+         ForkPlayerPrefsSettingsSection(isTablet = isTablet)
+     }
++    item {
++        DxRememberSettingsSection(isTablet = isTablet)
++    }
+     item {
+         DxWatchedTitlesSettingsSection(isTablet = isTablet)
+     }
+     item {
+-        DxWatchStatsSettingsSection(isTablet = isTablet)
++        ForkDohSettingsSection(isTablet = isTablet)
+     }
+     item {
+-        DxSoundsSettingsSection(isTablet = isTablet)
++        ForkImageCacheSection(isTablet = isTablet)
++    }
++    item {
++        ForkCrashLogsSection(isTablet = isTablet)
+     }
+     item {
+-        SettingsSection(title = "Network", isTablet = isTablet) {
+-            SettingsGroup(isTablet = isTablet) {
+-                DohSettingsRow(isTablet = isTablet)
+-            }
+-        }
++        DxWatchStatsSettingsSection(isTablet = isTablet)
++    }
++    item {
++        DxSoundsSettingsSection(isTablet = isTablet)
+     }
+ }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+index f54fa6a92..fa90d0f94 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+@@ -156,8 +156,6 @@ internal fun LazyListScope.playbackSettingsContent(
+     }
+     item {
+         PlayerEnhanceSettingsSection(isTablet = isTablet) // Nuvio fork: desktop picture & sound
+-        DxRememberSettingsSection(isTablet = isTablet) // Nuvio fork: remember speed + number keys
+-        ForkPlayerPrefsSettingsSection(isTablet = isTablet) // Nuvio fork: subtitle shadow + start off
+     }
+ }
+ 
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
+index d4a2f1f79..708a02312 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
+@@ -92,12 +92,6 @@ internal fun LazyListScope.settingsRootContent(
+         item {
+             ProfileInsightsRootCard(isTablet = isTablet, onSwitchProfile = onSwitchProfileClick) // Nuvio fork: profile insights panel at the top
+         }
+-        item {
+-            DxSoundsSettingsSection(isTablet = isTablet) // Nuvio fork: sounds hook
+-        }
+-        item {
+-            DxWatchStatsSettingsSection(isTablet = isTablet) // Nuvio fork: watch stats hook
+-        }
+     }
+     if (showAccountSection) {
+         item {
+@@ -274,7 +268,7 @@ internal fun LazyListScope.settingsRootContent(
+             ) {
+                 SettingsGroup(isTablet = isTablet) {
+                     SettingsNavigationRow(
+-                        title = if (showSectionTitles) stringResource(Res.string.compose_settings_page_advanced) else "",
++                        title = stringResource(Res.string.compose_settings_page_advanced),
+                         description = stringResource(Res.string.compose_settings_root_advanced_description),
+                         icon = Icons.Rounded.Tune,
+                         isTablet = isTablet,
