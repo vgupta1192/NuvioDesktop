@@ -41,15 +41,35 @@ index 7cd8f4c65..950330b42 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/debrid/DirectDebridStreamPreparer.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/debrid/DirectDebridStreamPreparer.kt
-index c349f4ef4..c057d4f7f 100644
+index 775259b4f..c057d4f7f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/debrid/DirectDebridStreamPreparer.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/debrid/DirectDebridStreamPreparer.kt
-@@ -1,7 +1,7 @@
+@@ -1,5 +1,6 @@
  package com.nuvio.app.features.debrid
  
- import com.nuvio.app.features.debrid.DebridMagnetBuilder
--co.touchlab.kermit.Logger
-+import co.touchlab.kermit.Logger
++import com.nuvio.app.features.debrid.DebridMagnetBuilder
+ import co.touchlab.kermit.Logger
  import com.nuvio.app.features.player.PlayerSettingsUiState
  import com.nuvio.app.features.streams.AddonStreamGroup
- import com.nuvio.app.features.streams.StreamAutoPlayMode
+@@ -53,6 +54,21 @@ object DirectDebridStreamPreparer {
+                             onPrepared(stream, result.stream)
+                         }
+                     }
++                    DirectDebridPlayableResult.NotCached -> {
++                        // Nuvio fork: optionally send the uncached torrent to TorBox so it caches for next time
++                        if (com.nuvio.app.features.settings.ForkPrefs.autoAddTorbox.current()) {
++                            val apiKey = DebridSettingsRepository.snapshot()
++                                .apiKeyFor(DebridProviders.TORBOX_ID).trim()
++                            val magnet = DebridMagnetBuilder.fromStream(stream)
++                            if (apiKey.isNotBlank() && magnet != null) {
++                                val added = runCatching {
++                                    TorboxApiClient.createTorrent(apiKey = apiKey, magnet = magnet)
++                                        .body?.success != false
++                                }.getOrDefault(false)
++                                log.d { "Not cached; TorBox auto-add ${if (added) "succeeded" else "failed"} for ${stream.title}" }
++                            }
++                        }
++                    }
+                     else -> Unit
+                 }
+             } catch (error: CancellationException) {

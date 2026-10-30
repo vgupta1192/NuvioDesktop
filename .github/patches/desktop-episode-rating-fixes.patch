@@ -14,7 +14,7 @@ index 74d26f8c2..fb57d9d20 100644
  /**
   * Nuvio fork: per-source episode ratings ("Simkl", "Trakt") keyed by (season, episode), shown
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index a028fa5cc..feb54db45 100644
+index 42353c5d8..feb54db45 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 @@ -105,6 +105,7 @@ import com.nuvio.app.core.ui.nuvioSafeBottomPadding
@@ -33,7 +33,15 @@ index a028fa5cc..feb54db45 100644
                                      settings = metaScreenSettingsUiState.copy(
                                          items = metaScreenSettingsUiState.items.filterNot {
                                              it.key in desktopHeroOwnedMetaSectionKeys
-@@ -1506,6 +1508,7 @@ fun MetaDetailsScreen(
+@@ -1376,7 +1378,6 @@ fun MetaDetailsScreen(
+                                     commentsPageCount = commentsPageCount,
+                                     commentsError = commentsError,
+                                     episodeImdbRatings = episodeImdbRatings,
+-                                    episodeExtraRatings = episodeExtraRatings, // Nuvio fork
+                                     episodeListGroupedEpisodes = episodeListGroupedEpisodes,
+                                     episodeListSeasons = episodeListSeasons,
+                                     episodeListCurrentSeason = currentEpisodeListSeason,
+@@ -1507,6 +1508,7 @@ fun MetaDetailsScreen(
                                  }
  
                                  configuredMetaSectionItems(
@@ -41,7 +49,15 @@ index a028fa5cc..feb54db45 100644
                                      settings = if (useTabletLayout) {
                                          metaScreenSettingsUiState.copy(
                                              items = metaScreenSettingsUiState.items.filterNot { it.key in tabletHeroSectionKeys },
-@@ -2210,6 +2213,7 @@ private fun MetaDetails.toMetaPreview(): MetaPreview =
+@@ -1549,7 +1551,6 @@ fun MetaDetailsScreen(
+                                     commentsPageCount = commentsPageCount,
+                                     commentsError = commentsError,
+                                     episodeImdbRatings = episodeImdbRatings,
+-                                    episodeExtraRatings = episodeExtraRatings, // Nuvio fork
+                                     episodeListGroupedEpisodes = episodeListGroupedEpisodes,
+                                     episodeListSeasons = episodeListSeasons,
+                                     episodeListCurrentSeason = currentEpisodeListSeason,
+@@ -2212,6 +2213,7 @@ private fun MetaDetails.toMetaPreview(): MetaPreview =
  
  private fun LazyListScope.configuredMetaSectionItems(
      settings: MetaScreenSettingsUiState,
@@ -49,3 +65,35 @@ index a028fa5cc..feb54db45 100644
      isMdbListActive: Boolean,
      meta: MetaDetails,
      isTablet: Boolean,
+@@ -2330,7 +2332,6 @@ private fun LazyListScope.configuredMetaSectionItems(
+                     commentsPageCount = commentsPageCount,
+                     commentsError = commentsError,
+                     episodeImdbRatings = episodeImdbRatings,
+-                    episodeExtraRatings = episodeExtraRatings, // Nuvio fork
+                     onRetryComments = onRetryComments,
+                     onLoadMoreComments = onLoadMoreComments,
+                     onCommentClick = onCommentClick,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
+index 4f628673d..8a56d1b77 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
+@@ -53,7 +53,6 @@ import androidx.compose.ui.draw.blur
+ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.graphics.Brush
+ import androidx.compose.ui.graphics.Color
+-import androidx.compose.ui.layout.ContentScale
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.text.style.TextOverflow
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index c8f8b353f..4d92a34ea 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.padding
++import androidx.compose.ui.Modifier
+ import androidx.compose.ui.unit.dp
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Text
