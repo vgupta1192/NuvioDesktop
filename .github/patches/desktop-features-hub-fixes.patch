@@ -1,0 +1,22 @@
+diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
+index dd4df76d6..7f186367c 100644
+--- a/composeApp/src/commonMain/composeResources/values/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings.xml
+@@ -533,7 +533,6 @@
+     <string name="compose_settings_page_poster_customization">Poster Card Style</string>
+     <string name="compose_settings_page_privacy_policy">Privacy Policy</string>
+     <string name="compose_settings_page_root">Settings</string>
+-    <string name="compose_settings_page_features">Fork features</string>
+     <string name="compose_settings_page_streams">Streams</string>
+     <string name="settings_appearance_section_streams">STREAMS</string>
+     <string name="compose_settings_page_supporters_contributors">Supporters &amp; Contributors</string>
+diff --git a/composeApp/src/commonMain/composeResources/values/strings_fork_features.xml b/composeApp/src/commonMain/composeResources/values/strings_fork_features.xml
+new file mode 100644
+index 000000000..6ccf1062e
+--- /dev/null
++++ b/composeApp/src/commonMain/composeResources/values/strings_fork_features.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="compose_settings_page_features">Fork features</string>
++</resources>
