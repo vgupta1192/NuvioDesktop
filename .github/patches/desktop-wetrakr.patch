@@ -10,6 +10,464 @@ index a4af5d7a5..0b80c2bd4 100644
      TraktAuthRepository.descriptor
      TraktScrobbleRepository.ensureRegistered()
      SimklAuthRepository.descriptor
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
+index 3b6570e5d..63e4df666 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
+@@ -49,13 +49,13 @@ private data class StoredPosterCardStylePreferences(
+     val hideLabelsEnabled: Boolean = false,
+     val hoverPreviewEnabled: Boolean = true,
+     val hoverPreviewOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
+-    val hoverPreviewTrailerEnabled: Boolean = false,
++    val hoverPreviewTrailerEnabled: Boolean = true,
+     val hoverPreviewTrailerSoundEnabled: Boolean = false,
+     val hoverPreviewTrailerStartSeconds: Int = DefaultHoverPreviewTrailerStartSeconds,
+     val netflixStyleEnabled: Boolean = false,
+     val netflixPrevHoverEnabled: Boolean = true,
+     val netflixPrevOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
+-    val netflixPrevTrailerEnabled: Boolean = false,
++    val netflixPrevTrailerEnabled: Boolean = true,
+     val netflixPrevTrailerSoundEnabled: Boolean = false,
+     val netflixPrevCwStyle: ContinueWatchingSectionStyle = ContinueWatchingSectionStyle.Card,
+     val liveTvNetflixStyleEnabled: Boolean = false,
+@@ -74,13 +74,13 @@ data class PosterCardStyleUiState(
+     val hideLabelsEnabled: Boolean = false,
+     val hoverPreviewEnabled: Boolean = true,
+     val hoverPreviewOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
+-    val hoverPreviewTrailerEnabled: Boolean = false,
++    val hoverPreviewTrailerEnabled: Boolean = true,
+     val hoverPreviewTrailerSoundEnabled: Boolean = false,
+     val hoverPreviewTrailerStartSeconds: Int = DefaultHoverPreviewTrailerStartSeconds,
+     val netflixStyleEnabled: Boolean = false,
+     val netflixPrevHoverEnabled: Boolean = true,
+     val netflixPrevOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
+-    val netflixPrevTrailerEnabled: Boolean = false,
++    val netflixPrevTrailerEnabled: Boolean = true,
+     val netflixPrevTrailerSoundEnabled: Boolean = false,
+     val netflixPrevCwStyle: ContinueWatchingSectionStyle = ContinueWatchingSectionStyle.Card,
+     val liveTvNetflixStyleEnabled: Boolean = false,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
+index fb57d9d20..6b70bdfac 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
+@@ -29,18 +29,43 @@ object ExtraEpisodeRatings {
+     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+     private val cache = HashMap<String, Map<String, Map<Pair<Int, Int>, Double>>>()
+ 
+-    suspend fun fetch(imdbId: String): Map<String, Map<Pair<Int, Int>, Double>> {
+-        cache[imdbId]?.let { return it }
++    suspend fun fetch(imdbId: String, tmdbId: Int? = null): Map<String, Map<Pair<Int, Int>, Double>> {
++        val cacheKey = "$imdbId|$tmdbId"
++        cache[cacheKey]?.let { return it }
+         val simkl = fetchSimkl(imdbId)
+         val trakt = fetchTrakt(imdbId)
++        val tmdb = tmdbId?.takeIf { it > 0 }?.let { fetchTmdb(it) } ?: emptyMap()
+         val out = buildMap {
++            if (tmdb.isNotEmpty()) put("TMDB", tmdb)
+             if (simkl.isNotEmpty()) put("Simkl", simkl)
+             if (trakt.isNotEmpty()) put("Trakt", trakt)
+         }
+-        if (out.isNotEmpty()) cache[imdbId] = out
++        if (out.isNotEmpty()) cache[cacheKey] = out
+         return out
+     }
+ 
++    /** TMDB per-episode ratings from the series-graph API (keyed by the TMDB id). */
++    private suspend fun fetchTmdb(tmdbId: Int): Map<Pair<Int, Int>, Double> = withContext(Dispatchers.Default) {
++        try {
++            val seasons = SeriesGraphApi.getSeasonRatings(tmdbId)
++            val out = HashMap<Pair<Int, Int>, Double>()
++            seasons.forEach { season ->
++                val s = season.episodes?.firstOrNull()?.seasonNumber ?: return@forEach
++                season.episodes.orEmpty().forEach { episode ->
++                    val e = episode.episodeNumber ?: return@forEach
++                    val rating = episode.voteAverage?.takeIf { it > 0.0 } ?: return@forEach
++                    out[s to e] = rating
++                }
++            }
++            out
++        } catch (cancelled: kotlinx.coroutines.CancellationException) {
++            throw cancelled
++        } catch (e: Exception) {
++            log.w { "TMDB episode ratings failed for $tmdbId: ${e.message}" }
++            emptyMap()
++        }
++    }
++
+     private suspend fun fetchSimkl(imdbId: String): Map<Pair<Int, Int>, Double> = withContext(Dispatchers.Default) {
+         if (SimklConfig.CLIENT_ID.isBlank()) return@withContext emptyMap()
+         try {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
+index feb54db45..c1e5fdf22 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
+@@ -424,9 +424,9 @@ fun MetaDetailsScreen(
+             imdbId = imdbId,
+             tmdbId = tmdbId,
+         )
+-        // Nuvio fork: Simkl/Trakt episode ratings as logo badges
++        // Nuvio fork: TMDB/Simkl/Trakt episode ratings as logo badges
+         episodeExtraRatings = imdbId?.takeIf { it.isNotBlank() }
+-            ?.let { runCatching { ExtraEpisodeRatings.fetch(it) }.getOrDefault(emptyMap()) }
++            ?.let { runCatching { ExtraEpisodeRatings.fetch(it, tmdbId) }.getOrDefault(emptyMap()) }
+             ?: emptyMap()
+     }
+ 
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaScreenSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaScreenSettingsRepository.kt
+index decf75c68..605e25a13 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaScreenSettingsRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaScreenSettingsRepository.kt
+@@ -79,7 +79,7 @@ data class MetaScreenSettingsUiState(
+     val items: List<MetaScreenSectionItem> = emptyList(),
+     val backgroundMode: MetaScreenBackgroundMode = MetaScreenBackgroundMode.Default,
+     val cinematicBackground: Boolean = MetaScreenBackgroundMode.Default.usesBackdropBackground,
+-    val heroTrailerPlayback: Boolean = false,
++    val heroTrailerPlayback: Boolean = true,
+     val tabLayout: Boolean = false,
+     val episodeCardStyle: MetaEpisodeCardStyle = MetaEpisodeCardStyle.Horizontal,
+     val blurUnwatchedEpisodes: Boolean = false,
+@@ -132,7 +132,7 @@ private data class StoredMetaScreenSettingsPayload(
+     val backgroundMode: String? = null,
+     val cinematicBackground: Boolean = false,
+     @SerialName("hero_trailer_playback")
+-    val heroTrailerPlayback: Boolean = false,
++    val heroTrailerPlayback: Boolean = true,
+     @SerialName("tvStyleLayout")
+     val tabLayout: Boolean = false,
+     val episodeCardStyle: String = "horizontal",
+@@ -217,7 +217,7 @@ object MetaScreenSettingsRepository {
+     private var hasLoaded = false
+     private var preferences: MutableMap<MetaScreenSectionKey, StoredMetaScreenSectionPreference> = mutableMapOf()
+     private var backgroundMode: MetaScreenBackgroundMode = MetaScreenBackgroundMode.Default
+-    private var heroTrailerPlayback: Boolean = false
++    private var heroTrailerPlayback: Boolean = true
+     private var tabLayout: Boolean = false
+     private var episodeCardStyle: MetaEpisodeCardStyle = MetaEpisodeCardStyle.Horizontal
+     private var blurUnwatchedEpisodes: Boolean = false
+@@ -262,7 +262,7 @@ object MetaScreenSettingsRepository {
+         hasLoaded = false
+         preferences.clear()
+         backgroundMode = MetaScreenBackgroundMode.Default
+-        heroTrailerPlayback = false
++        heroTrailerPlayback = true
+         tabLayout = false
+         episodeCardStyle = MetaEpisodeCardStyle.Horizontal
+         blurUnwatchedEpisodes = false
+@@ -350,7 +350,7 @@ object MetaScreenSettingsRepository {
+         hasLoaded = false
+         preferences.clear()
+         backgroundMode = MetaScreenBackgroundMode.Default
+-        heroTrailerPlayback = false
++        heroTrailerPlayback = true
+         tabLayout = false
+         episodeCardStyle = MetaEpisodeCardStyle.Horizontal
+         blurUnwatchedEpisodes = false
+@@ -363,7 +363,7 @@ object MetaScreenSettingsRepository {
+     internal fun applyFromSync(
+         items: List<MetaScreenSectionItem>,
+         cinematicBackground: Boolean,
+-        heroTrailerPlayback: Boolean = false,
++        heroTrailerPlayback: Boolean = true,
+         tabLayout: Boolean,
+         episodeCardStyle: MetaEpisodeCardStyle = MetaEpisodeCardStyle.Horizontal,
+         blurUnwatchedEpisodes: Boolean = false,
+@@ -404,7 +404,7 @@ object MetaScreenSettingsRepository {
+         ensureLoaded()
+         preferences.clear()
+         backgroundMode = MetaScreenBackgroundMode.Default
+-        heroTrailerPlayback = false
++        heroTrailerPlayback = true
+         tabLayout = false
+         episodeCardStyle = MetaEpisodeCardStyle.Horizontal
+         blurUnwatchedEpisodes = false
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
+index 8a56d1b77..5eb879370 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
+@@ -1587,11 +1587,26 @@ private fun EpisodeExtraRatingBadges(
+     textSize: androidx.compose.ui.unit.TextUnit,
+ ) {
+     extras.forEach { (source, value) ->
++        // The value text takes the source's brand color so it matches the icon tone.
++        val valueColor = when (source) {
++            "TMDB" -> Color(0xFF01B4E4)
++            "Simkl" -> Color(0xFFFFFFFF)
++            "Trakt" -> Color(0xFFED1C24)
++            "IMDb" -> Color(0xFFF5C518)
++            "MAL" -> Color(0xFF2E51A2)
++            else -> Color.White.copy(alpha = 0.85f)
++        }
+         androidx.compose.foundation.layout.Row(
+             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(3.dp),
+         ) {
+             when (source) {
++                "TMDB" -> androidx.compose.foundation.Image(
++                    painter = painterResource(Res.drawable.rating_tmdb),
++                    contentDescription = source,
++                    modifier = Modifier.height(logoHeight),
++                    contentScale = ContentScale.Fit,
++                )
+                 "Simkl" -> androidx.compose.foundation.Image(
+                     painter = painterResource(Res.drawable.simkl_logo_glyph),
+                     contentDescription = source,
+@@ -1609,7 +1624,7 @@ private fun EpisodeExtraRatingBadges(
+             Text(
+                 text = String.format(Locale.US, "%.1f", value),
+                 style = MaterialTheme.typography.labelSmall.copy(fontSize = textSize),
+-                color = Color.White.copy(alpha = 0.85f),
++                color = valueColor,
+                 maxLines = 1,
+             )
+         }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+index d59838031..3a4dd1c17 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+@@ -159,30 +159,6 @@ internal fun LazyListScope.advancedSettingsContent(
+             }
+         }
+     }
+-    if (DiscordRichPresenceRepository.isSupported) {
+-        item {
+-            val discordEnabledFlow = remember {
+-                DiscordRichPresenceRepository.ensureLoaded()
+-                DiscordRichPresenceRepository.enabled
+-            }
+-            val discordEnabled by discordEnabledFlow.collectAsStateWithLifecycle()
+-
+-            SettingsSection(
+-                title = stringResource(Res.string.settings_advanced_section_discord),
+-                isTablet = isTablet,
+-            ) {
+-                SettingsGroup(isTablet = isTablet) {
+-                    SettingsSwitchRow(
+-                        title = stringResource(Res.string.settings_advanced_discord_rich_presence),
+-                        description = stringResource(Res.string.settings_advanced_discord_rich_presence_description),
+-                        checked = discordEnabled,
+-                        isTablet = isTablet,
+-                        onCheckedChange = DiscordRichPresenceRepository::setEnabled,
+-                    )
+-                }
+-            }
+-        }
+-    }
+     item {
+         SettingsSection(
+             title = stringResource(Res.string.settings_advanced_section_cache),
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DiscordRichPresenceRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DiscordRichPresenceRepository.kt
+index a564f67d6..46e4d7b85 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DiscordRichPresenceRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DiscordRichPresenceRepository.kt
+@@ -1,5 +1,6 @@
+ package com.nuvio.app.features.settings
+ 
++import com.nuvio.app.features.settings.ForkPrefs
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.asStateFlow
+@@ -11,12 +12,20 @@ internal object DiscordRichPresenceRepository {
+     private val _enabled = MutableStateFlow(false)
+     val enabled: StateFlow<Boolean> = _enabled.asStateFlow()
+ 
++    /** Bumped whenever any presence preference changes so the manager republishes the activity. */
++    private val _prefsVersion = MutableStateFlow(0)
++    val prefsVersion: StateFlow<Int> = _prefsVersion.asStateFlow()
++
+     private var hasLoaded = false
+ 
+     fun ensureLoaded() {
+         if (hasLoaded) return
+         hasLoaded = true
+         _enabled.value = DiscordRichPresenceStorage.loadEnabled() ?: false
++        ForkPrefs.activityType.ensureLoaded()
++        ForkPrefs.discordShowIdle.ensureLoaded()
++        ForkPrefs.discordShowPoster.ensureLoaded()
++        ForkPrefs.discordShowProgress.ensureLoaded()
+     }
+ 
+     fun setEnabled(enabled: Boolean) {
+@@ -25,4 +34,35 @@ internal object DiscordRichPresenceRepository {
+         _enabled.value = enabled
+         DiscordRichPresenceStorage.saveEnabled(enabled)
+     }
++
++    // Nuvio fork: presence display preferences (Fork features page).
++    val activityType get() = ForkPrefs.activityType
++    val discordShowIdle get() = ForkPrefs.discordShowIdle
++    val discordShowPoster get() = ForkPrefs.discordShowPoster
++    val discordShowProgress get() = ForkPrefs.discordShowProgress
++
++    fun currentActivityType(): String = ForkPrefs.activityType.current()
++    fun showIdle(): Boolean = ForkPrefs.discordShowIdle.current()
++    fun showPoster(): Boolean = ForkPrefs.discordShowPoster.current()
++    fun showProgress(): Boolean = ForkPrefs.discordShowProgress.current()
++
++    fun setActivityType(value: String) {
++        ForkPrefs.activityType.set(value)
++        _prefsVersion.value += 1
++    }
++
++    fun setShowIdle(on: Boolean) {
++        ForkPrefs.discordShowIdle.set(on)
++        _prefsVersion.value += 1
++    }
++
++    fun setShowPoster(on: Boolean) {
++        ForkPrefs.discordShowPoster.set(on)
++        _prefsVersion.value += 1
++    }
++
++    fun setShowProgress(on: Boolean) {
++        ForkPrefs.discordShowProgress.set(on)
++        _prefsVersion.value += 1
++    }
+ }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
+index ccc42c411..ab01a6163 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
+@@ -22,6 +22,9 @@ internal fun LazyListScope.featuresSettingsContent(isTablet: Boolean) {
+     item {
+         ForkCrashLogsSection(isTablet = isTablet)
+     }
++    item {
++        DiscordRpcSettingsSection(isTablet = isTablet)
++    }
+     item {
+         DxWatchStatsSettingsSection(isTablet = isTablet)
+     }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index 9aba00f76..68656deef 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -309,3 +309,101 @@ private fun LanguageOptionRow(label: String, code: String, selected: Boolean, on
+         Text(label)
+     }
+ }
++
++private val discordActivityTypeChoices = listOf("watching", "playing", "listening", "competing")
++
++private fun discordActivityTypeLabel(value: String): String = when (value) {
++    "playing" -> "Playing"
++    "listening" -> "Listening"
++    "competing" -> "Competing"
++    else -> "Watching"
++}
++
++/** Nuvio fork: Discord Rich Presence display settings (from the mobile fork's Discord section). */
++@Composable
++internal fun DiscordRpcSettingsSection(isTablet: Boolean) {
++    if (!DiscordRichPresenceRepository.isSupported) return
++    DiscordRichPresenceRepository.ensureLoaded()
++    val enabled by DiscordRichPresenceRepository.enabled.collectAsStateWithLifecycle()
++    val activityType by DiscordRichPresenceRepository.activityType.value.collectAsStateWithLifecycle()
++    val showIdle by DiscordRichPresenceRepository.discordShowIdle.value.collectAsStateWithLifecycle()
++    val showPoster by DiscordRichPresenceRepository.discordShowPoster.value.collectAsStateWithLifecycle()
++    val showProgress by DiscordRichPresenceRepository.discordShowProgress.value.collectAsStateWithLifecycle()
++    var showTypeDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
++    SettingsSection(title = "Discord Rich Presence", isTablet = isTablet) {
++        SettingsGroup(isTablet = isTablet) {
++            SettingsSwitchRow(
++                title = "Discord Rich Presence",
++                description = "Show the movie or episode you're watching on your Discord profile.",
++                checked = enabled,
++                isTablet = isTablet,
++                onCheckedChange = DiscordRichPresenceRepository::setEnabled,
++            )
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsNavigationRow(
++                title = "Activity type",
++                description = "How Discord labels the activity on your profile.",
++                isTablet = isTablet,
++                trailingContent = {
++                    Text(
++                        discordActivityTypeLabel(activityType),
++                        style = MaterialTheme.typography.labelLarge,
++                        color = MaterialTheme.colorScheme.primary,
++                    )
++                },
++                enabled = enabled,
++                onClick = { showTypeDialog = true },
++            )
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSwitchRow(
++                title = "Show idle presence",
++                description = "Keep the presence visible while browsing the app, not just during playback.",
++                checked = showIdle,
++                isTablet = isTablet,
++                enabled = enabled,
++                onCheckedChange = DiscordRichPresenceRepository::setShowIdle,
++            )
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSwitchRow(
++                title = "Show poster artwork",
++                description = "Use the title's poster as the presence artwork.",
++                checked = showPoster,
++                isTablet = isTablet,
++                enabled = enabled,
++                onCheckedChange = DiscordRichPresenceRepository::setShowPoster,
++            )
++            SettingsGroupDivider(isTablet = isTablet)
++            SettingsSwitchRow(
++                title = "Show progress bar",
++                description = "Render a live progress bar with the remaining time on the presence.",
++                checked = showProgress,
++                isTablet = isTablet,
++                enabled = enabled,
++                onCheckedChange = DiscordRichPresenceRepository::setShowProgress,
++            )
++        }
++    }
++    if (showTypeDialog) {
++        androidx.compose.material3.AlertDialog(
++            onDismissRequest = { showTypeDialog = false },
++            confirmButton = {
++                androidx.compose.material3.TextButton(onClick = { showTypeDialog = false }) { Text("Done") }
++            },
++            title = { Text("Activity type") },
++            text = {
++                Column {
++                    discordActivityTypeChoices.forEach { value ->
++                        LanguageOptionRow(
++                            discordActivityTypeLabel(value),
++                            value,
++                            selected = activityType == value,
++                        ) {
++                            DiscordRichPresenceRepository.setActivityType(value)
++                            showTypeDialog = false
++                        }
++                    }
++                }
++            },
++        )
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+index e11f00495..68c069047 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -78,6 +78,10 @@ object ForkPrefs {
+     val secondSubtitleLang = StringPref("settings/second_subtitle_lang", "")
+     val autoAddTorbox = BoolPref("settings/auto_add_torbox", false)
+     val nuvioRead = BoolPref("settings/nuvio_read", false)
++    val activityType = StringPref("settings/discord_activity_type", "watching")
++    val discordShowIdle = BoolPref("settings/discord_show_idle", true)
++    val discordShowPoster = BoolPref("settings/discord_show_poster", true)
++    val discordShowProgress = BoolPref("settings/discord_show_progress", true)
+ 
+     private const val PINNED_SOURCES_KEY = "sources/pinned"
+ 
+@@ -120,5 +124,9 @@ object ForkPrefs {
+         secondSubtitleLang.ensureLoaded()
+         autoAddTorbox.ensureLoaded()
+         nuvioRead.ensureLoaded()
++        activityType.ensureLoaded()
++        discordShowIdle.ensureLoaded()
++        discordShowPoster.ensureLoaded()
++        discordShowProgress.ensureLoaded()
+     }
+ }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
 index 0ce8b0a95..7e24e1661 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
@@ -572,3 +1030,78 @@ index 000000000..9904d2fe9
 +    private const val REFRESH_MARGIN_MS = 120_000L
 +    private const val AUTH_KEY = "wetrakr/auth"
 +}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/discordrpc/DiscordPresenceManager.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/discordrpc/DiscordPresenceManager.kt
+index ecd00c77d..c00148ffa 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/discordrpc/DiscordPresenceManager.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/discordrpc/DiscordPresenceManager.kt
+@@ -35,7 +35,10 @@ internal object DiscordPresenceManager {
+         if (DiscordConfig.CLIENT_ID.isBlank()) return
+         DiscordRichPresenceRepository.ensureLoaded()
+         scope.launch {
+-            DiscordRichPresenceRepository.enabled.collectLatest { enabled ->
++            kotlinx.coroutines.flow.combine(
++                DiscordRichPresenceRepository.enabled,
++                DiscordRichPresenceRepository.prefsVersion,
++            ) { enabled, _ -> enabled }.collectLatest { enabled ->
+                 if (enabled) startSync() else stopSync()
+             }
+         }
+@@ -54,8 +57,12 @@ internal object DiscordPresenceManager {
+                     lastActivity = null
+                     try {
+                         AppPresenceState.current.collect { snapshot ->
+-                            val activity = snapshot?.toDiscordActivity() ?: IdleActivity
++                            val activity = snapshot?.toDiscordActivity()
++                                ?: DiscordRichPresenceRepository.showIdle().let { if (it) IdleActivity else null }
+                             if (activity == lastActivity) return@collect
++                            if (activity == null) {
++                                if (lastActivity != null && client.setActivity(null)) lastActivity = null
++                                return@collect
+                             if (client.setActivity(activity)) {
+                                 lastActivity = activity
+                             } else {
+@@ -97,19 +104,27 @@ private fun String.toDiscordEpisodeLabel(): String {
+ }
+ 
+ 
++// Nuvio fork: presence prefs (activity type, poster, progress) come from DiscordRichPresenceRepository.
++private fun presenceActivityType(): Int = when (DiscordRichPresenceRepository.currentActivityType()) {
++    "playing" -> 0
++    "listening" -> 2
++    "competing" -> 5
++    else -> WatchingActivityType
++}
++
+ private fun PresenceSnapshot.toDiscordActivity(): DiscordActivity = when (this) {
+-    is PresenceSnapshot.Tab -> DiscordActivity(type = WatchingActivityType, details = "Browsing ${tab.name}")
+-    is PresenceSnapshot.Details -> DiscordActivity(type = WatchingActivityType, details = "Viewing $title")
++    is PresenceSnapshot.Tab -> DiscordActivity(type = presenceActivityType(), details = "Browsing ${tab.name}")
++    is PresenceSnapshot.Details -> DiscordActivity(type = presenceActivityType(), details = "Viewing $title")
+     is PresenceSnapshot.Player -> {
+         val episode = episodeLabel?.toDiscordEpisodeLabel()
+         // Discord expects Unix timestamps in seconds, not milliseconds.
+         val startSecs = (System.currentTimeMillis() - positionMs) / 1_000L
+         DiscordActivity(
+-            type = WatchingActivityType,
++            type = presenceActivityType(),
+             name = title, // Show the media title under the pseudo when the client honors it.
+             details = title, // Always keep the title here as a fallback for clients that ignore `name`.
+             state = if (isPlaying) episode else episode?.let { "$it • Paused" } ?: "Paused",
+-            timestamps = if (isPlaying) {
++            timestamps = if (DiscordRichPresenceRepository.showProgress() && isPlaying) {
+                 // start + end -> Discord renders a live progress bar with time remaining.
+                 DiscordActivityTimestamps(
+                     start = startSecs,
+@@ -118,7 +133,11 @@ private fun PresenceSnapshot.toDiscordActivity(): DiscordActivity = when (this)
+             } else {
+                 null
+             },
+-            assets = posterUrl?.let { DiscordActivityAssets(largeImage = it, largeText = title) },
++            assets = if (DiscordRichPresenceRepository.showPoster()) {
++                posterUrl?.let { DiscordActivityAssets(largeImage = it, largeText = title) }
++            } else {
++                null
++            },
+         )
+     }
+ }
