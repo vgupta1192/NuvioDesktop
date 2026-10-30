@@ -173,10 +173,10 @@ index 6218fb193..3f42ebd13 100644
          fun fromStorage(value: String?): TrackingProviderId? =
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/WeTrakrRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/WeTrakrRepository.kt
 new file mode 100644
-index 000000000..a90b984d0
+index 000000000..9904d2fe9
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/WeTrakrRepository.kt
-@@ -0,0 +1,397 @@
+@@ -0,0 +1,395 @@
 +package com.nuvio.app.features.tracking
 +
 +import co.touchlab.kermit.Logger
@@ -563,14 +563,12 @@ index 000000000..a90b984d0
 +            Response(response.status, response.body)
 +        }
 +
-+    companion object {
-+        const val CLIENT_ID = "193cadea493eaf3f7f4cdcbba020f577"
-+        const val API_BASE_URL = "https://api.wetrakr.com"
-+        const val API_VERSION = "1"
-+        const val DEFAULT_VERIFICATION_URL = "https://wetrakr.com/activate"
-+        const val USER_AGENT = "NuvioDesktop"
-+        const val WATCHED = "watched"
-+        const val REFRESH_MARGIN_MS = 120_000L
-+        private const val AUTH_KEY = "wetrakr/auth"
-+    }
++    private const val CLIENT_ID = "193cadea493eaf3f7f4cdcbba020f577"
++    private const val API_BASE_URL = "https://api.wetrakr.com"
++    private const val API_VERSION = "1"
++    private const val DEFAULT_VERIFICATION_URL = "https://wetrakr.com/activate"
++    private const val USER_AGENT = "NuvioDesktop"
++    private const val WATCHED = "watched"
++    private const val REFRESH_MARGIN_MS = 120_000L
++    private const val AUTH_KEY = "wetrakr/auth"
 +}
