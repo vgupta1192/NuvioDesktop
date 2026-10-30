@@ -1031,7 +1031,7 @@ index 000000000..9904d2fe9
 +    private const val AUTH_KEY = "wetrakr/auth"
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/discordrpc/DiscordPresenceManager.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/discordrpc/DiscordPresenceManager.kt
-index ecd00c77d..c00148ffa 100644
+index ecd00c77d..5e1ba14de 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/discordrpc/DiscordPresenceManager.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/discordrpc/DiscordPresenceManager.kt
 @@ -35,7 +35,10 @@ internal object DiscordPresenceManager {
@@ -1046,7 +1046,7 @@ index ecd00c77d..c00148ffa 100644
                  if (enabled) startSync() else stopSync()
              }
          }
-@@ -54,8 +57,12 @@ internal object DiscordPresenceManager {
+@@ -54,8 +57,13 @@ internal object DiscordPresenceManager {
                      lastActivity = null
                      try {
                          AppPresenceState.current.collect { snapshot ->
@@ -1057,10 +1057,11 @@ index ecd00c77d..c00148ffa 100644
 +                            if (activity == null) {
 +                                if (lastActivity != null && client.setActivity(null)) lastActivity = null
 +                                return@collect
++                            }
                              if (client.setActivity(activity)) {
                                  lastActivity = activity
                              } else {
-@@ -97,19 +104,27 @@ private fun String.toDiscordEpisodeLabel(): String {
+@@ -97,19 +105,27 @@ private fun String.toDiscordEpisodeLabel(): String {
  }
  
  
@@ -1092,7 +1093,7 @@ index ecd00c77d..c00148ffa 100644
                  // start + end -> Discord renders a live progress bar with time remaining.
                  DiscordActivityTimestamps(
                      start = startSecs,
-@@ -118,7 +133,11 @@ private fun PresenceSnapshot.toDiscordActivity(): DiscordActivity = when (this)
+@@ -118,7 +134,11 @@ private fun PresenceSnapshot.toDiscordActivity(): DiscordActivity = when (this)
              } else {
                  null
              },
