@@ -10,18 +10,32 @@ index dd4df76d6..7f186367c 100644
      <string name="compose_settings_page_streams">Streams</string>
      <string name="settings_appearance_section_streams">STREAMS</string>
      <string name="compose_settings_page_supporters_contributors">Supporters &amp; Contributors</string>
-diff --git a/composeApp/src/commonMain/composeResources/values/strings_fork_features.xml b/composeApp/src/commonMain/composeResources/values/strings_fork_features.xml
-new file mode 100644
-index 000000000..6ccf1062e
---- /dev/null
-+++ b/composeApp/src/commonMain/composeResources/values/strings_fork_features.xml
-@@ -0,0 +1,4 @@
-+<?xml version="1.0" encoding="utf-8"?>
-+<resources>
-+    <string name="compose_settings_page_features">Fork features</string>
-+</resources>
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt
+index 5b46ab4a0..331d737bc 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt
+@@ -53,6 +53,7 @@ internal enum class SettingsPage(
+     val titleRes: StringResource,
+     val category: SettingsCategory,
+     val parentPage: SettingsPage?,
++    val customTitle: String? = null, // Nuvio fork: plain-text title when no resource exists
+ ) {
+     Root(
+         titleRes = Res.string.compose_settings_page_root,
+@@ -125,9 +126,10 @@ internal enum class SettingsPage(
+         parentPage = Root,
+     ),
+     Features(
+-        titleRes = Res.string.compose_settings_page_features,
++        titleRes = Res.string.compose_settings_page_root, // unused; customTitle below
+         category = SettingsCategory.General,
+         parentPage = Root,
++        customTitle = "Fork features",
+     ),
+     Addons(
+         titleRes = Res.string.compose_settings_page_addons,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
-index 6755ec730..e59b4d323 100644
+index 6755ec730..1f427904e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
 @@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
@@ -32,3 +46,25 @@ index 6755ec730..e59b4d323 100644
  import androidx.compose.material.icons.rounded.CloudDownload
  import androidx.compose.material.icons.rounded.Extension
  import androidx.compose.material.icons.rounded.Favorite
+@@ -278,7 +279,7 @@ internal fun LazyListScope.settingsRootContent(
+                     run { // Nuvio fork: features hub
+                         SettingsGroupDivider(isTablet = isTablet)
+                         SettingsNavigationRow(
+-                            title = stringResource(Res.string.compose_settings_page_features),
++                            title = "Fork features",
+                             description = "All Nuvio fork feature toggles in one place.",
+                             icon = Icons.Rounded.Build,
+                             isTablet = isTablet,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
+index c0025da51..4010f5aab 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
+@@ -130,7 +130,7 @@ private fun SettingsPage.isEnabledByPolicy(): Boolean =
+ @Composable
+ private fun settingsPageTitles(): Map<SettingsPage, String> {
+     val titles = mutableMapOf<SettingsPage, String>()
+-    SettingsPage.entries.forEach { page -> titles[page] = stringResource(page.titleRes) }
++    SettingsPage.entries.forEach { page -> titles[page] = page.customTitle ?: stringResource(page.titleRes) } // Nuvio fork: customTitle support
+     return titles
+ }
+ 
