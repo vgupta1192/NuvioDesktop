@@ -1,0 +1,129 @@
+diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
+index 7f186367c..dd4df76d6 100644
+--- a/composeApp/src/commonMain/composeResources/values/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings.xml
+@@ -533,6 +533,7 @@
+     <string name="compose_settings_page_poster_customization">Poster Card Style</string>
+     <string name="compose_settings_page_privacy_policy">Privacy Policy</string>
+     <string name="compose_settings_page_root">Settings</string>
++    <string name="compose_settings_page_features">Fork features</string>
+     <string name="compose_settings_page_streams">Streams</string>
+     <string name="settings_appearance_section_streams">STREAMS</string>
+     <string name="compose_settings_page_supporters_contributors">Supporters &amp; Contributors</string>
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
+new file mode 100644
+index 000000000..99d8563a9
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
+@@ -0,0 +1,26 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.foundation.lazy.LazyListScope
++
++/** Nuvio fork: one page gathering every fork feature toggle. */
++internal fun LazyListScope.featuresSettingsContent(isTablet: Boolean) {
++    item {
++        ForkPlayerPrefsSettingsSection(isTablet = isTablet)
++    }
++    item {
++        DxWatchedTitlesSettingsSection(isTablet = isTablet)
++    }
++    item {
++        DxWatchStatsSettingsSection(isTablet = isTablet)
++    }
++    item {
++        DxSoundsSettingsSection(isTablet = isTablet)
++    }
++    item {
++        SettingsSection(title = "Network", isTablet = isTablet) {
++            SettingsGroup(isTablet = isTablet) {
++                DohSettingsRow(isTablet = isTablet)
++            }
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt
+index dd65bba7b..5b46ab4a0 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt
+@@ -124,6 +124,11 @@ internal enum class SettingsPage(
+         category = SettingsCategory.General,
+         parentPage = Root,
+     ),
++    Features(
++        titleRes = Res.string.compose_settings_page_features,
++        category = SettingsCategory.General,
++        parentPage = Root,
++    ),
+     Addons(
+         titleRes = Res.string.compose_settings_page_addons,
+         category = SettingsCategory.General,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
+index 9db7ad51b..6755ec730 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
+@@ -64,6 +64,7 @@ internal fun LazyListScope.settingsRootContent(
+     onPlaybackClick: () -> Unit,
+     onAppearanceClick: () -> Unit,
+     onAdvancedClick: () -> Unit,
++    onFeaturesClick: () -> Unit = {},
+     onNotificationsClick: () -> Unit,
+     onContentDiscoveryClick: () -> Unit,
+     onLiveTvClick: (() -> Unit)? = null,
+@@ -274,6 +275,16 @@ internal fun LazyListScope.settingsRootContent(
+                         isTablet = isTablet,
+                         onClick = onAdvancedClick,
+                     )
++                    run { // Nuvio fork: features hub
++                        SettingsGroupDivider(isTablet = isTablet)
++                        SettingsNavigationRow(
++                            title = stringResource(Res.string.compose_settings_page_features),
++                            description = "All Nuvio fork feature toggles in one place.",
++                            icon = Icons.Rounded.Build,
++                            isTablet = isTablet,
++                            onClick = onFeaturesClick,
++                        )
++                    }
+                 }
+             }
+         }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
+index 8b7d664a7..c0025da51 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
+@@ -710,6 +710,7 @@ private fun MobileSettingsScreen(
+                             onPlaybackClick = { onPageChange(SettingsPage.Playback) },
+                             onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
+                             onAdvancedClick = { onPageChange(SettingsPage.Advanced) },
++                            onFeaturesClick = { onPageChange(SettingsPage.Features) },
+                             onNotificationsClick = { onPageChange(SettingsPage.Notifications) },
+                             onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
+                             onLiveTvClick = { onPageChange(SettingsPage.LiveTv) },
+@@ -738,6 +739,9 @@ private fun MobileSettingsScreen(
+                 SettingsPage.LicensesAttributions -> licensesAttributionsContent(
+                     isTablet = false,
+                 )
++                SettingsPage.Features -> featuresSettingsContent(
++                    isTablet = false,
++                )
+                 SettingsPage.Playback -> playbackSettingsContent(
+                     isTablet = false,
+                     showLoadingOverlay = showLoadingOverlay,
+@@ -1190,6 +1194,7 @@ private fun TabletSettingsScreen(
+                                         onPlaybackClick = { openInlinePage(SettingsPage.Playback) },
+                                         onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
+                                         onAdvancedClick = { openInlinePage(SettingsPage.Advanced) },
++                                        onFeaturesClick = { openInlinePage(SettingsPage.Features) },
+                                         onNotificationsClick = { openInlinePage(SettingsPage.Notifications) },
+                                         onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
+                                         onLiveTvClick = { openInlinePage(SettingsPage.LiveTv) },
+@@ -1223,6 +1228,9 @@ private fun TabletSettingsScreen(
+                             SettingsPage.LicensesAttributions -> licensesAttributionsContent(
+                                 isTablet = true,
+                             )
++                            SettingsPage.Features -> featuresSettingsContent(
++                                isTablet = true,
++                            )
+                             SettingsPage.Playback -> playbackSettingsContent(
+                                 isTablet = true,
+                                 showLoadingOverlay = showLoadingOverlay,
