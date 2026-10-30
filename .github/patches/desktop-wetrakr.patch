@@ -173,10 +173,10 @@ index 6218fb193..3f42ebd13 100644
          fun fromStorage(value: String?): TrackingProviderId? =
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/WeTrakrRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/WeTrakrRepository.kt
 new file mode 100644
-index 000000000..b60f8d6bc
+index 000000000..a90b984d0
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/WeTrakrRepository.kt
-@@ -0,0 +1,393 @@
+@@ -0,0 +1,397 @@
 +package com.nuvio.app.features.tracking
 +
 +import co.touchlab.kermit.Logger
@@ -195,6 +195,7 @@ index 000000000..b60f8d6bc
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
++import kotlinx.coroutines.withContext
 +import kotlinx.serialization.json.Json
 +import kotlinx.serialization.json.JsonObject
 +import kotlinx.serialization.json.JsonPrimitive
@@ -317,8 +318,9 @@ index 000000000..b60f8d6bc
 +    // --- internals ---
 +
 +    private fun historyDocument(entries: List<Pair<TrackingMediaReference, Long?>>): JsonObject? {
-+        val movies = mutableListOf<kotlinx.serialization.json.JsonElement>()
-+        val shows = linkedMapOf<String, Pair<MutableMap<String, kotlinx.serialization.json.JsonElement>, MutableMap<Int, MutableMap<Int, Long?>>>>()
++        val movies = mutableListOf<JsonObject>()
++        data class ShowAcc(val show: JsonObject, val seasons: MutableMap<Int, MutableMap<Int, Long?>>)
++        val shows = linkedMapOf<String, ShowAcc>()
 +        entries.forEach { (media, watchedAt) ->
 +            val ids = mediaIds(media) ?: return@forEach
 +            if (media.kind == TrackingMediaKind.MOVIE) {
@@ -332,20 +334,23 @@ index 000000000..b60f8d6bc
 +            val episode = media.episode ?: return@forEach
 +            val key = ids.toString()
 +            val show = shows.getOrPut(key) {
-+                buildJsonObject {
-+                    put("ids", ids)
-+                    put("status", WATCHED)
-+                } to linkedMapOf()
++                ShowAcc(
++                    buildJsonObject {
++                        put("ids", ids)
++                        put("status", WATCHED)
++                    },
++                    linkedMapOf(),
++                )
 +            }
-+            show.second.getOrPut(episode.season ?: 1) { linkedMapOf() }[episode.number] = watchedAt
++            show.seasons.getOrPut(episode.season ?: 1) { linkedMapOf() }[episode.number] = watchedAt
 +        }
 +        if (movies.isEmpty() && shows.isEmpty()) return null
-+        val showArray = shows.values.map { (show, seasons) ->
++        val showArray = shows.values.map { acc ->
 +            buildJsonObject {
-+                put("ids", (show["ids"] as JsonObject))
++                put("ids", acc.show["ids"] as JsonObject)
 +                put("status", WATCHED)
 +                put("seasons", kotlinx.serialization.json.JsonArray(
-+                    seasons.toSortedMap().map { (season, episodes) ->
++                    acc.seasons.toSortedMap().map { (season, episodes) ->
 +                        buildJsonObject {
 +                            put("number", season)
 +                            put("episodes", kotlinx.serialization.json.JsonArray(
@@ -558,9 +563,7 @@ index 000000000..b60f8d6bc
 +            Response(response.status, response.body)
 +        }
 +
-+    private const val AUTH_KEY = "wetrakr/auth"
-+
-+    private companion object {
++    companion object {
 +        const val CLIENT_ID = "193cadea493eaf3f7f4cdcbba020f577"
 +        const val API_BASE_URL = "https://api.wetrakr.com"
 +        const val API_VERSION = "1"
@@ -568,5 +571,6 @@ index 000000000..b60f8d6bc
 +        const val USER_AGENT = "NuvioDesktop"
 +        const val WATCHED = "watched"
 +        const val REFRESH_MARGIN_MS = 120_000L
++        private const val AUTH_KEY = "wetrakr/auth"
 +    }
 +}
