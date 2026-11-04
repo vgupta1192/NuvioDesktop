@@ -1,0 +1,37 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
+index fe3ce31b9..8cc5836ae 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
+@@ -2,6 +2,7 @@ package com.nuvio.app.features.details
+ 
+ import co.touchlab.kermit.Logger
+ import com.nuvio.app.features.addons.httpGetText
++import com.nuvio.app.features.addons.httpRequestRaw
+ import com.nuvio.app.features.addons.httpGetTextWithHeaders
+ import com.nuvio.app.features.player.skip.SimklIdResolver
+ import com.nuvio.app.features.simkl.SimklConfig
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+index fd532c480..2688f9ea8 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
+@@ -343,11 +343,7 @@ internal class NativePlayerController(
+                             .onFailure { error -> recordTerminalDisposeFailure(error, "superseded create", created) }
+                         return@onSuccess
+                     }
+-                    // Custom subtitle font (Nuvio fork): sub-fonts-dir must be set before the
+-                    // first subtitle renders, and sub-font picks the imported family. The
+-                    // connection-fit feed learns throughput from this handle's reads.
+-                    com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.activeHandle = created
+-                    com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.applyToPlayer()
++                    // Nuvio fork: the connection-fit feed learns throughput from this handle's reads.
+                     com.nuvio.app.features.player.ConnectionFitDesktopFeed.start(created)
+                     com.nuvio.app.features.player.DesktopPlayerEnhance.onChanged = { refreshControlsForEnhance() }
+                     com.nuvio.app.features.player.DesktopPlayerEnhance.start(created, resolvedSource)
+@@ -1105,7 +1101,6 @@ internal class NativePlayerController(
+         com.nuvio.app.features.player.ConnectionFitDesktopFeed.stop()
+         com.nuvio.app.features.player.DesktopPlayerEnhance.stop()
+         com.nuvio.app.features.player.generated.GeneratedSubtitlesDesktop.onPlayerHandleDisposed(current)
+-        com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.clearActiveHandle(current)
+     }
+ 
+     private fun startTrackedDisposeLocked(current: Long) {
