@@ -276,7 +276,7 @@ jobs:
         if: steps.ver.outputs.should_build == 'true'
         run: |
           # optional-desktop-batch5
-          for P in desktop-torbox-offer desktop-nuvio-read-card desktop-episode-rating-fixes desktop-owned-marker desktop-crash-logs desktop-batch5-fixes desktop-features-hub desktop-features-hub-fixes desktop-features-hub-fixes2 desktop-features-consolidate desktop-wetrakr desktop-feedback-3 desktop-streams-autorefresh desktop-compile-fixes; do
+          for P in desktop-torbox-offer desktop-nuvio-read-card desktop-episode-rating-fixes desktop-owned-marker desktop-crash-logs desktop-batch5-fixes desktop-features-hub desktop-features-hub-fixes desktop-features-hub-fixes2 desktop-features-consolidate desktop-wetrakr desktop-feedback-3 desktop-streams-autorefresh desktop-streams-counts desktop-compile-fixes; do
             if git apply "fork-src/.github/patches/$P.patch"; then
               echo "applied $P.patch"
             else

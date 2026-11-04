@@ -1,0 +1,32 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ProviderFilterRow.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ProviderFilterRow.kt
+index 5ac7fe9c4..175939720 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ProviderFilterRow.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ProviderFilterRow.kt
+@@ -64,7 +64,12 @@ internal fun ProviderFilterRow(
+     },
+     filterChip: @Composable (AddonStreamGroup?, Boolean, () -> Unit) -> Unit = { group, isSelected, onClick ->
+         FilterChip(
+-            label = group?.addonName ?: stringResource(Res.string.collections_tab_all),
++            // Nuvio fork: link count next to the provider name
++            label = group?.let { if (it.streams.isNotEmpty()) "${it.addonName} ${it.streams.size}" else it.addonName }
++                ?: groups.sumOf { it.streams.size }.let { total ->
++                    val all = stringResource(Res.string.collections_tab_all)
++                    if (total > 0) "$all $total" else all
++                },
+             isSelected = isSelected,
+             onClick = onClick,
+         )
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
+index 78c450ea5..59e6af9c4 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
+@@ -795,7 +795,8 @@ object StreamsRepository {
+             val newKeys = presented.streams.map { it.refreshKey() }.toSet()
+             val oldKeys = oldByKey.keys
+             if (old != null && !(newKeys.size >= oldKeys.size && newKeys != oldKeys)) return@update current
+-            added = newKeys.count { it !in oldKeys }
++            // Count real growth only: link names, tokens and descriptions can change every round.
++            added = (newKeys.size - oldKeys.size).coerceAtLeast(0)
+             // Links that were already there keep their badges and cache status.
+             val merged = presented.copy(
+                 streams = presented.streams.map { oldByKey[it.refreshKey()] ?: it },
