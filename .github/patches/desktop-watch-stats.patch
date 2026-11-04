@@ -285,10 +285,10 @@ index 000000000..548c1e578
 +}
 \ No newline at end of file
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
-index 23a640437..705ceb523 100644
+index c2458fcab..ebcfe0e56 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
-@@ -547,6 +547,14 @@ private fun PlayerScreenRuntime.BindPlayerUiVisibilityEffects() {
+@@ -554,6 +554,14 @@ private fun PlayerScreenRuntime.BindPlayerUiVisibilityEffects() {
          snapshotSignals.isEnded,
          snapshotSignals.durationMs,
      ) {
@@ -602,16 +602,16 @@ index 99ab665e8..d07601f15 100644
      fun install(newStorage: Storage) {
          storage = newStorage
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
-index d87213988..dc3c532a3 100644
+index f30edeb4e..16a55e65a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
-@@ -87,6 +87,9 @@ internal fun LazyListScope.settingsRootContent(
+@@ -20,6 +20,9 @@ internal fun LazyListScope.settingsRootContent(
      item {
          DxSoundsSettingsSection(isTablet = isTablet) // Nuvio fork: sounds hook
      }
 +    item {
 +        DxWatchStatsSettingsSection(isTablet = isTablet) // Nuvio fork: watch stats hook
 +    }
-     if (showAccountSection) {
-         item {
-             SettingsSection(
+     SettingsCategory.entries.filter { category == null || it == category }.forEach { group ->
+         item(key = group.name) {
+             SettingsGroup(isTablet = isTablet) {

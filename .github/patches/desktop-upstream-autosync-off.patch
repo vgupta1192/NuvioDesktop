@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPlayerContracts.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPlayerContracts.kt
-index 559fb5a5..3b7b6707 100644
+index 559fb5a52..3b7b6707a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPlayerContracts.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPlayerContracts.kt
 @@ -18,7 +18,4 @@ internal interface AutoSyncPlayerController {
@@ -11,7 +11,7 @@ index 559fb5a5..3b7b6707 100644
 -
 -internal enum class AutoSyncFailure { NO_REFERENCE, FAILED }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
-index 0a364814..138adb59 100644
+index 0a3648142..138adb598 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
 @@ -1,6 +1,5 @@
@@ -35,10 +35,10 @@ index 0a364814..138adb59 100644
      candidates: List<StreamSubtitle>,
  ) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
-index 567cfdfb..53e2e904 100644
+index 136227188..10157a49f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
-@@ -303,7 +303,6 @@ data class PlayerControlsState(
+@@ -320,7 +320,6 @@ data class PlayerControlsState(
      val chaptersLabel: String = "Chapters",
      val chaptersPanelTitle: String = "Chapters",
      val chapterRemainingTemplate: String = "{time} left",
@@ -46,7 +46,7 @@ index 567cfdfb..53e2e904 100644
      val streamInfoLabel: String = "Stream info",
      val streamInfoSections: List<PlayerControlInfoSection> = emptyList(),
  )
-@@ -385,7 +384,6 @@ data class PlayerControlSubtitleOptionItem(
+@@ -402,7 +401,6 @@ data class PlayerControlSubtitleOptionItem(
      val title: String = "",
      val metadata: String = "",
      val isSelected: Boolean = false,
@@ -55,7 +55,7 @@ index 567cfdfb..53e2e904 100644
      val autoSynced: Boolean = false,
  )
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
-index 1d43b0ac..85860029 100644
+index 1d43b0aca..85860029a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
 @@ -3,17 +3,11 @@ package com.nuvio.app.features.player
@@ -107,10 +107,10 @@ index 1d43b0ac..85860029 100644
      LaunchedEffect(playbackSession.videoId) {
          GeneratedSubtitles.contentId = playbackSession.videoId // Generated subtitles hook: lines are saved per title
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index c6b04995..7c711ad7 100644
+index 8d0e691f4..42bce62d4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -31,7 +31,6 @@ import com.nuvio.app.features.debrid.DirectDebridPlaybackResolver
+@@ -30,7 +30,6 @@ import com.nuvio.app.features.debrid.DirectDebridPlaybackResolver
  import com.nuvio.app.features.details.MetaDetailsRepository
  import com.nuvio.app.features.details.MetaVideo
  import com.nuvio.app.features.p2p.P2pSettingsRepository
@@ -118,7 +118,7 @@ index c6b04995..7c711ad7 100644
  import androidx.compose.runtime.getValue
  import androidx.compose.runtime.key
  import androidx.compose.runtime.mutableStateOf
-@@ -51,7 +50,6 @@ import com.nuvio.app.features.streams.StreamItem
+@@ -50,7 +49,6 @@ import com.nuvio.app.features.streams.StreamItem
  import com.nuvio.app.features.streams.isSelectableForPlayback
  import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
  import com.nuvio.app.features.watching.application.WatchingState
@@ -126,7 +126,7 @@ index c6b04995..7c711ad7 100644
  import com.nuvio.app.isDesktop
  import com.nuvio.app.features.player.skip.internalSkipAction
  import com.nuvio.app.features.servers.ServerStreams
-@@ -288,7 +286,6 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -303,7 +301,6 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
          chaptersLabel = stringResource(Res.string.compose_player_chapters),
          chaptersPanelTitle = stringResource(Res.string.compose_player_panel_chapters, chapters.size),
          chapterRemainingTemplate = stringResource(Res.string.compose_player_chapter_remaining, "{time}"),
@@ -134,27 +134,27 @@ index c6b04995..7c711ad7 100644
          streamInfoLabel = stringResource(Res.string.cd_stream_info),
          streamInfoSections = streamInfoSections,
          title = title,
-@@ -1170,11 +1167,9 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
+@@ -1203,11 +1200,9 @@ internal fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value:
              playerControlsLog.d {
                  "selectAddonSubtitle index=${value.toInt()} addonId=${addon.id} language=${addon.language} ${playerControlLogContext()}"
              }
 -            isUserExplicitSubtitleSelection = true
-             selectedAddonSubtitleId = addon.id
+             selectedAddonSubtitleId = addon.selectionKey
              selectedSubtitleIndex = -1
              useCustomSubtitles = true
 -            preferredSubtitleSelectionApplied = true
              persistAddonSubtitlePreference(addon)
              val autoSync = playerController as? AutoSyncPlayerController
-             if (autoSync != null) autoSync.setSubtitleUriWithSelectedAutoSync(addon.url) else playerController?.setSubtitleUri(addon.url)
-@@ -1599,7 +1594,6 @@ private data class PlayerControlSubtitleSelection(
+             if (autoSync != null) autoSync.setSubtitleUriWithSelectedAutoSync(addon.url) else attachSelectedAddonSubtitleWithAutoSync(addon.url)
+@@ -1673,7 +1668,6 @@ private data class PlayerControlSubtitleSelection(
  
  @Composable
  private fun PlayerScreenRuntime.buildPlayerControlSubtitleSelection(): PlayerControlSubtitleSelection {
 -    val autoSyncedUrl by AutoSyncSyncedSubtitle.url.collectAsState()
      val selectedAddon = selectedAddonSubtitle
-     val selectedLanguageKey = selectedSubtitleLanguageKey(
-         subtitleTracks = subtitleTracks,
-@@ -1671,7 +1665,6 @@ private fun PlayerScreenRuntime.buildPlayerControlSubtitleSelection(): PlayerCon
+     var selectedLanguageKey = "__off__"
+     var selectedOptionId = ""
+@@ -1749,7 +1743,6 @@ private fun PlayerScreenRuntime.buildPlayerControlSubtitleSelection(): PlayerCon
                              it.isNotBlank() && it != title
                          }.orEmpty(),
                          isSelected = option.id == selectedOptionId,
@@ -163,7 +163,7 @@ index c6b04995..7c711ad7 100644
                      )
                  }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopCoordinator.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopCoordinator.kt
-index fa54902b..292ce1bb 100644
+index fa54902b3..292ce1bba 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopCoordinator.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopCoordinator.kt
 @@ -26,7 +26,6 @@ internal class DesktopAutoSyncCoordinator(
@@ -234,10 +234,10 @@ index fa54902b..292ce1bb 100644
          coordinator.cancel()
          base.setSubtitleUri(url)
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 2b8647f8..d400149c 100644
+index 4cfbae267..8edee5f2a 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -1795,8 +1795,6 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+@@ -1834,8 +1834,6 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
          append(',')
          appendJsonField("chapterRemainingTemplate", chapterRemainingTemplate)
          append(',')
@@ -246,7 +246,7 @@ index 2b8647f8..d400149c 100644
          appendJsonField("streamInfoLabel", streamInfoLabel)
          append(',')
          appendJsonArrayField("streamInfoSections", streamInfoSections) { section ->
-@@ -2019,8 +2017,6 @@ private fun StringBuilder.appendSubtitleOptionItemJson(item: PlayerControlSubtit
+@@ -2058,8 +2056,6 @@ private fun StringBuilder.appendSubtitleOptionItemJson(item: PlayerControlSubtit
      append(',')
      appendJsonField("isSelected", item.isSelected)
      append(',')
@@ -256,10 +256,10 @@ index 2b8647f8..d400149c 100644
      append('}')
  }
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/composeApp/src/desktopMain/resources/player-ui/controls.css
-index aa7160b3..9a35f660 100644
+index 00b7d1566..a10ec0323 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.css
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
-@@ -3844,30 +3844,6 @@ svg {
+@@ -3881,30 +3881,6 @@ svg {
    white-space: nowrap;
  }
  
@@ -291,7 +291,7 @@ index aa7160b3..9a35f660 100644
  .enhance-heading { padding: 12px 16px 4px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .6; }
  .enhance-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 8px 16px; }
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
-index df95c458..01b26531 100644
+index 9a7d7998b..8955f6a2f 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.html
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.html
 @@ -93,9 +93,6 @@
@@ -305,10 +305,10 @@ index df95c458..01b26531 100644
        <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3ZM5 5h6v2H7v10h10v-4h2v6H5V5Z"/>
      </symbol>
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index 58ac5796..35949f50 100644
+index 500a5409f..b096cd39a 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
-@@ -1476,22 +1476,10 @@ const appendSubtitleOptionRow = option => {
+@@ -1502,22 +1502,10 @@ const appendSubtitleOptionRow = option => {
    });
    const copy = document.createElement("span");
    copy.className = "subtitle-option-copy";

@@ -275,42 +275,33 @@ index 99d8563a9..ccc42c411 100644
 +        DxSoundsSettingsSection(isTablet = isTablet)
      }
  }
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index f54fa6a92..fa90d0f94 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -156,8 +156,6 @@ internal fun LazyListScope.playbackSettingsContent(
-     }
-     item {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackVideoSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackVideoSettings.kt
+index 3e3746fc0..6f99c6263 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackVideoSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackVideoSettings.kt
+@@ -170,8 +170,6 @@ internal fun PlaybackVideoSettings(
+             }
+         }
          PlayerEnhanceSettingsSection(isTablet = isTablet) // Nuvio fork: desktop picture & sound
 -        DxRememberSettingsSection(isTablet = isTablet) // Nuvio fork: remember speed + number keys
 -        ForkPlayerPrefsSettingsSection(isTablet = isTablet) // Nuvio fork: subtitle shadow + start off
      }
- }
  
+     if (showDecoderPriorityDialog) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
-index d4a2f1f79..708a02312 100644
+index 83c0832e1..dc860cd91 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
-@@ -92,12 +92,6 @@ internal fun LazyListScope.settingsRootContent(
-         item {
-             ProfileInsightsRootCard(isTablet = isTablet, onSwitchProfile = onSwitchProfileClick) // Nuvio fork: profile insights panel at the top
-         }
--        item {
--            DxSoundsSettingsSection(isTablet = isTablet) // Nuvio fork: sounds hook
--        }
--        item {
--            DxWatchStatsSettingsSection(isTablet = isTablet) // Nuvio fork: watch stats hook
--        }
+@@ -17,12 +17,6 @@ internal fun LazyListScope.settingsRootContent(
+     showNotificationsEntry: Boolean = true,
+     category: SettingsCategory? = null,
+ ) {
+-    item {
+-        DxSoundsSettingsSection(isTablet = isTablet) // Nuvio fork: sounds hook
+-    }
+-    item {
+-        DxWatchStatsSettingsSection(isTablet = isTablet) // Nuvio fork: watch stats hook
+-    }
+     item {
+         ProfileInsightsRootCard(isTablet = isTablet, onSwitchProfile = onSwitchProfileClick) // Nuvio fork: profile insights hook
      }
-     if (showAccountSection) {
-         item {
-@@ -274,7 +268,7 @@ internal fun LazyListScope.settingsRootContent(
-             ) {
-                 SettingsGroup(isTablet = isTablet) {
-                     SettingsNavigationRow(
--                        title = if (showSectionTitles) stringResource(Res.string.compose_settings_page_advanced) else "",
-+                        title = stringResource(Res.string.compose_settings_page_advanced),
-                         description = stringResource(Res.string.compose_settings_root_advanced_description),
-                         icon = Icons.Rounded.Tune,
-                         isTablet = isTablet,

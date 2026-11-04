@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
-index ca4838529..fa530b3ab 100644
+index ecbf2062f..7e9e47648 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeTrackActions.kt
 @@ -244,6 +244,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
@@ -47,18 +47,18 @@ index 000000000..99a51fa34
 +        }
 +    }
 +}
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index 8961e2e59..f54fa6a92 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -157,6 +157,7 @@ internal fun LazyListScope.playbackSettingsContent(
-     item {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackVideoSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackVideoSettings.kt
+index 0748f90e7..3e3746fc0 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackVideoSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackVideoSettings.kt
+@@ -171,6 +171,7 @@ internal fun PlaybackVideoSettings(
+         }
          PlayerEnhanceSettingsSection(isTablet = isTablet) // Nuvio fork: desktop picture & sound
          DxRememberSettingsSection(isTablet = isTablet) // Nuvio fork: remember speed + number keys
 +        ForkPlayerPrefsSettingsSection(isTablet = isTablet) // Nuvio fork: subtitle shadow + start off
      }
- }
  
+     if (showDecoderPriorityDialog) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
 index 61dda8a08..fd5fd0da3 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt

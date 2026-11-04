@@ -1,6 +1,6 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxRemember.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxRemember.kt
 new file mode 100644
-index 00000000..b63dd6e8
+index 000000000..b63dd6e86
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/DxRemember.kt
 @@ -0,0 +1,66 @@
@@ -72,7 +72,7 @@ index 00000000..b63dd6e8
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DxRememberSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DxRememberSettings.kt
 new file mode 100644
-index 00000000..fd119945
+index 000000000..fd1199459
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DxRememberSettings.kt
 @@ -0,0 +1,33 @@
@@ -109,20 +109,20 @@ index 00000000..fd119945
 +        }
 +    }
 +}
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index fa90d0f9..8961e2e5 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -156,6 +156,7 @@ internal fun LazyListScope.playbackSettingsContent(
-     }
-     item {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackVideoSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackVideoSettings.kt
+index 6f99c6263..0748f90e7 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackVideoSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackVideoSettings.kt
+@@ -170,6 +170,7 @@ internal fun PlaybackVideoSettings(
+             }
+         }
          PlayerEnhanceSettingsSection(isTablet = isTablet) // Nuvio fork: desktop picture & sound
 +        DxRememberSettingsSection(isTablet = isTablet) // Nuvio fork: remember speed + number keys
      }
- }
  
+     if (showDecoderPriorityDialog) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
-index 7968e660..61dda8a0 100644
+index 7968e6607..61dda8a08 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
 @@ -53,6 +53,13 @@ internal object DesktopPlayerEnhance {
@@ -157,7 +157,7 @@ index 7968e660..61dda8a0 100644
  
      private fun applyPictureLocked() {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index d400149c..9eefd494 100644
+index 8edee5f2a..cccf25a4c 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 @@ -2,6 +2,7 @@ package com.nuvio.app.features.player.desktop
@@ -168,7 +168,7 @@ index d400149c..9eefd494 100644
  import com.nuvio.app.features.player.PlayerControlAddonSubtitleItem
  import com.nuvio.app.features.player.PlayerControlEpisodeItem
  import com.nuvio.app.features.player.PlayerControlFilterItem
-@@ -762,6 +763,7 @@ internal class NativePlayerController(
+@@ -763,6 +764,7 @@ internal class NativePlayerController(
          val currentSpeed = NativePlayerBridge.speed(current)
          val next = speeds.firstOrNull { it > currentSpeed + 0.01f } ?: speeds.first()
          NativePlayerBridge.setSpeed(current, next)
@@ -176,7 +176,7 @@ index d400149c..9eefd494 100644
      }
  
      fun snapshot(): PlayerPlaybackSnapshot {
-@@ -1089,6 +1091,7 @@ internal class NativePlayerController(
+@@ -1090,6 +1092,7 @@ internal class NativePlayerController(
  
      override fun setPlaybackSpeed(speed: Float) {
          log.d { "setPlaybackSpeed speed=$speed handle=$handle" }
@@ -185,10 +185,10 @@ index d400149c..9eefd494 100644
      }
  
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index 8dfd1e67..b33d314c 100644
+index 268461b41..5de912f1c 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
-@@ -4210,6 +4210,17 @@ document.addEventListener("keydown", event => {
+@@ -4334,6 +4334,17 @@ document.addEventListener("keydown", event => {
      return;
    }
  

@@ -1,19 +1,19 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
-index da418a30b..235b9f313 100644
+index 58745169e..995fb51ee 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 @@ -1,6 +1,10 @@
  package com.nuvio.app.features.settings
  
-+import androidx.compose.foundation.clickable
-+import androidx.compose.foundation.layout.Column
  import androidx.compose.foundation.layout.fillMaxWidth
-+import androidx.compose.foundation.layout.padding
 +import androidx.compose.ui.unit.dp
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.clickable
+ import androidx.compose.ui.Modifier
  import androidx.compose.material3.MaterialTheme
  import androidx.compose.material3.Text
- import androidx.compose.runtime.Composable
-@@ -14,6 +18,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+@@ -15,6 +19,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
  @Composable
  internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
      var showOmdbDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -23,7 +23,7 @@ index da418a30b..235b9f313 100644
      var showWhatsNew by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
      val shadow by ForkPrefs.subtitleShadow.value.collectAsStateWithLifecycle()
      val subsOff by ForkPrefs.subtitlesStartOff.value.collectAsStateWithLifecycle()
-@@ -34,8 +41,62 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+@@ -35,8 +42,62 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
                  isTablet = isTablet,
                  onCheckedChange = ForkPrefs.subtitlesStartOff::set,
              )
@@ -86,7 +86,7 @@ index da418a30b..235b9f313 100644
      val skipFeedback by ForkPrefs.skipFeedback.value.collectAsStateWithLifecycle()
      SettingsSection(title = "Home", isTablet = isTablet) {
          SettingsGroup(isTablet = isTablet) {
-@@ -188,3 +249,31 @@ private fun HomeRowToggle(
+@@ -189,3 +250,31 @@ private fun HomeRowToggle(
          onCheckedChange = pref::set,
      )
  }
@@ -140,10 +140,10 @@ index d753ecd37..7cd8f4c65 100644
      }
  }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index efcfafe5f..1039f7797 100644
+index 6f60f4f9e..fd532c480 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -696,6 +696,33 @@ internal class NativePlayerController(
+@@ -697,6 +697,33 @@ internal class NativePlayerController(
          }
      }
  
@@ -177,7 +177,7 @@ index efcfafe5f..1039f7797 100644
      private fun startPlaybackStatsPoller() {
          val poller = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
              Thread(r, "nuvio-playback-stats").apply { isDaemon = true }
-@@ -707,6 +734,7 @@ internal class NativePlayerController(
+@@ -708,6 +735,7 @@ internal class NativePlayerController(
                  val paused = runCatching { NativePlayerBridge.propGetString(current, "paused") }.getOrNull()
                  if (paused == "true") return@scheduleWithFixedDelay
                  refreshPlaybackStats()

@@ -74,7 +74,7 @@ index 42353c5d8..feb54db45 100644
                      onLoadMoreComments = onLoadMoreComments,
                      onCommentClick = onCommentClick,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-index 4f628673d..8a56d1b77 100644
+index fe0a84d4b..d47f7590c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 @@ -53,7 +53,6 @@ import androidx.compose.ui.draw.blur
@@ -86,14 +86,14 @@ index 4f628673d..8a56d1b77 100644
  import androidx.compose.ui.text.style.TextAlign
  import androidx.compose.ui.text.style.TextOverflow
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
-index c8f8b353f..4d92a34ea 100644
+index da418a30b..58745169e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
-@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
- import androidx.compose.foundation.layout.Column
+@@ -1,6 +1,7 @@
+ package com.nuvio.app.features.settings
+ 
  import androidx.compose.foundation.layout.fillMaxWidth
- import androidx.compose.foundation.layout.padding
 +import androidx.compose.ui.Modifier
- import androidx.compose.ui.unit.dp
  import androidx.compose.material3.MaterialTheme
  import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable

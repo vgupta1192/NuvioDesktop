@@ -1,12 +1,13 @@
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 7f186367c..dd4df76d6 100644
+index ae535f3f1..acff04a82 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -533,6 +533,7 @@
+@@ -532,6 +532,8 @@
      <string name="compose_settings_page_poster_customization">Poster Card Style</string>
      <string name="compose_settings_page_privacy_policy">Privacy Policy</string>
      <string name="compose_settings_page_root">Settings</string>
 +    <string name="compose_settings_page_features">Fork features</string>
++    <string name="compose_settings_root_features_description">All Nuvio fork feature toggles in one place.</string>
      <string name="compose_settings_page_streams">Streams</string>
      <string name="settings_appearance_section_streams">STREAMS</string>
      <string name="compose_settings_page_supporters_contributors">Supporters &amp; Contributors</string>
@@ -43,87 +44,64 @@ index 000000000..99d8563a9
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt
-index dd65bba7b..5b46ab4a0 100644
+index a50fb578d..55b3c4f15 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt
-@@ -124,6 +124,11 @@ internal enum class SettingsPage(
-         category = SettingsCategory.General,
+@@ -213,6 +213,11 @@ internal enum class SettingsPage(
+         category = SettingsCategory.Watch,
          parentPage = Root,
      ),
 +    Features(
 +        titleRes = Res.string.compose_settings_page_features,
-+        category = SettingsCategory.General,
++        category = SettingsCategory.System,
 +        parentPage = Root,
 +    ),
      Addons(
          titleRes = Res.string.compose_settings_page_addons,
-         category = SettingsCategory.General,
+         category = SettingsCategory.Watch,
+@@ -300,6 +305,7 @@ internal val SettingsPage.icon: ImageVector
+         SettingsPage.PosterCustomization -> Icons.Default.RoundedCorner
+         SettingsPage.ContentDiscovery -> Icons.Default.Explore
+         SettingsPage.LiveTv -> Icons.Default.LiveTv
++        SettingsPage.Features -> Icons.Default.Build
+         SettingsPage.Addons -> Icons.Default.Extension
+         SettingsPage.Plugins -> Icons.Default.Power
+         SettingsPage.MediaServers -> Icons.Default.Dns
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
-index 9db7ad51b..6755ec730 100644
+index 5bfa1c5f2..83c0832e1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
-@@ -64,6 +64,7 @@ internal fun LazyListScope.settingsRootContent(
-     onPlaybackClick: () -> Unit,
-     onAppearanceClick: () -> Unit,
-     onAdvancedClick: () -> Unit,
-+    onFeaturesClick: () -> Unit = {},
-     onNotificationsClick: () -> Unit,
-     onContentDiscoveryClick: () -> Unit,
-     onLiveTvClick: (() -> Unit)? = null,
-@@ -274,6 +275,16 @@ internal fun LazyListScope.settingsRootContent(
-                         isTablet = isTablet,
-                         onClick = onAdvancedClick,
-                     )
-+                    run { // Nuvio fork: features hub
-+                        SettingsGroupDivider(isTablet = isTablet)
-+                        SettingsNavigationRow(
-+                            title = stringResource(Res.string.compose_settings_page_features),
-+                            description = "All Nuvio fork feature toggles in one place.",
-+                            icon = Icons.Rounded.Build,
+@@ -120,6 +120,13 @@ internal fun LazyListScope.settingsRootContent(
+                             )
+                             SettingsGroupDivider(isTablet = isTablet)
+                         }
++                        SettingsPageRow(
++                            page = SettingsPage.Features,
++                            description = Res.string.compose_settings_root_features_description,
 +                            isTablet = isTablet,
-+                            onClick = onFeaturesClick,
++                            onPageClick = onPageClick,
 +                        )
-+                    }
-                 }
-             }
-         }
++                        SettingsGroupDivider(isTablet = isTablet)
+                         SettingsPageRow(
+                             page = SettingsPage.Advanced,
+                             description = Res.string.compose_settings_root_advanced_description,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
-index 8b7d664a7..c0025da51 100644
+index 786dc9fc6..7df1b9a13 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
-@@ -710,6 +710,7 @@ private fun MobileSettingsScreen(
-                             onPlaybackClick = { onPageChange(SettingsPage.Playback) },
-                             onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
-                             onAdvancedClick = { onPageChange(SettingsPage.Advanced) },
-+                            onFeaturesClick = { onPageChange(SettingsPage.Features) },
-                             onNotificationsClick = { onPageChange(SettingsPage.Notifications) },
-                             onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
-                             onLiveTvClick = { onPageChange(SettingsPage.LiveTv) },
-@@ -738,6 +739,9 @@ private fun MobileSettingsScreen(
-                 SettingsPage.LicensesAttributions -> licensesAttributionsContent(
-                     isTablet = false,
+@@ -723,6 +723,7 @@ private fun MobileSettingsScreen(
+                     onTestUpdateBannerClick = onTestUpdateBannerClick,
+                     showSupportersContributorsPage = AppFeaturePolicy.supportersContributorsPageEnabled,
                  )
-+                SettingsPage.Features -> featuresSettingsContent(
-+                    isTablet = false,
-+                )
-                 SettingsPage.Playback -> playbackSettingsContent(
++                SettingsPage.Features -> featuresSettingsContent(isTablet = false)
+                 SettingsPage.Advanced -> advancedSettingsContent(
                      isTablet = false,
-                     showLoadingOverlay = showLoadingOverlay,
-@@ -1190,6 +1194,7 @@ private fun TabletSettingsScreen(
-                                         onPlaybackClick = { openInlinePage(SettingsPage.Playback) },
-                                         onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
-                                         onAdvancedClick = { openInlinePage(SettingsPage.Advanced) },
-+                                        onFeaturesClick = { openInlinePage(SettingsPage.Features) },
-                                         onNotificationsClick = { openInlinePage(SettingsPage.Notifications) },
-                                         onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
-                                         onLiveTvClick = { openInlinePage(SettingsPage.LiveTv) },
-@@ -1223,6 +1228,9 @@ private fun TabletSettingsScreen(
-                             SettingsPage.LicensesAttributions -> licensesAttributionsContent(
-                                 isTablet = true,
-                             )
-+                            SettingsPage.Features -> featuresSettingsContent(
-+                                isTablet = true,
-+                            )
-                             SettingsPage.Playback -> playbackSettingsContent(
-                                 isTablet = true,
-                                 showLoadingOverlay = showLoadingOverlay,
+                     rememberLastProfileEnabled = rememberLastProfileEnabled,
+@@ -1135,6 +1136,7 @@ private fun TabletSettingsScreen(
+                             onTestUpdateBannerClick = onTestUpdateBannerClick,
+                             showSupportersContributorsPage = AppFeaturePolicy.supportersContributorsPageEnabled,
+                         )
++                        SettingsPage.Features -> featuresSettingsContent(isTablet = true)
+                         SettingsPage.Advanced -> advancedSettingsContent(
+                             isTablet = true,
+                             rememberLastProfileEnabled = rememberLastProfileEnabled,

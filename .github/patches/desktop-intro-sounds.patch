@@ -27,10 +27,10 @@ index d9126c65c..31cbaa677 100644
  }
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 8494824d2..acb4e3fd9 100644
+index 5deb02397..f8f0bc8d0 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -435,6 +435,7 @@ internal fun MainAppContent(
+@@ -436,6 +436,7 @@ internal fun MainAppContent(
      }
  
      fun handleRootTabClick(tab: AppScreenTab) {
@@ -258,19 +258,19 @@ index b3436c4e1..5bc4d1abe 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
-index 6d5d2dfb6..d87213988 100644
+index 687b0f936..f30edeb4e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt
-@@ -84,6 +84,9 @@ internal fun LazyListScope.settingsRootContent(
-     showSupportersContributorsPage: Boolean = true,
-     showAttribution: Boolean = true,
+@@ -17,6 +17,9 @@ internal fun LazyListScope.settingsRootContent(
+     showNotificationsEntry: Boolean = true,
+     category: SettingsCategory? = null,
  ) {
 +    item {
 +        DxSoundsSettingsSection(isTablet = isTablet) // Nuvio fork: sounds hook
 +    }
-     if (showAccountSection) {
-         item {
-             SettingsSection(
+     SettingsCategory.entries.filter { category == null || it == category }.forEach { group ->
+         item(key = group.name) {
+             SettingsGroup(isTablet = isTablet) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/sound/DxSoundPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/sound/DxSoundPlatform.desktop.kt
 new file mode 100644
 index 000000000..accb19845
