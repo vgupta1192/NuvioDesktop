@@ -284,6 +284,14 @@ jobs:
             fi
           done
 
+      # Self-heal: a patch that carries a stray .rej/.orig file (left over from a hand rebase) breaks
+      # the Compose resource generator ("Unknown resource type: 'values'"). Delete them before building.
+      - name: Remove stray reject/backup files from patches
+        if: steps.ver.outputs.should_build == 'true'
+        run: |
+          find . -path ./fork-src -prune -o -path ./.git -prune -o \( -name '*.rej' -o -name '*.orig' \) -type f -print -delete
+          true
+
       # On-device Whisper for generated subtitles (desktop-whisper-macos.patch): whisper.cpp is built
       # here as static libraries and the patch's Gradle task links them into libwhisper_bridge.dylib.
       # Metal and Accelerate on Apple silicon; the Intel build is best effort (the runner packages

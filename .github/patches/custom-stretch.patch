@@ -840,9 +840,9 @@ index e03330be4..700ffa114 100644
  #include <cmath>
 +#include <cstdint>
 +#include <cstring>
- #include <dlfcn.h>
  #include <mutex>
  #include <string>
+ #include <vector>
 @@ -119,6 +122,71 @@ static constexpr double kMaxVolumePercent = 200.0;
  
  @end

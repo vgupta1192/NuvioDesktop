@@ -1,18 +1,3 @@
-diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml.rej b/composeApp/src/commonMain/composeResources/values/strings.xml.rej
-new file mode 100644
-index 000000000..33a5312da
---- /dev/null
-+++ b/composeApp/src/commonMain/composeResources/values/strings.xml.rej
-@@ -0,0 +1,9 @@
-+diff a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml	(rejected hunks)
-+@@ -533,7 +533,6 @@
-+     <string name="compose_settings_page_poster_customization">Poster Card Style</string>
-+     <string name="compose_settings_page_privacy_policy">Privacy Policy</string>
-+     <string name="compose_settings_page_root">Settings</string>
-+-    <string name="compose_settings_page_features">Fork features</string>
-+     <string name="compose_settings_page_streams">Streams</string>
-+     <string name="settings_appearance_section_streams">STREAMS</string>
-+     <string name="compose_settings_page_supporters_contributors">Supporters &amp; Contributors</string>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt
 index 55b3c4f15..2d01ae210 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsModels.kt
