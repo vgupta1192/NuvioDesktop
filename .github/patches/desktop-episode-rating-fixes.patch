@@ -14,10 +14,10 @@ index 74d26f8c2..fb57d9d20 100644
  /**
   * Nuvio fork: per-source episode ratings ("Simkl", "Trakt") keyed by (season, episode), shown
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index 42353c5d8..feb54db45 100644
+index 6f27b78b6..fe46ee65b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-@@ -105,6 +105,7 @@ import com.nuvio.app.core.ui.nuvioSafeBottomPadding
+@@ -111,6 +111,7 @@ import com.nuvio.app.core.ui.rememberArtworkBackdrop
  import com.nuvio.app.core.ui.rememberHeroStretchState
  import dev.chrisbanes.haze.hazeSource
  import dev.chrisbanes.haze.rememberHazeState
@@ -25,39 +25,39 @@ index 42353c5d8..feb54db45 100644
  import com.nuvio.app.features.details.components.DetailActions
  import com.nuvio.app.features.details.components.CommentDetailSheet
  import com.nuvio.app.features.details.components.DetailAdditionalInfoSection
-@@ -1336,6 +1337,7 @@ fun MetaDetailsScreen(
-                                     )
-                                 }
-                                 configuredMetaSectionItems(
-+                                    episodeExtraRatings = episodeExtraRatings, // Nuvio fork
-                                     settings = metaScreenSettingsUiState.copy(
-                                         items = metaScreenSettingsUiState.items.filterNot {
-                                             it.key in desktopHeroOwnedMetaSectionKeys
-@@ -1376,7 +1378,6 @@ fun MetaDetailsScreen(
-                                     commentsPageCount = commentsPageCount,
-                                     commentsError = commentsError,
-                                     episodeImdbRatings = episodeImdbRatings,
--                                    episodeExtraRatings = episodeExtraRatings, // Nuvio fork
-                                     episodeListGroupedEpisodes = episodeListGroupedEpisodes,
-                                     episodeListSeasons = episodeListSeasons,
-                                     episodeListCurrentSeason = currentEpisodeListSeason,
-@@ -1507,6 +1508,7 @@ fun MetaDetailsScreen(
-                                 }
+@@ -1343,6 +1344,7 @@ fun MetaDetailsScreen(
+                                         )
+                                     }
+                                     configuredMetaSectionItems(
++                                        episodeExtraRatings = episodeExtraRatings, // Nuvio fork
+                                         settings = metaScreenSettingsUiState.copy(
+                                             items = metaScreenSettingsUiState.items.filterNot {
+                                                 it.key in desktopHeroOwnedMetaSectionKeys
+@@ -1383,7 +1385,6 @@ fun MetaDetailsScreen(
+                                         commentsPageCount = commentsPageCount,
+                                         commentsError = commentsError,
+                                         episodeImdbRatings = episodeImdbRatings,
+-                                        episodeExtraRatings = episodeExtraRatings, // Nuvio fork
+                                         episodeListGroupedEpisodes = episodeListGroupedEpisodes,
+                                         episodeListSeasons = episodeListSeasons,
+                                         episodeListCurrentSeason = currentEpisodeListSeason,
+@@ -1514,6 +1515,7 @@ fun MetaDetailsScreen(
+                                     }
  
-                                 configuredMetaSectionItems(
-+                                    episodeExtraRatings = episodeExtraRatings, // Nuvio fork
-                                     settings = if (useTabletLayout) {
-                                         metaScreenSettingsUiState.copy(
-                                             items = metaScreenSettingsUiState.items.filterNot { it.key in tabletHeroSectionKeys },
-@@ -1549,7 +1551,6 @@ fun MetaDetailsScreen(
-                                     commentsPageCount = commentsPageCount,
-                                     commentsError = commentsError,
-                                     episodeImdbRatings = episodeImdbRatings,
--                                    episodeExtraRatings = episodeExtraRatings, // Nuvio fork
-                                     episodeListGroupedEpisodes = episodeListGroupedEpisodes,
-                                     episodeListSeasons = episodeListSeasons,
-                                     episodeListCurrentSeason = currentEpisodeListSeason,
-@@ -2212,6 +2213,7 @@ private fun MetaDetails.toMetaPreview(): MetaPreview =
+                                     configuredMetaSectionItems(
++                                        episodeExtraRatings = episodeExtraRatings, // Nuvio fork
+                                         settings = if (useTabletLayout) {
+                                             metaScreenSettingsUiState.copy(
+                                                 items = metaScreenSettingsUiState.items.filterNot { it.key in tabletHeroSectionKeys },
+@@ -1556,7 +1558,6 @@ fun MetaDetailsScreen(
+                                         commentsPageCount = commentsPageCount,
+                                         commentsError = commentsError,
+                                         episodeImdbRatings = episodeImdbRatings,
+-                                        episodeExtraRatings = episodeExtraRatings, // Nuvio fork
+                                         episodeListGroupedEpisodes = episodeListGroupedEpisodes,
+                                         episodeListSeasons = episodeListSeasons,
+                                         episodeListCurrentSeason = currentEpisodeListSeason,
+@@ -2250,6 +2251,7 @@ private fun MetaDetails.toMetaPreview(): MetaPreview =
  
  private fun LazyListScope.configuredMetaSectionItems(
      settings: MetaScreenSettingsUiState,
@@ -65,7 +65,7 @@ index 42353c5d8..feb54db45 100644
      isMdbListActive: Boolean,
      meta: MetaDetails,
      isTablet: Boolean,
-@@ -2330,7 +2332,6 @@ private fun LazyListScope.configuredMetaSectionItems(
+@@ -2368,7 +2370,6 @@ private fun LazyListScope.configuredMetaSectionItems(
                      commentsPageCount = commentsPageCount,
                      commentsError = commentsError,
                      episodeImdbRatings = episodeImdbRatings,
@@ -74,7 +74,7 @@ index 42353c5d8..feb54db45 100644
                      onLoadMoreComments = onLoadMoreComments,
                      onCommentClick = onCommentClick,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-index fe0a84d4b..d47f7590c 100644
+index 04a97093c..c057c51c1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 @@ -53,7 +53,6 @@ import androidx.compose.ui.draw.blur

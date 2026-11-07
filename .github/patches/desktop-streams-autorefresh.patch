@@ -307,22 +307,22 @@ index b2fb3e098..78c450ea5 100644
          _uiState.value = StreamsUiState()
      }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index c81dc594f..ca0bcfe52 100644
+index e6998a680..64ca13ad8 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-@@ -545,6 +545,7 @@ private fun MobileStreamsLayout(
-                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                         )
-                     }
-+                    StreamRefreshStatusLine(uiState = uiState)
-                     ProviderFilterRow(
-                         groups = uiState.groups,
-                         selectedFilter = uiState.selectedFilter,
+@@ -517,6 +517,7 @@ private fun MobileStreamsLayout(
+                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                     )
+                 }
++                StreamRefreshStatusLine(uiState = uiState)
+                 ProviderFilterRow(
+                     groups = uiState.groups,
+                     selectedFilter = uiState.selectedFilter,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsTabletLayout.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsTabletLayout.kt
-index 6e7906879..9c7572174 100644
+index 9040d6b69..d9100f37d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsTabletLayout.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsTabletLayout.kt
-@@ -270,6 +270,8 @@ internal fun TabletStreamsLayout(
+@@ -272,6 +272,8 @@ internal fun TabletStreamsLayout(
                          )
                      }
  
@@ -331,12 +331,12 @@ index 6e7906879..9c7572174 100644
                      ProviderFilterRow(
                          groups = uiState.groups,
                          selectedFilter = uiState.selectedFilter,
-@@ -448,6 +450,8 @@ private fun LegacyTabletStreamsLayout(
-                             )
-                         }
+@@ -451,6 +453,8 @@ private fun LegacyTabletStreamsLayout(
+                                 )
+                             }
  
-+                        StreamRefreshStatusLine(uiState = uiState)
++                            StreamRefreshStatusLine(uiState = uiState)
 +
-                         ProviderFilterRow(
-                             groups = uiState.groups,
-                             selectedFilter = uiState.selectedFilter,
+                             ProviderFilterRow(
+                                 groups = uiState.groups,
+                                 selectedFilter = uiState.selectedFilter,

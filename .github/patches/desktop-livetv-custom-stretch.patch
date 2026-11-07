@@ -98,10 +98,10 @@ index 000000000..80ec52f7f
 +/** Wide-bars Live TV channel (see [isWideBarsChannel]); false everywhere else. Read by the sampling loop. */
 +internal val LocalLiveTvWideBars = compositionLocalOf { false }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-index 98e64ada9..38583fa50 100644
+index ae4fa7190..dcccae005 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-@@ -355,6 +355,12 @@ private fun PlayerScreenRuntime.handleDoubleTapSeek(
+@@ -356,6 +356,12 @@ private fun PlayerScreenRuntime.handleDoubleTapSeek(
  }
  
  internal fun PlayerScreenRuntime.cycleResizeMode() {
@@ -115,7 +115,7 @@ index 98e64ada9..38583fa50 100644
      resizeMode = nextMode
      lastSyncedSettingsResizeMode = nextMode
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 4f5351f9c..8d0e691f4 100644
+index 51cd91add..954e1e70d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 @@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
@@ -126,7 +126,7 @@ index 4f5351f9c..8d0e691f4 100644
  import androidx.compose.runtime.DisposableEffect
  import androidx.compose.ui.graphics.Color
  import androidx.compose.ui.Modifier
-@@ -616,6 +617,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -621,6 +622,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi(
          if (renderPlayerSurface) {
              val surfaceSource = currentPlayerSurfaceSource
              val sourceAvailable = surfaceSource != null
@@ -134,16 +134,16 @@ index 4f5351f9c..8d0e691f4 100644
              PlatformPlayerSurface(
                  sourceUrl = surfaceSource?.sourceUrl.orEmpty(),
                  sourceAvailable = sourceAvailable,
-@@ -628,7 +630,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -633,7 +635,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi(
                  playWhenReady = shouldPlay && sourceAvailable,
                  initialPositionMs = surfaceSource?.initialPositionMs,
                  initialPositionRequestKey = surfaceSource?.initialPositionRequestKey,
--                resizeMode = resizeMode,
-+                resizeMode = effectiveResizeMode,
+-                resizeMode = if (partyPanelInset > 0.dp) PlayerResizeMode.Fit else resizeMode,
++                resizeMode = if (partyPanelInset > 0.dp) PlayerResizeMode.Fit else effectiveResizeMode,
                  playbackEngine = playbackEngineOverride ?: resolvedAutoEngine,
                  playerControlsState = playerControlsState,
                  onPlayerControlsAction = { action -> handlePlayerControlsAction(action) },
-@@ -691,6 +693,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -696,6 +698,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi(
                      }
                  },
              )
@@ -151,7 +151,7 @@ index 4f5351f9c..8d0e691f4 100644
          }
  
          AnimatedVisibility(
-@@ -800,7 +803,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(
+@@ -810,7 +813,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(
              playbackSnapshot = playbackSnapshot,
              displayedPositionMs = displayedPositionMs,
              metrics = metrics,
