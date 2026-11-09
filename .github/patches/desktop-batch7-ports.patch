@@ -477,7 +477,7 @@ index c6f04ae6..3f54416f 100644
                              it.id, it.type, it.name, it.poster, it.banner, it.logo,
                              it.posterShape.name, it.description, it.releaseInfo, it.imdbRating,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 2d71335d..fc35704e 100644
+index 2d71335d..d1038b52 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 @@ -32,6 +32,7 @@ import com.nuvio.app.core.network.NetworkStatusRepository
@@ -505,11 +505,10 @@ index 2d71335d..fc35704e 100644
                                  viewportHeight = maxHeight,
                                  mobileBelowSectionHeightHint = mobileHeroBelowSectionHeightHint,
                                  sectionPadding = if (isDesktop) homeSectionPadding else null,
-@@ -1231,6 +1235,8 @@ fun HomeScreen(
+@@ -1231,6 +1235,7 @@ fun HomeScreen(
                  }
              }
          }
-+        }
 +        }
      }
  }
