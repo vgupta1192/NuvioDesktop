@@ -1,0 +1,1182 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonRepository.kt
+index 94a0d479..a4f31aab 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonRepository.kt
+@@ -70,6 +70,7 @@ object AddonRepository {
+         val storedUrls = dedupeManifestUrls(AddonStorage.loadInstalledAddonUrls(currentProfileId))
+         val enabledByUrl = loadLocalEnabledStates()
+         log.d { "initialize() — local addon count: ${storedUrls.size}" }
++        startForkManifestRefresh()
+         if (storedUrls.isEmpty()) return
+ 
+         val existingByUrl = _uiState.value.addons.associateBy(ManagedAddon::manifestUrl)
+@@ -273,6 +274,19 @@ object AddonRepository {
+         }
+     }
+ 
++    private var forkManifestRefreshJob: Job? = null
++
++    /** Nuvio fork: re-read installed addon manifests every 30 min so new addon versions arrive without a restart. */
++    private fun startForkManifestRefresh() {
++        if (forkManifestRefreshJob?.isActive == true) return
++        forkManifestRefreshJob = scope.launch {
++            while (true) {
++                kotlinx.coroutines.delay(30 * 60_000L)
++                runCatching { refreshAll() }
++            }
++        }
++    }
++
+     fun refreshAll() {
+         _uiState.value.addons.filter { it.enabled }.distinctBy { it.manifestUrl }.forEach { addon ->
+             refreshAddon(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogData.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogData.kt
+index b4d3efa6..bc23bb5f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogData.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogData.kt
+@@ -89,10 +89,12 @@ suspend fun fetchCatalogPage(
+         url = url,
+         forceRefresh = forceRefresh,
+     )
+-    val parsed = HomeCatalogParser.parseCatalogResponse(
+-        payload = payload,
+-        maxItems = maxItems,
+-    )
++    val parsed = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
++        HomeCatalogParser.parseCatalogResponse(
++            payload = payload,
++            maxItems = maxItems,
++        )
++    }
+     val nextSkip = if (parsed.rawItemCount > 0) {
+         (skip ?: 0) + parsed.rawItemCount
+     } else {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
+index 20b8e88a..eb09de7c 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
+@@ -184,6 +184,9 @@ fun DetailSeriesContent(
+         ?.takeIf { it in groupedEpisodes }
+         ?: defaultSeason
+ 
++    var sortOrder by rememberSaveable(meta.id) { mutableStateOf(EpisodeSortOrder.FirstToLast) } // Nuvio fork
++    var jumpEpisode by remember(meta.id, currentSeason) { mutableStateOf<Int?>(null) } // Nuvio fork
++
+     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+         val sizing = seriesContentSizing(maxWidth.value)
+         val containerWidthDp = maxWidth.value
+@@ -227,6 +230,12 @@ fun DetailSeriesContent(
+                             },
+                         )
+                     }
++                    ForkEpisodeNavigatorBar( // Nuvio fork: sort and go to episode
++                        episodes = groupedEpisodes.getValue(seasonForContent),
++                        sortOrder = sortOrder,
++                        onSortChange = { sortOrder = it },
++                        onGoTo = { jumpEpisode = it.episode },
++                    )
+                     if (episodeRatings.isNotEmpty()) { // Nuvio fork: episode rating map
+                         var showRatingMap by remember { mutableStateOf(false) }
+                         Text(
+@@ -245,7 +254,25 @@ fun DetailSeriesContent(
+                             }
+                         }
+                     }
+-                    val seasonEpisodes = groupedEpisodes.getValue(seasonForContent)
++                    val seasonEpisodes = groupedEpisodes.getValue(seasonForContent).sortedForNavigator(
++                        order = sortOrder,
++                        isWatched = { video ->
++                            val videoId = buildPlaybackVideoId(
++                                parentMetaId = meta.id,
++                                seasonNumber = video.season,
++                                episodeNumber = video.episode,
++                                fallbackVideoId = video.id,
++                            )
++                            progressByVideoId[videoId]?.isEffectivelyCompleted == true ||
++                                WatchingState.isEpisodeWatched(
++                                    watchedKeys = watchedKeys,
++                                    metaType = meta.type,
++                                    metaId = meta.id,
++                                    episode = video,
++                                )
++                        },
++                        ratingOf = { video -> video.seasonEpisodeKey()?.let { episodeRatings[it] } ?: video.rating },
++                    )
+                     if (episodeCardStyle == MetaEpisodeCardStyle.Horizontal) {
+                         EpisodeHorizontalRow(
+                             episodes = seasonEpisodes,
+@@ -259,7 +286,7 @@ fun DetailSeriesContent(
+                             episodeRatings = episodeRatings,
+                             episodeRatingsVisibility = episodeRatingsVisibility,
+                             blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+-                            preferredEpisodeNumber = preferredEpisodeNumberForSeason(
++                            preferredEpisodeNumber = jumpEpisode ?: preferredEpisodeNumberForSeason(
+                                 displayedSeasonNumber = seasonForContent,
+                                 preferredSeasonNumber = preferredSeasonNumber,
+                                 preferredEpisodeNumber = preferredEpisodeNumber,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkEpisodeNavigator.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkEpisodeNavigator.kt
+new file mode 100644
+index 00000000..d5ff7591
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkEpisodeNavigator.kt
+@@ -0,0 +1,139 @@
++package com.nuvio.app.features.details.components
++
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.heightIn
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.grid.GridCells
++import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
++import androidx.compose.foundation.lazy.grid.items
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.DropdownMenu
++import androidx.compose.material3.DropdownMenuItem
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Surface
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.text.style.TextAlign
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.window.Dialog
++import com.nuvio.app.features.details.MetaVideo
++
++/*
++ * Nuvio fork: episode navigator tools (sort order and "go to episode"), ported from NuvioTV and
++ * NuvioMobile. They change only what the episode row shows, never the watched state.
++ */
++
++internal enum class EpisodeSortOrder(val label: String) {
++    FirstToLast("First to last"),
++    LastToFirst("Last to first"),
++    HighestRated("Highest rated"),
++    NewestAired("Newest aired"),
++    UnwatchedFirst("Unwatched first"),
++}
++
++internal fun List<MetaVideo>.sortedForNavigator(
++    order: EpisodeSortOrder,
++    isWatched: (MetaVideo) -> Boolean,
++    ratingOf: (MetaVideo) -> Double?,
++): List<MetaVideo> = when (order) {
++    EpisodeSortOrder.FirstToLast -> this
++    EpisodeSortOrder.LastToFirst -> asReversed()
++    EpisodeSortOrder.HighestRated -> sortedByDescending { ratingOf(it) ?: -1.0 }
++    EpisodeSortOrder.NewestAired -> sortedByDescending { it.released.orEmpty() }
++    EpisodeSortOrder.UnwatchedFirst -> sortedBy { isWatched(it) }
++}
++
++@Composable
++internal fun ForkEpisodeNavigatorBar(
++    episodes: List<MetaVideo>,
++    sortOrder: EpisodeSortOrder,
++    onSortChange: (EpisodeSortOrder) -> Unit,
++    onGoTo: (MetaVideo) -> Unit,
++    modifier: Modifier = Modifier,
++) {
++    var menuOpen by remember { mutableStateOf(false) }
++    var goToOpen by remember { mutableStateOf(false) }
++    Row(
++        modifier = modifier,
++        horizontalArrangement = Arrangement.spacedBy(16.dp),
++        verticalAlignment = Alignment.CenterVertically,
++    ) {
++        Box {
++            Text(
++                text = "Sort: ${sortOrder.label}",
++                style = MaterialTheme.typography.labelLarge,
++                color = MaterialTheme.colorScheme.primary,
++                modifier = Modifier.clickable { menuOpen = true },
++            )
++            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
++                EpisodeSortOrder.entries.forEach { order ->
++                    DropdownMenuItem(
++                        text = { Text(order.label) },
++                        onClick = {
++                            menuOpen = false
++                            onSortChange(order)
++                        },
++                    )
++                }
++            }
++        }
++        if (episodes.size > 1) {
++            Text(
++                text = "Go to episode",
++                style = MaterialTheme.typography.labelLarge,
++                color = MaterialTheme.colorScheme.primary,
++                modifier = Modifier.clickable { goToOpen = true },
++            )
++        }
++    }
++    if (goToOpen) {
++        val ordered = remember(episodes) { episodes.sortedBy { it.episode ?: Int.MAX_VALUE } }
++        var hovered by remember { mutableStateOf<String?>(null) }
++        Dialog(onDismissRequest = { goToOpen = false }) {
++            Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface) {
++                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
++                    Text("Go to episode", style = MaterialTheme.typography.titleMedium)
++                    Text(
++                        text = hovered.orEmpty(),
++                        style = MaterialTheme.typography.bodySmall,
++                        color = MaterialTheme.colorScheme.onSurfaceVariant,
++                        maxLines = 1,
++                    )
++                    LazyVerticalGrid(
++                        columns = GridCells.Adaptive(52.dp),
++                        horizontalArrangement = Arrangement.spacedBy(8.dp),
++                        verticalArrangement = Arrangement.spacedBy(8.dp),
++                        modifier = Modifier.heightIn(max = 340.dp).fillMaxWidth(),
++                    ) {
++                        items(ordered, key = { it.id }) { video ->
++                            Text(
++                                text = (video.episode ?: 0).toString(),
++                                textAlign = TextAlign.Center,
++                                style = MaterialTheme.typography.labelLarge,
++                                modifier = Modifier
++                                    .clip(RoundedCornerShape(8.dp))
++                                    .clickable {
++                                        goToOpen = false
++                                        onGoTo(video)
++                                    }
++                                    .padding(vertical = 10.dp),
++                            )
++                        }
++                    }
++                }
++            }
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeCache.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeCache.kt
+new file mode 100644
+index 00000000..c6f04ae6
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeCache.kt
+@@ -0,0 +1,82 @@
++package com.nuvio.app.features.home
++
++import com.nuvio.app.features.catalog.CatalogTarget
++import com.nuvio.app.features.settings.ForkPrefs
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.encodeToString
++import kotlinx.serialization.json.Json
++
++/** Nuvio fork: disk cache for addon home rows so Home paints instantly on launch. */
++internal object ForkHomeCache {
++    private const val KEY = "cache/home_rows_v1"
++    private const val MAX_ITEMS = 30
++    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
++
++    @Serializable
++    private data class Item(
++        val id: String, val type: String, val name: String,
++        val poster: String? = null, val banner: String? = null, val logo: String? = null,
++        val shape: String? = null, val description: String? = null,
++        val releaseInfo: String? = null, val imdbRating: String? = null,
++        val genres: List<String> = emptyList(), val landscape: String? = null,
++        val runtime: String? = null,
++    )
++
++    @Serializable
++    private data class Row(
++        val cacheKey: String, val key: String, val title: String, val subtitle: String,
++        val addonName: String, val manifestUrl: String, val contentType: String,
++        val catalogId: String, val genre: String? = null, val pagination: Boolean = false,
++        val total: Int = 0, val hasMore: Boolean = false, val items: List<Item> = emptyList(),
++    )
++
++    @Serializable
++    private data class Blob(val rows: List<Row> = emptyList())
++
++    fun save(sections: Map<String, HomeCatalogSection>) {
++        runCatching {
++            val rows = sections.mapNotNull { (cacheKey, s) ->
++                val t = s.target as? CatalogTarget.Addon ?: return@mapNotNull null
++                if (s.items.isEmpty()) return@mapNotNull null
++                Row(
++                    cacheKey, s.key, s.title, s.subtitle, s.addonName, t.manifestUrl,
++                    t.contentType, t.catalogId, t.genre, t.supportsPagination,
++                    s.availableItemCount, s.hasMore,
++                    s.items.take(if (ForkPrefs.lowRam.value.value) 12 else MAX_ITEMS).map {
++                        Item(
++                            it.id, it.type, it.name, it.poster, it.banner, it.logo,
++                            it.posterShape.name, it.description, it.releaseInfo, it.imdbRating,
++                            it.genres, it.landscapePoster, it.runtime,
++                        )
++                    },
++                )
++            }
++            if (rows.isNotEmpty()) ForkPrefs.writeRaw(KEY, json.encodeToString(Blob(rows)))
++        }
++    }
++
++    fun load(allowedKeys: Set<String>): Map<String, HomeCatalogSection> = runCatching {
++        val raw = ForkPrefs.readRaw(KEY) ?: return emptyMap()
++        val out = linkedMapOf<String, HomeCatalogSection>()
++        json.decodeFromString<Blob>(raw).rows.forEach { r ->
++            if (r.cacheKey !in allowedKeys) return@forEach
++            out[r.cacheKey] = HomeCatalogSection(
++                key = r.key, title = r.title, subtitle = r.subtitle, addonName = r.addonName,
++                target = CatalogTarget.Addon(r.manifestUrl, r.contentType, r.catalogId, r.genre, r.pagination),
++                items = r.items.map {
++                    MetaPreview(
++                        id = it.id, type = it.type, name = it.name, poster = it.poster,
++                        banner = it.banner, logo = it.logo,
++                        posterShape = runCatching { PosterShape.valueOf(it.shape ?: "Poster") }
++                            .getOrDefault(PosterShape.Poster),
++                        description = it.description, releaseInfo = it.releaseInfo,
++                        imdbRating = it.imdbRating, genres = it.genres,
++                        landscapePoster = it.landscape, runtime = it.runtime,
++                    )
++                },
++                availableItemCount = r.total, hasMore = r.hasMore,
++            )
++        }
++        out
++    }.getOrDefault(emptyMap())
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
+index 466a3c3f..7585e702 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
+@@ -49,6 +49,7 @@ object HomeRepository {
+     private var collectionHeroRequestKey: String? = null
+     private var lastPublishedCatalogHeroEmpty: Boolean = true
+     private var lastErrorMessage: String? = null
++    private var forkCachePreloaded = false
+ 
+     fun refresh(addons: List<ManagedAddon>, force: Boolean = false) {
+         val activeAddons = addons.enabledAddons()
+@@ -82,6 +83,14 @@ object HomeRepository {
+         }
+ 
+         activeJob?.cancel()
++        if (cachedSections.isEmpty() && !forkCachePreloaded) {
++            forkCachePreloaded = true
++            val disk = ForkHomeCache.load(requestCacheKeys)
++            if (disk.isNotEmpty()) {
++                cachedSections = disk
++                publishCurrentState(isLoading = true, requestKey = requestKey)
++            }
++        }
+         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+         activeJob = scope.launch {
+             val prioritizedRequests = prioritizeDefinitions(
+@@ -130,6 +139,7 @@ object HomeRepository {
+             if (activeRequestKey != requestKey) return@launch
+ 
+             cachedSections = loadedSections.toMap()
++            ForkHomeCache.save(cachedSections)
+             lastErrorMessage = firstErrorMessage
+             activeRequestKey = null
+             publishCurrentState(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt
+index b1c9c412..00092887 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt
+@@ -2,6 +2,7 @@ package com.nuvio.app.features.library
+ 
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.rounded.CalendarMonth
++import androidx.compose.material.icons.rounded.Casino
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
+ import androidx.compose.material3.MaterialTheme
+@@ -34,6 +35,19 @@ internal fun LibraryCalendarButton() {
+     }
+ }
+ 
++/** Random pick button: opens a random saved title (Nuvio fork, ported from NuvioTV). */
++@Composable
++internal fun LibraryRandomPickButton(items: List<LibraryItem>, onPosterClick: ((LibraryItem) -> Unit)?) {
++    if (items.isEmpty() || onPosterClick == null) return
++    IconButton(onClick = { items.randomOrNull()?.let(onPosterClick) }) {
++        Icon(
++            imageVector = Icons.Rounded.Casino,
++            contentDescription = "Random pick",
++            tint = MaterialTheme.colorScheme.onSurfaceVariant,
++        )
++    }
++}
++
+ /** The calendar sheet while it is open. */
+ @Composable
+ internal fun LibraryCalendarHost(items: List<LibraryItem>, onPosterClick: ((LibraryItem) -> Unit)?) {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
+index 31cbe5b0..833c7295 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
+@@ -350,6 +350,7 @@ fun LibraryScreen(
+                             actions = {
+                                 if (sourceMode == LibraryViewMode.Saved) {
+                                     LibraryCalendarButton() // Nuvio fork: library calendar
++                                    LibraryRandomPickButton(uiState.items, onPosterClick) // Nuvio fork: random pick
+                                     LibraryListManagementButton()
+                                     val targetLayout = if (displaySettings.layoutMode == LibraryLayoutMode.HORIZONTAL) {
+                                         LibraryLayoutMode.VERTICAL
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/ForkLiveTv.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/ForkLiveTv.kt
+new file mode 100644
+index 00000000..d6401fdf
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/ForkLiveTv.kt
+@@ -0,0 +1,159 @@
++package com.nuvio.app.features.livetv
++
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.update
++import kotlinx.coroutines.launch
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.encodeToString
++import kotlinx.serialization.json.Json
++
++/** Nuvio fork: Live TV channel list kept on disk so the screen is full the moment it opens. */
++internal object ForkLiveTvChannelCache {
++    private const val KEY = "channels_cache_v1"
++    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
++
++    @Serializable
++    private data class Row(
++        val id: String,
++        val type: String,
++        val name: String,
++        val poster: String? = null,
++        val logo: String? = null,
++        val genres: List<String> = emptyList(),
++        val description: String? = null,
++        val addonName: String,
++        val manifestUrl: String,
++        val addonLogo: String? = null,
++        val catalogId: String,
++        val catalogName: String,
++    )
++
++    fun load(): List<LiveTvChannel> {
++        val raw = LiveTvStorage.loadString(KEY)?.takeIf { it.isNotBlank() } ?: return emptyList()
++        return runCatching {
++            json.decodeFromString<List<Row>>(raw).map {
++                LiveTvChannel(
++                    id = it.id, type = it.type, name = it.name, poster = it.poster, logo = it.logo,
++                    genres = it.genres, description = it.description, addonName = it.addonName,
++                    manifestUrl = it.manifestUrl, addonLogo = it.addonLogo,
++                    catalogId = it.catalogId, catalogName = it.catalogName,
++                )
++            }
++        }.getOrDefault(emptyList())
++    }
++
++    fun save(channels: List<LiveTvChannel>) {
++        if (channels.isEmpty()) return
++        runCatching {
++            val rows = channels.map {
++                Row(
++                    id = it.id, type = it.type, name = it.name, poster = it.poster, logo = it.logo,
++                    genres = it.genres, description = it.description?.take(160), addonName = it.addonName,
++                    manifestUrl = it.manifestUrl, addonLogo = it.addonLogo,
++                    catalogId = it.catalogId, catalogName = it.catalogName,
++                )
++            }
++            LiveTvStorage.saveString(KEY, json.encodeToString(rows))
++        }
++    }
++}
++
++data class LiveReminder(
++    val channelKey: String,
++    val channelName: String,
++    val programTitle: String,
++    val startEpochMs: Long,
++    val fireAtEpochMs: Long,
++)
++
++data class LiveReminderState(
++    val reminders: List<LiveReminder> = emptyList(),
++    /** Reminders whose time has come; the screen shows them until dismissed. */
++    val due: List<LiveReminder> = emptyList(),
++)
++
++/** Nuvio fork: "Remind me" for upcoming guide programmes. Stored on disk, checked every 20 s. */
++object ForkLiveReminders {
++    private const val KEY = "live_reminders"
++    val LEAD_MINUTES = 5
++
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
++    private val _state = MutableStateFlow(LiveReminderState())
++    val state: StateFlow<LiveReminderState> = _state.asStateFlow()
++    private var started = false
++
++    fun ensureStarted() {
++        if (started) return
++        started = true
++        _state.update { it.copy(reminders = load()) }
++        scope.launch {
++            while (true) {
++                tick()
++                delay(20_000)
++            }
++        }
++    }
++
++    fun isReminded(channel: LiveTvChannel, program: EpgProgram): Boolean =
++        _state.value.reminders.any { it.channelKey == channel.stableKey() && it.startEpochMs == program.startEpochMs }
++
++    fun toggle(channel: LiveTvChannel, program: EpgProgram) {
++        val now = LiveTvEpgRepository.nowEpochMs()
++        val current = _state.value.reminders
++        val key = channel.stableKey()
++        val existing = current.firstOrNull { it.channelKey == key && it.startEpochMs == program.startEpochMs }
++        val updated = if (existing != null) {
++            current - existing
++        } else {
++            current + LiveReminder(
++                channelKey = key,
++                channelName = channel.name,
++                programTitle = program.title,
++                startEpochMs = program.startEpochMs,
++                fireAtEpochMs = (program.startEpochMs - LEAD_MINUTES * 60_000L).coerceAtLeast(now + 3_000L),
++            )
++        }
++        save(updated)
++        _state.update { it.copy(reminders = updated) }
++    }
++
++    fun dismiss(reminder: LiveReminder) {
++        _state.update { it.copy(due = it.due - reminder) }
++    }
++
++    private fun tick() {
++        val now = LiveTvEpgRepository.nowEpochMs()
++        val current = _state.value.reminders
++        val fired = current.filter { it.fireAtEpochMs <= now }
++        if (fired.isEmpty()) return
++        val remaining = current - fired.toSet()
++        save(remaining)
++        _state.update { it.copy(reminders = remaining, due = (it.due + fired).distinct()) }
++    }
++
++    private fun clean(text: String) = text.replace('\t', ' ').replace('\n', ' ')
++
++    private fun save(list: List<LiveReminder>) {
++        LiveTvStorage.saveString(
++            KEY,
++            list.joinToString("\n") {
++                listOf(clean(it.channelKey), clean(it.channelName), clean(it.programTitle), it.startEpochMs, it.fireAtEpochMs).joinToString("\t")
++            },
++        )
++    }
++
++    private fun load(): List<LiveReminder> =
++        LiveTvStorage.loadString(KEY)?.lineSequence()?.mapNotNull { line ->
++            val p = line.split('\t')
++            if (p.size != 5) return@mapNotNull null
++            val start = p[3].toLongOrNull() ?: return@mapNotNull null
++            val fire = p[4].toLongOrNull() ?: return@mapNotNull null
++            LiveReminder(p[0], p[1], p[2], start, fire)
++        }?.toList().orEmpty()
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
+index 614019a3..365fd446 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
+@@ -18,13 +18,16 @@ object LiveTvEpgRepository {
+     val DEFAULT_SOURCES = listOf(
+         EpgSource("epg_us1", "United States (US1)", "https://epgshare01.online/epgshare01/epg_ripper_US1.xml.gz"),
+         EpgSource("epg_uk1", "United Kingdom (UK1)", "https://epgshare01.online/epgshare01/epg_ripper_UK1.xml.gz", isEnabled = false),
+-        EpgSource("epg_in1", "India (IN1)", "https://epgshare01.online/epgshare01/epg_ripper_IN1.xml.gz", isEnabled = false),
++        EpgSource("epg_in1", "India (IN1)", "https://epgshare01.online/epgshare01/epg_ripper_IN1.xml.gz"),
++        EpgSource("epg_in4", "India regional (IN4)", "https://epgshare01.online/epgshare01/epg_ripper_IN4.xml.gz"),
+         EpgSource("epg_ca1", "Canada (CA1)", "https://epgshare01.online/epgshare01/epg_ripper_CA1.xml.gz", isEnabled = false),
+         EpgSource("epg_br1", "Brasil (BR1)", "https://epgshare01.online/epgshare01/epg_ripper_BR1.xml.gz", isEnabled = false),
+         EpgSource("epg_pt1", "Portugal (PT1)", "https://epgshare01.online/epgshare01/epg_ripper_PT1.xml.gz", isEnabled = false),
+     )
+ 
+     private const val ENABLED_SOURCES_KEY = "epg_enabled_sources"
++    private const val INDIA_ADDED_KEY = "epg_india_added"
++    private const val OVERRIDES_KEY = "epg_overrides"
+     private const val CACHE_MAX_AGE_MS = 12L * 3_600_000L
+ 
+     private val qualityTokens = setOf("hd", "fhd", "uhd", "4k", "sd", "hdtv", "fullhd", "hevc", "h265")
+@@ -40,6 +43,8 @@ object LiveTvEpgRepository {
+     private var programsByChannelId: Map<String, List<EpgProgram>> = emptyMap()
+     private var keyToChannelId: Map<String, String> = emptyMap()
+     private val matchCache = mutableMapOf<String, String?>()
++    private var guideNames: Map<String, String> = emptyMap()
++    private var epgOverrides: Map<String, String> = emptyMap()
+ 
+     private var syncJob: Job? = null
+     private var iptvGuides: List<EpgSource> = emptyList()
+@@ -48,10 +53,23 @@ object LiveTvEpgRepository {
+     fun initialize() {
+         if (initialized) return
+         initialized = true
+-        val saved = LiveTvStorage.loadString(ENABLED_SOURCES_KEY)
++        var saved = LiveTvStorage.loadString(ENABLED_SOURCES_KEY)
+             ?.split(',')
+             ?.filter { it.isNotBlank() }
+             ?.toSet()
++        // Existing users get the two India guides switched on once; later choices stick.
++        if (LiveTvStorage.loadString(INDIA_ADDED_KEY) == null) {
++            LiveTvStorage.saveString(INDIA_ADDED_KEY, "1")
++            if (saved != null) {
++                saved = saved + setOf("epg_in1", "epg_in4")
++                LiveTvStorage.saveString(ENABLED_SOURCES_KEY, saved.joinToString(","))
++            }
++        }
++        epgOverrides = LiveTvStorage.loadString(OVERRIDES_KEY)
++            ?.lineSequence()
++            ?.mapNotNull { line -> line.split('\t').takeIf { it.size == 2 && it[0].isNotBlank() && it[1].isNotBlank() }?.let { it[0] to it[1] } }
++            ?.toMap()
++            .orEmpty()
+         if (saved != null) {
+             _uiState.update { state ->
+                 state.copy(sources = DEFAULT_SOURCES.map { it.copy(isEnabled = it.id in saved) })
+@@ -86,6 +104,7 @@ object LiveTvEpgRepository {
+             val now = nowEpochMs()
+             val programs = mutableMapOf<String, List<EpgProgram>>()
+             val keys = mutableMapOf<String, String>()
++            val names = mutableMapOf<String, String>()
+             var failures = 0
+             for (source in active) {
+                 try {
+@@ -96,6 +115,8 @@ object LiveTvEpgRepository {
+                     }
+                     val parsed = XmlTvParser.parse(xml, now)
+                     for ((id, channel) in parsed.channels) {
++                        names[id] = channel.displayNames.firstOrNull() ?: id
++                        rawIdKey(id)?.let { key -> if (key !in keys) keys[key] = id }
+                         (listOf(id.substringBefore('.')) + channel.displayNames)
+                             .map(::normalize)
+                             .filter { it.isNotBlank() }
+@@ -111,6 +132,7 @@ object LiveTvEpgRepository {
+             synchronized(lock) {
+                 programsByChannelId = programs
+                 keyToChannelId = keys
++                guideNames = names
+                 matchCache.clear()
+             }
+             val total = programs.values.sumOf { it.size }
+@@ -135,7 +157,10 @@ object LiveTvEpgRepository {
+             val id = if (matchCache.containsKey(key)) {
+                 matchCache[key]
+             } else {
+-                (exactChannelId(channel.epgId) ?: matchChannelId(channel.name)).also { matchCache[key] = it }
++                (epgOverrides[key]?.takeIf { programsByChannelId.containsKey(it) }
++                    ?: exactChannelId(channel.epgId)
++                    ?: addonIdChannelId(channel.id)
++                    ?: matchChannelId(channel.name)).also { matchCache[key] = it }
+             }
+             id to id?.let { programsByChannelId[it] }.orEmpty()
+         }
+@@ -152,13 +177,56 @@ object LiveTvEpgRepository {
+         return keyToChannelId[normalize(raw.substringBefore('.'))]
+     }
+ 
++    fun hasEpgOverride(channel: LiveTvChannel): Boolean = epgOverrides.containsKey(channel.stableKey())
++
++    /** Pins [channel] to a guide channel id, or clears the pin when [guideId] is null. */
++    fun setEpgOverride(channel: LiveTvChannel, guideId: String?) {
++        val updated = if (guideId == null) epgOverrides - channel.stableKey() else epgOverrides + (channel.stableKey() to guideId)
++        epgOverrides = updated
++        LiveTvStorage.saveString(OVERRIDES_KEY, updated.entries.joinToString("\n") { "${it.key}\t${it.value}" })
++        synchronized(lock) { matchCache.clear() }
++        _uiState.update { it.copy(revision = it.revision + 1) }
++    }
++
++    /** Guide channels whose id or name contains every word of [query], best matches first. */
++    fun searchGuideChannels(query: String, limit: Int = 40): List<GuideChannelHit> {
++        val words = query.lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
++        if (words.isEmpty()) return emptyList()
++        val hits = ArrayList<GuideChannelHit>()
++        synchronized(lock) {
++            for ((id, name) in guideNames) {
++                val count = programsByChannelId[id]?.size ?: 0
++                if (count == 0) continue
++                val hay = "$name $id".lowercase()
++                if (words.all { hay.contains(it) }) hits.add(GuideChannelHit(id, name, count))
++            }
++        }
++        return hits.sortedWith(compareBy({ !it.name.lowercase().startsWith(words.first()) }, { it.name.length })).take(limit)
++    }
++
++    /**
++     * Guide ids and addon ids differ only in dots and case (NexoTV "10TV.in" vs guide "10.TV.in"),
++     * so both are reduced to letters and digits without the country suffix.
++     */
++    private fun rawIdKey(id: String): String? {
++        val body = if (id.contains('.')) id.substringBeforeLast('.') else id
++        val key = body.lowercase().filter { it in 'a'..'z' || it in '0'..'9' }
++        return if (key.length >= 3) "id:$key" else null
++    }
++
++    private fun addonIdChannelId(addonChannelId: String): String? {
++        if (!addonChannelId.contains('.')) return null
++        val key = rawIdKey(addonChannelId.substringAfter('_')) ?: return null
++        return keyToChannelId[key]
++    }
++
+     private fun matchChannelId(channelName: String): String? {
+         val norm = normalize(channelName)
+         if (norm.isBlank()) return null
+         keyToChannelId[norm]?.let { return it }
+         if (norm.length < 4) return null
+         return keyToChannelId.entries.firstOrNull { (key, _) ->
+-            key.length >= 4 && (norm.startsWith(key) || key.startsWith(norm))
++            key.length >= 4 && !key.startsWith("id:") && (norm.startsWith(key) || key.startsWith(norm))
+         }?.value
+     }
+ 
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
+index fe36dad0..ccae1e69 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
+@@ -122,6 +122,9 @@ data class ChannelEpgInfo(
+     val programs: List<EpgProgram> = emptyList(),
+ )
+ 
++/** A guide channel offered by the Fix guide picker. */
++data class GuideChannelHit(val id: String, val name: String, val programCount: Int)
++
+ data class EpgSource(
+     val id: String,
+     val name: String,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
+index 9c2cab2c..605699fe 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
+@@ -20,6 +20,7 @@ import kotlinx.coroutines.SupervisorJob
+ import kotlinx.coroutines.async
+ import kotlinx.coroutines.awaitAll
+ import kotlinx.coroutines.coroutineScope
++import kotlinx.coroutines.delay
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.asStateFlow
+@@ -27,7 +28,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
+ import kotlinx.coroutines.flow.map
+ import kotlinx.coroutines.flow.update
+ import kotlinx.coroutines.launch
++import kotlinx.coroutines.sync.Mutex
+ import kotlinx.coroutines.sync.Semaphore
++import kotlinx.coroutines.sync.withLock
+ import kotlinx.coroutines.sync.withPermit
+ 
+ object LiveTvRepository {
+@@ -48,6 +51,8 @@ object LiveTvRepository {
+     private var iptvChannels: List<LiveTvChannel> = emptyList()
+     private var iptvJob: Job? = null
+     private var addonLoading = false
++    private var graceUsed = false
++    private var graceJob: Job? = null
+     private val streamCache = mutableMapOf<String, List<LiveTvStreamOption>>()
+ 
+     fun initialize() {
+@@ -55,6 +60,9 @@ object LiveTvRepository {
+         initialized = true
+         AddonRepository.initialize()
+         LiveTvEpgRepository.initialize()
++        ForkLiveReminders.ensureStarted()
++        // Last session's channels show at once; the network load below refreshes them.
++        addonChannels = ForkLiveTvChannelCache.load()
+         _uiState.update {
+             it.copy(
+                 favoriteKeys = loadSet(FAVORITES_KEY).orEmpty(),
+@@ -63,6 +71,7 @@ object LiveTvRepository {
+             )
+         }
+         loadIptv(forceReload = false)
++        if (addonChannels.isNotEmpty()) publishChannels()
+         scope.launch {
+             AddonRepository.uiState
+                 .map { state -> state.addons.filter { it.isActive } }
+@@ -214,15 +223,64 @@ object LiveTvRepository {
+         val addons = enabledAddons.filter { it.manifestUrl in selectedUrls }
+         if (addons.isEmpty()) {
+             addonLoading = false
++            if (addonChannels.isNotEmpty() && !graceUsed) {
++                // The addon list may not be loaded yet: keep last session's channels for a moment.
++                graceUsed = true
++                graceJob = scope.launch {
++                    delay(8_000)
++                    if (enabledAddons.none { it.manifestUrl in selectedUrls }) {
++                        addonChannels = emptyList()
++                        publishChannels()
++                    }
++                }
++                publishChannels()
++                return
++            }
+             addonChannels = emptyList()
+             publishChannels()
+             return
+         }
++        graceJob?.cancel()
+         addonLoading = true
+         _uiState.update { it.copy(isLoadingChannels = true, channelsErrorMessage = null) }
++        val previous = addonChannels
+         loadJob = scope.launch {
+             val gate = Semaphore(6)
+-            val results = coroutineScope {
++            val lock = Mutex()
++            val seen = mutableSetOf<String>()
++            val fresh = mutableListOf<LiveTvChannel>()
++            val finished = mutableSetOf<String>()
++            suspend fun absorb(addon: ManagedAddon, catalog: AddonCatalog, items: List<MetaPreview>) = lock.withLock {
++                val catalogName = catalog.name.ifBlank { catalog.id }
++                for (meta in items) {
++                    if (meta.id.isBlank() || meta.name.isBlank()) continue
++                    val genres = meta.genres.filter { it.isNotBlank() }.ifEmpty {
++                        if (catalogName.isNotBlank() && !catalogName.equals("tv", ignoreCase = true)) listOf(catalogName) else emptyList()
++                    }
++                    val channel = LiveTvChannel(
++                        id = meta.id,
++                        type = meta.type.ifBlank { catalog.type },
++                        name = meta.name,
++                        poster = meta.poster,
++                        logo = meta.logo ?: meta.poster,
++                        genres = genres,
++                        description = meta.description,
++                        addonName = addon.displayTitle,
++                        manifestUrl = addon.manifestUrl,
++                        addonLogo = addon.manifest?.logoUrl,
++                        catalogId = catalog.id,
++                        catalogName = catalogName,
++                    )
++                    if (seen.add(channel.stableKey())) fresh.add(channel)
++                }
++                finished += "${addon.manifestUrl}|${catalog.id}"
++                // Channels not yet re-fetched stay from the saved list, so the list never shrinks while loading.
++                val stale = previous.filter {
++                    it.manifestUrl in selectedUrls && "${it.manifestUrl}|${it.catalogId}" !in finished && it.stableKey() !in seen
++                }
++                addonChannels = fresh.toList() + stale
++            }
++            coroutineScope {
+                 addons.flatMap { addon -> addon.tvCatalogs().map { addon to it } }
+                     .map { (addon, catalog) ->
+                         async {
+@@ -232,44 +290,26 @@ object LiveTvRepository {
+                                 } catch (error: CancellationException) {
+                                     throw error
+                                 } catch (_: Throwable) {
+-                                    emptyList()
++                                    null
++                                }
++                                // A failed catalog keeps its saved channels instead of vanishing.
++                                if (items != null) {
++                                    absorb(addon, catalog, items)
++                                    publishChannels()
+                                 }
+-                                Triple(addon, catalog, items)
+                             }
+                         }
+                     }
+                     .awaitAll()
+             }
+-            val seen = mutableSetOf<String>()
+-            val channels = buildList {
+-                for ((addon, catalog, items) in results) {
+-                    val catalogName = catalog.name.ifBlank { catalog.id }
+-                    for (meta in items) {
+-                        if (meta.id.isBlank() || meta.name.isBlank()) continue
+-                        val genres = meta.genres.filter { it.isNotBlank() }.ifEmpty {
+-                            if (catalogName.isNotBlank() && !catalogName.equals("tv", ignoreCase = true)) listOf(catalogName) else emptyList()
+-                        }
+-                        val channel = LiveTvChannel(
+-                            id = meta.id,
+-                            type = meta.type.ifBlank { catalog.type },
+-                            name = meta.name,
+-                            poster = meta.poster,
+-                            logo = meta.logo ?: meta.poster,
+-                            genres = genres,
+-                            description = meta.description,
+-                            addonName = addon.displayTitle,
+-                            manifestUrl = addon.manifestUrl,
+-                            addonLogo = addon.manifest?.logoUrl,
+-                            catalogId = catalog.id,
+-                            catalogName = catalogName,
+-                        )
+-                        if (seen.add(channel.stableKey())) add(channel)
+-                    }
++            addonLoading = false
++            addonChannels = lock.withLock {
++                fresh.toList() + previous.filter {
++                    it.manifestUrl in selectedUrls && "${it.manifestUrl}|${it.catalogId}" !in finished && it.stableKey() !in seen
+                 }
+             }
+-            addonLoading = false
+-            addonChannels = channels
+             publishChannels()
++            ForkLiveTvChannelCache.save(addonChannels)
+         }
+     }
+ 
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
+index 2a061fad..a8f89692 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
+@@ -28,6 +28,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.rounded.Close
++import androidx.compose.material.icons.rounded.Notifications
++import androidx.compose.material.icons.rounded.NotificationsActive
++import androidx.compose.material.icons.rounded.NotificationsNone
++import androidx.compose.material.icons.rounded.Tune
+ import androidx.compose.material.icons.rounded.LiveTv
+ import androidx.compose.material.icons.rounded.PlayArrow
+ import androidx.compose.material.icons.rounded.Refresh
+@@ -122,6 +126,38 @@ fun LiveTvScreen(
+                 }
+             },
+         )
++        val reminderState by ForkLiveReminders.state.collectAsStateWithLifecycle()
++        reminderState.due.forEach { due ->
++            Row(
++                modifier = Modifier
++                    .fillMaxWidth()
++                    .padding(bottom = 8.dp)
++                    .clip(RoundedCornerShape(12.dp))
++                    .background(tokens.colors.accent.copy(alpha = 0.18f))
++                    .padding(horizontal = 14.dp, vertical = 8.dp),
++                verticalAlignment = Alignment.CenterVertically,
++            ) {
++                Icon(Icons.Rounded.NotificationsActive, contentDescription = null, tint = tokens.colors.accent)
++                Spacer(Modifier.width(10.dp))
++                Text(
++                    text = "${due.programTitle} starts soon on ${due.channelName}",
++                    modifier = Modifier.weight(1f),
++                    color = tokens.colors.textPrimary,
++                    style = MaterialTheme.typography.bodyMedium,
++                    maxLines = 1,
++                    overflow = TextOverflow.Ellipsis,
++                )
++                IconButton(onClick = {
++                    state.allChannels.firstOrNull { it.stableKey() == due.channelKey }?.let(LiveTvRepository::selectChannel)
++                    ForkLiveReminders.dismiss(due)
++                }) {
++                    Icon(Icons.Rounded.PlayArrow, contentDescription = "Open channel", tint = tokens.colors.textPrimary)
++                }
++                IconButton(onClick = { ForkLiveReminders.dismiss(due) }) {
++                    Icon(Icons.Rounded.Close, contentDescription = "Dismiss", tint = tokens.colors.textMuted)
++                }
++            }
++        }
+         Row(modifier = Modifier.fillMaxSize().padding(bottom = 16.dp)) {
+             LiveTvSidebar(
+                 state = state,
+@@ -161,6 +197,7 @@ fun LiveTvScreen(
+                     channel = selected,
+                     state = state,
+                     epg = remember(selected, epgState.revision, nowMs) { LiveTvEpgRepository.epgFor(selected, nowMs) },
++                    epgState = epgState,
+                     nowMs = nowMs,
+                     netflixStyle = netflixStyle,
+                     onPlay = onPlay,
+@@ -599,7 +636,7 @@ private fun ChannelLogo(channel: LiveTvChannel, modifier: Modifier = Modifier) {
+     Box(
+         modifier = modifier
+             .clip(RoundedCornerShape(8.dp))
+-            .background(tokens.colors.surfaceElevated),
++            .background(tokens.colors.surfaceCard),
+         contentAlignment = Alignment.Center,
+     ) {
+         val logo = channel.displayLogo
+@@ -625,6 +662,7 @@ private fun LiveTvDetailPanel(
+     channel: LiveTvChannel,
+     state: LiveTvUiState,
+     epg: ChannelEpgInfo?,
++    epgState: LiveTvEpgUiState,
+     nowMs: Long,
+     netflixStyle: Boolean,
+     onPlay: (LiveTvChannel, LiveTvStreamOption) -> Unit,
+@@ -634,6 +672,10 @@ private fun LiveTvDetailPanel(
+     val upcoming = remember(epg, nowMs) {
+         epg?.programs.orEmpty().filter { it.endEpochMs > nowMs }.take(24)
+     }
++    var fixOpen by remember(channel.stableKey()) { mutableStateOf(false) }
++    var fixQuery by remember(channel.stableKey()) { mutableStateOf(channel.name) }
++    val reminderState by ForkLiveReminders.state.collectAsStateWithLifecycle()
++    val hasOverride = remember(channel, epg) { LiveTvEpgRepository.hasEpgOverride(channel) }
+     LazyColumn(
+         modifier = modifier
+             .clip(RoundedCornerShape(16.dp))
+@@ -709,7 +751,7 @@ private fun LiveTvDetailPanel(
+                     modifier = Modifier
+                         .fillMaxWidth()
+                         .clip(RoundedCornerShape(10.dp))
+-                        .background(tokens.colors.surfaceElevated)
++                        .background(tokens.colors.surfaceCard)
+                         .clickable { onPlay(channel, option) }
+                         .padding(horizontal = 12.dp, vertical = 10.dp),
+                     verticalAlignment = Alignment.CenterVertically,
+@@ -737,7 +779,73 @@ private fun LiveTvDetailPanel(
+                 }
+             }
+         }
+-        item { NuvioSectionLabel("SCHEDULE", modifier = Modifier.padding(top = 8.dp)) }
++        item {
++            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
++                NuvioSectionLabel("SCHEDULE", modifier = Modifier.weight(1f))
++                IconButton(onClick = { fixOpen = !fixOpen }) {
++                    Icon(
++                        Icons.Rounded.Tune,
++                        contentDescription = "Fix guide",
++                        tint = if (hasOverride || fixOpen) tokens.colors.accent else tokens.colors.textMuted,
++                    )
++                }
++            }
++        }
++        if (fixOpen) {
++            item(key = "fix-guide") {
++                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
++                    Text(
++                        text = "Pick the guide channel that belongs to ${channel.name}.",
++                        color = tokens.colors.textMuted,
++                        style = MaterialTheme.typography.bodySmall,
++                    )
++                    NuvioInputField(
++                        value = fixQuery,
++                        onValueChange = { fixQuery = it },
++                        placeholder = "Search guide channels",
++                    )
++                    val hits = remember(fixQuery, epgState.revision) { LiveTvEpgRepository.searchGuideChannels(fixQuery) }
++                    hits.forEach { hit ->
++                        Row(
++                            modifier = Modifier
++                                .fillMaxWidth()
++                                .clip(RoundedCornerShape(8.dp))
++                                .background(tokens.colors.surfaceCard)
++                                .clickable {
++                                    LiveTvEpgRepository.setEpgOverride(channel, hit.id)
++                                    fixOpen = false
++                                }
++                                .padding(horizontal = 10.dp, vertical = 6.dp),
++                            verticalAlignment = Alignment.CenterVertically,
++                        ) {
++                            Text(
++                                text = hit.name,
++                                modifier = Modifier.weight(1f),
++                                color = tokens.colors.textPrimary,
++                                style = MaterialTheme.typography.bodyMedium,
++                                maxLines = 1,
++                                overflow = TextOverflow.Ellipsis,
++                            )
++                            Text("${hit.programCount}", color = tokens.colors.textMuted, style = MaterialTheme.typography.labelSmall)
++                        }
++                    }
++                    if (hasOverride) {
++                        Text(
++                            text = "Reset to automatic match",
++                            modifier = Modifier
++                                .clip(RoundedCornerShape(8.dp))
++                                .clickable {
++                                    LiveTvEpgRepository.setEpgOverride(channel, null)
++                                    fixOpen = false
++                                }
++                                .padding(horizontal = 8.dp, vertical = 6.dp),
++                            color = tokens.colors.accent,
++                            style = MaterialTheme.typography.labelLarge,
++                        )
++                    }
++                }
++            }
++        }
+         if (upcoming.isEmpty()) {
+             item {
+                 Text(
+@@ -765,6 +873,22 @@ private fun LiveTvDetailPanel(
+                     if (live) {
+                         Spacer(Modifier.width(8.dp))
+                         Text("LIVE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = tokens.colors.danger)
++                    } else if (program.startEpochMs > nowMs) {
++                        Spacer(Modifier.weight(1f))
++                        val reminded = reminderState.reminders.any {
++                            it.channelKey == channel.stableKey() && it.startEpochMs == program.startEpochMs
++                        }
++                        IconButton(
++                            onClick = { ForkLiveReminders.toggle(channel, program) },
++                            modifier = Modifier.size(28.dp),
++                        ) {
++                            Icon(
++                                imageVector = if (reminded) Icons.Rounded.NotificationsActive else Icons.Rounded.NotificationsNone,
++                                contentDescription = "Remind me",
++                                tint = if (reminded) tokens.colors.accent else tokens.colors.textMuted,
++                                modifier = Modifier.size(18.dp),
++                            )
++                        }
+                     }
+                 }
+                 Text(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mdblist/MdbListTrackingLibraryProvider.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mdblist/MdbListTrackingLibraryProvider.kt
+index c2fa2ac4..ef5b0369 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mdblist/MdbListTrackingLibraryProvider.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mdblist/MdbListTrackingLibraryProvider.kt
+@@ -22,7 +22,12 @@ class MdbListTrackingLibraryProvider(
+     override fun prepare() = library.prepare()
+     override suspend fun refresh(intent: TrackingRefreshIntent) = library.refresh(intent)
+     override fun snapshot() = library.snapshot()
+-    override fun contains(contentId: String, contentType: String?): Boolean = library.find(contentId, contentType) != null
++    // Nuvio fork: a title only in read-only (external, dynamic, liked) lists does not count as saved,
++    // because the one-press toggle cannot take it out of those lists.
++    override fun contains(contentId: String, contentType: String?): Boolean =
++        library.find(contentId, contentType)?.let { item ->
++            item.listKeys.isEmpty() || item.listKeys.any { key -> !isMdbListReadOnlyListKey(key) }
++        } == true
+     override fun find(contentId: String): LibraryItem? = library.find(contentId)
+ 
+     override suspend fun membership(item: LibraryItem) = library.getMembershipSnapshot(item)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+index ea3363e3..a2ec00c1 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
+@@ -137,6 +137,13 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+                 pref = ForkPrefs.homeVideoRowsOnly,
+                 isTablet = isTablet,
+             )
++            SettingsGroupDivider(isTablet = isTablet)
++            HomeRowToggle(
++                title = "Low-RAM mode",
++                description = "Keeps fewer saved home items on disk and in memory. Use on small machines.",
++                pref = ForkPrefs.lowRam,
++                isTablet = isTablet,
++            )
+         }
+     }
+     val privateViewing by ForkPrefs.privateViewing.value.collectAsStateWithLifecycle()
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+index 68c06904..8dd947df 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
+@@ -72,6 +72,7 @@ object ForkPrefs {
+     val homeAiringWeek = BoolPref("settings/home_airing_week", true)
+     val homeFinishSeries = BoolPref("settings/home_finish_series", true)
+     val homeVideoRowsOnly = BoolPref("settings/home_video_rows_only", true)
++    val lowRam = BoolPref("settings/low_ram", false)
+     val privateViewing = BoolPref("settings/private_viewing", false)
+     val fillerGuide = BoolPref("settings/filler_guide", true)
+     val secondSubtitle = BoolPref("settings/second_subtitle", false)
+@@ -108,6 +109,7 @@ object ForkPrefs {
+         subtitleShadow.ensureLoaded()
+         subtitlesStartOff.ensureLoaded()
+         skipFeedback.ensureLoaded()
++        lowRam.ensureLoaded()
+         omdbKey.ensureLoaded()
+         dohProvider.ensureLoaded()
+         heroRotationMs.ensureLoaded()

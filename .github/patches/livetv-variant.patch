@@ -1,5 +1,5 @@
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index 56896c75..fda9c594 100644
+index eb6d13c4..4d6d2033 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
 @@ -1280,7 +1280,7 @@ compose.desktop {
@@ -34,7 +34,7 @@ index 56896c75..fda9c594 100644
                                  </array>
                              </dict>
                          </array>
-@@ -1358,8 +1357,8 @@ fun renameMacosDmgOutput(release: Boolean) {
+@@ -1364,8 +1363,8 @@ fun renameMacosDmgOutput(release: Boolean) {
  
      val distributionName = if (release) "main-release" else "main"
      val outputDir = layout.buildDirectory.dir("compose/binaries/$distributionName/dmg").get().asFile
@@ -45,7 +45,7 @@ index 56896c75..fda9c594 100644
      val sourceDmg = defaultDmg.takeIf { it.exists() }
          ?: finalDmg.takeIf { it.exists() }
          ?: error("Expected macOS DMG output in ${outputDir.absolutePath}")
-@@ -1663,8 +1662,8 @@ if (isMacHost) {
+@@ -1669,8 +1668,8 @@ if (isMacHost) {
          dependsOn("packageReleaseDmg")
          dmgDir.set(layout.buildDirectory.dir("compose/binaries/main-release/dmg"))
          artifactDir.set(layout.buildDirectory.dir("compose/release-dmgs"))
@@ -57,13 +57,13 @@ index 56896c75..fda9c594 100644
          keychainPath.set(macosNotaryKeychainPath.orEmpty())
          signingIdentity.set(macosSigningIdentity.orEmpty())
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-index a4cb2db6..e0251be3 100644
+index deec8b12..f5a1c45b 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-@@ -130,7 +130,7 @@ fun main(args: Array<String>) {
-                 SentryInitializer.close()
-                 exitApplication()
-             },
+@@ -134,7 +134,7 @@ fun main(args: Array<String>) {
+ 
+         SwingWindow(
+             onCloseRequest = closeApplication,
 -            title = if (smokePlayerUrl == null) "Nuvio" else "Nuvio Player Smoke",
 +            title = if (smokePlayerUrl == null) "Nuvio Live TV" else "Nuvio Player Smoke",
              state = windowState,
