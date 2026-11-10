@@ -1,5 +1,5 @@
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index f79415083..397f8bba8 100644
+index f7941508..397f8bba 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
 @@ -1177,6 +1177,7 @@ kotlin {
@@ -12,7 +12,7 @@ index f79415083..397f8bba8 100644
                  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitleSync.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitleSync.kt
 new file mode 100644
-index 000000000..0f71bce1a
+index 00000000..0f71bce1
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitleSync.kt
 @@ -0,0 +1,36 @@
@@ -54,7 +54,7 @@ index 000000000..0f71bce1a
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt
 new file mode 100644
-index 000000000..6426f118a
+index 00000000..6426f118
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt
 @@ -0,0 +1,210 @@
@@ -269,20 +269,20 @@ index 000000000..6426f118a
 +    fun deleteModels()
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
-index 154c3ede7..1d43b0aca 100644
+index dd40d2e4..649b5113 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
-@@ -7,6 +7,7 @@ import com.nuvio.app.features.autosync.AutoSyncFailure
+@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
  import com.nuvio.app.features.autosync.AutoSyncPlayerController
  import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
  import com.nuvio.app.features.autosync.AutoSyncSubtitleCandidate
 +import com.nuvio.app.features.streams.StreamSubtitle
  import kotlinx.coroutines.flow.collect
- import kotlinx.coroutines.launch
- import nuvio.composeapp.generated.resources.Res
-@@ -74,6 +75,9 @@ internal fun PlayerScreenRuntime.BindAutoSyncRuntimeEffects() {
-             activeController?.setAutoSyncFailureListener(null)
-         }
+ 
+ private fun List<AddonSubtitle>.toAutoSyncCandidates(): List<AutoSyncSubtitleCandidate> =
+@@ -54,6 +55,9 @@ internal fun PlayerScreenRuntime.BindAutoSyncRuntimeEffects() {
+         activeController?.let { configureAutoSyncController(it) }
+         onDispose { activeController?.setAutoSyncAppliedListener(null) }
      }
 +    LaunchedEffect(playbackSession.videoId) {
 +        GeneratedSubtitles.contentId = playbackSession.videoId // Generated subtitles hook: lines are saved per title
@@ -290,7 +290,7 @@ index 154c3ede7..1d43b0aca 100644
      LaunchedEffect(playerController, playbackSnapshot.isLoading, isLoadingAddonSubtitles, addonSubtitles) {
          // Add-ons can finish after Nuvio has completed its first track scan with no subtitle.
          // Retry that automatic pick only for AutoSync, while the user still has no selection.
-@@ -88,6 +92,15 @@ internal fun PlayerScreenRuntime.BindAutoSyncRuntimeEffects() {
+@@ -68,6 +72,15 @@ internal fun PlayerScreenRuntime.BindAutoSyncRuntimeEffects() {
      LaunchedEffect(playerController, externalSubtitles) {
          val controller = playerController ?: return@LaunchedEffect
          SubtitleRepository.addonSubtitles.collect { repositorySubtitles ->
@@ -308,7 +308,7 @@ index 154c3ede7..1d43b0aca 100644
                      repositorySubtitles,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
 new file mode 100644
-index 000000000..d3f4225c5
+index 00000000..d3f4225c
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
 @@ -0,0 +1,199 @@
@@ -513,7 +513,7 @@ index 000000000..d3f4225c5
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionFitSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionFitSettings.kt
 new file mode 100644
-index 000000000..78774b20b
+index 00000000..78774b20
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionFitSettings.kt
 @@ -0,0 +1,38 @@
@@ -557,7 +557,7 @@ index 000000000..78774b20b
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.kt
 new file mode 100644
-index 000000000..116a13f21
+index 00000000..116a13f2
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.kt
 @@ -0,0 +1,261 @@
@@ -824,7 +824,7 @@ index 000000000..116a13f21
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamConnectionFit.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamConnectionFit.kt
 new file mode 100644
-index 000000000..9d5df544d
+index 00000000..9d5df544
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamConnectionFit.kt
 @@ -0,0 +1,114 @@
@@ -943,7 +943,7 @@ index 000000000..9d5df544d
 +    return if (video != null || belongsToTitle) parseRuntimeMinutes(runtime) else null
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
-index 29bdc8bea..b2fb3e098 100644
+index 29bdc8be..b2fb3e09 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
 @@ -99,6 +99,13 @@ object StreamsRepository {
@@ -975,7 +975,7 @@ index 29bdc8bea..b2fb3e098 100644
              fun publishAddonGroup(group: AddonStreamGroup) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/ConnectionFitDesktopFeed.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/ConnectionFitDesktopFeed.kt
 new file mode 100644
-index 000000000..783b2453a
+index 00000000..783b2453
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/ConnectionFitDesktopFeed.kt
 @@ -0,0 +1,57 @@
@@ -1038,7 +1038,7 @@ index 000000000..783b2453a
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt
 new file mode 100644
-index 000000000..e761dedd1
+index 00000000..e761dedd
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SyncLog.kt
 @@ -0,0 +1,72 @@
@@ -1115,10 +1115,10 @@ index 000000000..e761dedd1
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
-index fff70cc54..eb2e49c53 100644
+index ec863fef..7ebd8e29 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
-@@ -154,6 +154,18 @@ internal object NativePlayerBridge {
+@@ -150,6 +150,18 @@ internal object NativePlayerBridge {
      external fun propSetString(handle: Long, name: String, value: String): Boolean
      external fun command(handle: Long, args: Array<String>): Boolean
  
@@ -1139,7 +1139,7 @@ index fff70cc54..eb2e49c53 100644
          controlsPageAssets.url
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt
 new file mode 100644
-index 000000000..654b0f31a
+index 00000000..654b0f31
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt
 @@ -0,0 +1,94 @@
@@ -1239,7 +1239,7 @@ index 000000000..654b0f31a
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 new file mode 100644
-index 000000000..90de7dd93
+index 00000000..90de7dd9
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -0,0 +1,269 @@
@@ -1514,7 +1514,7 @@ index 000000000..90de7dd93
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt
 new file mode 100644
-index 000000000..c74c81c30
+index 00000000..c74c81c3
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt
 @@ -0,0 +1,116 @@
@@ -1636,7 +1636,7 @@ index 000000000..c74c81c30
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.desktop.kt
 new file mode 100644
-index 000000000..e06676724
+index 00000000..e0667672
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/streams/ConnectionSpeed.desktop.kt
 @@ -0,0 +1,28 @@
@@ -1669,10 +1669,10 @@ index 000000000..e06676724
 +    actual fun saveEnabled(enabled: Boolean) = store.putBoolean("enabled", enabled)
 +}
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-index 0e692df4b..8c827aa95 100644
+index c6d7c957..eb3acd47 100644
 --- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-@@ -2225,5 +2225,112 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
+@@ -2122,5 +2122,112 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
  JNIEXPORT void JNICALL NP(layoutNativeSubviews)(JNIEnv *, jobject, jlong) {}
  JNIEXPORT void JNICALL NP(reparentSurfaceNative)(JNIEnv *, jobject, jlong, jlong) {}
  
@@ -1786,10 +1786,10 @@ index 0e692df4b..8c827aa95 100644
  #undef NP
  } // extern "C"
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index ca80d53f4..291ba620c 100644
+index f523d531..29b581ce 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-@@ -4013,3 +4013,155 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setSubtitleAppeara
+@@ -3699,3 +3699,155 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setSubtitleAppeara
                                     shadowOffset:(double)shadowOffset];
      });
  }

@@ -1895,7 +1895,7 @@ index 00000000..f4855b0f
 +    <string name="settings_seekr_api_key_invalid">Seekr didn't accept this key.</string>
 +</resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-index 5dccce83..ae4fa719 100644
+index 54310b1f..116b6847 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
 @@ -49,6 +49,7 @@ internal fun PlayerScreenRuntime.showGestureMessage(message: String) {
@@ -1916,7 +1916,7 @@ index 5dccce83..ae4fa719 100644
      val deltaMs = previewPositionMs - baselinePositionMs
      val direction = if (deltaMs < 0L) PlayerSeekDirection.Backward else PlayerSeekDirection.Forward
      liveGestureFeedback = GestureFeedbackState(
-@@ -468,7 +470,8 @@ internal fun PlayerScreenRuntime.rememberSurfaceGestureCallbacks(): PlayerSurfac
+@@ -467,7 +469,8 @@ internal fun PlayerScreenRuntime.rememberSurfaceGestureCallbacks(): PlayerSurfac
          playerControlsLocked = rememberUpdatedState(playerControlsLocked),
          currentPositionMs = rememberUpdatedState(playbackSnapshot.positionMs.coerceAtLeast(0L)),
          currentDurationMs = rememberUpdatedState(playbackSnapshot.durationMs),
@@ -4080,12 +4080,12 @@ index 00000000..b269ee05
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-index d048b9a1..e6e05c3d 100644
+index deec8b12..0a98fc06 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-@@ -65,7 +65,9 @@ fun main(args: Array<String>) {
+@@ -63,7 +63,9 @@ fun main(args: Array<String>) {
+     applyDesktopRendererPreference()
      SentryInitializer.start()
-     com.nuvio.app.features.player.autosync.AutoSyncPreferencesPlatform.install() // AutoSync hook: mobile-style rows persist on desktop
      configureDesktopQuickJsLibrary()
 +    installSeekrDesktopPreferences()
      configureDesktopChrome()
