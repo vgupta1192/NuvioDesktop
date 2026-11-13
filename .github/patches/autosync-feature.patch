@@ -134,17 +134,16 @@ diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/Play
 index 844c881a..0a364814 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
-@@ -3,6 +3,7 @@ package com.nuvio.app.features.player
- import com.nuvio.app.features.autosync.AutoSyncFailure
+@@ -3,5 +3,6 @@ package com.nuvio.app.features.player
  import com.nuvio.app.features.autosync.AutoSyncPlayerController
  import com.nuvio.app.features.autosync.AutoSyncSubtitleCandidate
 +import com.nuvio.app.features.streams.StreamSubtitle
  
  internal fun PlayerEngineController.setAutoSyncSubtitleCandidates(
      candidates: List<AutoSyncSubtitleCandidate>,
-@@ -39,3 +40,10 @@ internal fun PlayerEngineController.setAutoSyncFailureListener(
+@@ -32,3 +33,10 @@ internal fun PlayerEngineController.setAutoSyncAppliedListener(
  ) {
-     (this as? AutoSyncPlayerController)?.setAutoSyncFailureListener(listener)
+     (this as? AutoSyncPlayerController)?.setAutoSyncAppliedListener(listener)
  }
 +
 +internal fun PlayerEngineController.setAutoSyncSubtitleStreamCandidates(
@@ -498,14 +497,12 @@ diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/Au
 index 228e2dd0..e784a67b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AutoSyncPlaybackSettings.kt
-@@ -4,13 +4,22 @@ import androidx.compose.runtime.Composable
+@@ -4,11 +4,20 @@ import androidx.compose.runtime.Composable
  import androidx.compose.runtime.getValue
  import androidx.compose.runtime.remember
  import androidx.lifecycle.compose.collectAsStateWithLifecycle
 +import com.nuvio.app.features.autosync.AutoSyncDesktopHooks
  import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
- import com.nuvio.app.features.player.SubtitleLanguageOption
- import com.nuvio.app.isIos
  import nuvio.composeapp.generated.resources.Res
 +import nuvio.composeapp.generated.resources.settings_playback_audio_sync_fallback
 +import nuvio.composeapp.generated.resources.settings_playback_audio_sync_fallback_description
@@ -521,7 +518,7 @@ index 228e2dd0..e784a67b 100644
  import nuvio.composeapp.generated.resources.settings_playback_auto_sync_mode_passive_description
  import nuvio.composeapp.generated.resources.settings_playback_auto_sync_tolerance
  import nuvio.composeapp.generated.resources.settings_playback_auto_sync_tolerance_description
-@@ -38,6 +47,18 @@ internal fun AutoSyncPlaybackSettingsRows(
+@@ -35,5 +44,17 @@ internal fun AutoSyncPlaybackSettingsRows(
          AutoSyncPreferencesRepository.ensureLoaded()
          AutoSyncPreferencesRepository.syncToleranceMs
      }.collectAsStateWithLifecycle()
@@ -537,10 +534,9 @@ index 228e2dd0..e784a67b 100644
 +        AutoSyncPreferencesRepository.ensureLoaded()
 +        AutoSyncPreferencesRepository.showStatistics
 +    }.collectAsStateWithLifecycle()
-     if (isIos) return
  
-     val preferredLanguageAvailable =
-@@ -98,4 +119,43 @@ internal fun AutoSyncPlaybackSettingsRows(
+     SettingsSwitchRow(
+@@ -89,4 +110,43 @@ internal fun AutoSyncPlaybackSettingsRows(
              AutoSyncPreferencesRepository.setSyncToleranceMs(next)
          },
      )
@@ -588,17 +584,21 @@ diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/Pl
 index 47027059..a1f07afa 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSubtitleSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSubtitleSettings.kt
-@@ -77,6 +77,10 @@ internal fun PlaybackSubtitleSettings(
-                     )
-                 }
+@@ -69,10 +69,14 @@ internal fun PlaybackSubtitleSettings(
+                     onClick = { showSecondarySubtitleDialog = true },
+                 )
                  SettingsGroupDivider(isTablet = isTablet)
+                 AutoSyncPlaybackSettingsRows(
+                     isTablet = isTablet,
+                     enabled = !settings.externalPlayerEnabled,
+                 )
 +                GeneratedSubtitleSettingsRows(isTablet = isTablet) // Generated subtitles hook
 +                SettingsGroupDivider(isTablet = isTablet)
 +                ConnectionFitSettingsSection(isTablet = isTablet) // Nuvio fork: connection-speed fit
 +                SettingsGroupDivider(isTablet = isTablet)
+                 SettingsGroupDivider(isTablet = isTablet)
                  SettingsSwitchRow(
                      title = stringResource(Res.string.settings_playback_subtitle_strip_sdh),
-                     description = stringResource(Res.string.settings_playback_subtitle_strip_sdh_description),
 @@ -118,6 +122,9 @@ internal fun PlaybackSubtitleSettings(
              }
          }
@@ -688,7 +688,7 @@ index 381d8ad6..dad2db42 100644
  import androidx.compose.runtime.rememberUpdatedState
  import androidx.compose.runtime.collectAsState
  import androidx.compose.runtime.getValue
-@@ -32,12 +31,15 @@ import androidx.compose.ui.unit.dp
+@@ -32,13 +32,14 @@ import androidx.compose.ui.unit.dp
  import com.nuvio.app.core.ui.AppPresenceState
  import com.nuvio.app.core.ui.LocalNuvioPlatformDensity
  import com.nuvio.app.core.ui.PresenceSnapshot
@@ -698,13 +698,14 @@ index 381d8ad6..dad2db42 100644
  import com.nuvio.app.features.player.desktop.NativePlayerController
  import com.nuvio.app.features.player.desktop.NativePlayerHost
  import com.nuvio.app.features.player.desktop.desktopFullscreenChanges
--import com.nuvio.app.features.autosync.DesktopAutoSyncCoordinator
+-import com.nuvio.app.features.autosync.AutoSyncMpvCoordinator
+-import com.nuvio.app.features.autosync.DesktopAutoSyncMpvPlatform
+-import com.nuvio.app.features.autosync.withAutoSyncMessage
 +import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.SupervisorJob
  import kotlinx.coroutines.delay
  import kotlinx.coroutines.flow.drop
- 
 @@ -47,7 +49,7 @@ actual fun PlatformPlayerSurface(
      sourceAudioUrl: String?,
      sourceHeaders: Map<String, String>,
@@ -714,48 +715,63 @@ index 381d8ad6..dad2db42 100644
      streamType: String?,
      useYoutubeChunkedPlayback: Boolean,
      modifier: Modifier,
-@@ -127,25 +129,26 @@ private fun NativePlayerSurface(
- ) {
+@@ -130,40 +130,25 @@ private fun NativePlayerSurface(
      val platformDensity = LocalNuvioPlatformDensity.current
      val host = remember { NativePlayerHost() }
--    val controller = remember(host) { NativePlayerController(host) }
--    val hostFirstPaintComplete = remember { mutableStateOf(false) }
--    val hostFirstFullSizePaintComplete = remember { mutableStateOf(false) }
--    val playbackHeaders = remember(sourceHeaders) { sanitizePlaybackHeaders(sourceHeaders) }
+     val controller = remember(host) { NativePlayerController(host) }
+     val hostFirstPaintComplete = remember { mutableStateOf(false) }
+     val hostFirstFullSizePaintComplete = remember { mutableStateOf(false) }
+     val playbackHeaders = remember(sourceHeaders) { sanitizePlaybackHeaders(sourceHeaders) }
+     val latestExternalSubtitles = rememberUpdatedState(externalSubtitles)
+-    val latestPlayerControlsState = rememberUpdatedState(playerControlsState)
+-    val autoSyncScope = rememberCoroutineScope()
+-    // Kept across sources so its message count, part of the overlay's notification token, only grows.
+-    val autoSyncPlatform = remember {
+-        DesktopAutoSyncMpvPlatform(
+-            currentNotificationToken = { latestPlayerControlsState.value.notificationToken },
+-        )
+-    }
+-    val autoSyncCoordinator = remember(sourceUrl, playbackHeaders, autoSyncScope) {
+-        AutoSyncMpvCoordinator(
+-            scope = autoSyncScope,
+-            sourceUrl = sourceUrl,
+-            sourceHeaders = playbackHeaders,
+-            getSubtitleHeaders = { subtitleUrl ->
+-                latestExternalSubtitles.value
+-                    .firstOrNull { it.url == subtitleUrl }
+-                    ?.headers
+-                    .orEmpty()
+-            },
+-            getPreferredLanguage = { PlayerSettingsRepository.uiState.value.preferredSubtitleLanguage },
+-            platform = autoSyncPlatform,
+-        )
+-    }
+-    DisposableEffect(autoSyncCoordinator) {
+-        onDispose { autoSyncCoordinator.dispose() }
+-    }
+-    val readyController = remember(controller, autoSyncCoordinator) {
+-        // setSubtitleUri replaces the external subtitles, so the retimed copy takes the original's place.
+-        autoSyncCoordinator.wrap(controller) { _, path -> controller.setSubtitleUri(path) }
+-    }
+-    val controlsState = playerControlsState.withAutoSyncMessage(autoSyncPlatform.message)
 +    val latestSourceUrl = rememberUpdatedState(sourceUrl)
 +    val latestSourceHeaders = rememberUpdatedState(sourceHeaders)
-     val latestExternalSubtitles = rememberUpdatedState(externalSubtitles)
--    val autoSyncScope = rememberCoroutineScope()
--    val autoSyncCoordinator = remember(sourceUrl, playbackHeaders, autoSyncScope) {
--        DesktopAutoSyncCoordinator(
 +    val autoSyncScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
-+    val controller = remember(host) { NativePlayerController(host) }
 +    val autoSyncController = remember(host) {
 +        AutoSyncNativePlayerController(
 +            base = controller,
-             scope = autoSyncScope,
--            sourceUrl = sourceUrl,
--            sourceHeaders = playbackHeaders,
--            getExternalSubtitles = { latestExternalSubtitles.value },
--            getPreferredLanguage = { PlayerSettingsRepository.uiState.value.preferredSubtitleLanguage },
++            scope = autoSyncScope,
 +            sourceUrl = { latestSourceUrl.value },
 +            sourceHeaders = { sanitizePlaybackHeaders(latestSourceHeaders.value) },
 +            subtitleCandidates = { latestExternalSubtitles.value },
 +            playerInstanceKey = controller.hashCode(),
-         )
-     }
--    DisposableEffect(autoSyncCoordinator) {
--        onDispose { autoSyncCoordinator.dispose() }
--    }
--    val readyController = remember(controller, autoSyncCoordinator) { autoSyncCoordinator.wrap(controller) }
-+    val hostFirstPaintComplete = remember { mutableStateOf(false) }
-+    val hostFirstFullSizePaintComplete = remember { mutableStateOf(false) }
-+    val playbackHeaders = remember(sourceHeaders) { sanitizePlaybackHeaders(sourceHeaders) }
++        )
++    }
 +    // Upstream's native AutoSync coordinator (Dev 6bdcc1b6) is deliberately not wired here:
 +    // the fork's AutoSyncNativePlayerController (above) owns subtitle auto-sync on desktop.
++    val controlsState = playerControlsState
+     val latestControlsState = rememberUpdatedState(controlsState)
      val latestOnPlayerControlsAction = rememberUpdatedState(onPlayerControlsAction)
-     val latestOnPlayerControlsEvent = rememberUpdatedState(onPlayerControlsEvent)
-     val latestOnPlayerControlsScrubChange = rememberUpdatedState(onPlayerControlsScrubChange)
 @@ -158,7 +161,7 @@ private fun NativePlayerSurface(
      val nvidiaRtxSuperResolutionEnabled = playerSettings.nvidiaRtxSuperResolutionEnabled
  

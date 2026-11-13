@@ -254,4 +254,4 @@ index b4720094..7d4b9279 100644
 +        memoryKey = sourceUrl,
      )
  
-     LaunchedEffect(controller, playerControlsState) {
+     LaunchedEffect(controller, controlsState) {

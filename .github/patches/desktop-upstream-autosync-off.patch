@@ -1,39 +1,3 @@
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPlayerContracts.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPlayerContracts.kt
-index 559fb5a52..3b7b6707a 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPlayerContracts.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncPlayerContracts.kt
-@@ -18,7 +18,4 @@ internal interface AutoSyncPlayerController {
-     fun setAutoSyncAppliedListener(
-         listener: ((subtitleUrl: String, delayMs: Int) -> Unit)?,
-     )
--    fun setAutoSyncFailureListener(listener: ((AutoSyncFailure) -> Unit)?) {}
- }
--
--internal enum class AutoSyncFailure { NO_REFERENCE, FAILED }
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
-index 0a3648142..138adb598 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerAutoSyncAdapter.kt
-@@ -1,6 +1,5 @@
- package com.nuvio.app.features.player
- 
--import com.nuvio.app.features.autosync.AutoSyncFailure
- import com.nuvio.app.features.autosync.AutoSyncPlayerController
- import com.nuvio.app.features.autosync.AutoSyncSubtitleCandidate
- import com.nuvio.app.features.streams.StreamSubtitle
-@@ -35,12 +34,6 @@ internal fun PlayerEngineController.setAutoSyncAppliedListener(
-     (this as? AutoSyncPlayerController)?.setAutoSyncAppliedListener(listener)
- }
- 
--internal fun PlayerEngineController.setAutoSyncFailureListener(
--    listener: ((AutoSyncFailure) -> Unit)?,
--) {
--    (this as? AutoSyncPlayerController)?.setAutoSyncFailureListener(listener)
--}
--
- internal fun PlayerEngineController.setAutoSyncSubtitleStreamCandidates(
-     candidates: List<StreamSubtitle>,
- ) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
 index 136227188..10157a49f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
@@ -54,58 +18,6 @@ index 136227188..10157a49f 100644
      /** The row has a saved synced timing (this sync or any device's) - shows the Auto synced chip. */
      val autoSynced: Boolean = false,
  )
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
-index 1d43b0aca..85860029a 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerRuntimeAutoSync.kt
-@@ -3,17 +3,11 @@ package com.nuvio.app.features.player
- import androidx.compose.runtime.Composable
- import androidx.compose.runtime.DisposableEffect
- import androidx.compose.runtime.LaunchedEffect
--import com.nuvio.app.features.autosync.AutoSyncFailure
- import com.nuvio.app.features.autosync.AutoSyncPlayerController
- import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
- import com.nuvio.app.features.autosync.AutoSyncSubtitleCandidate
- import com.nuvio.app.features.streams.StreamSubtitle
- import kotlinx.coroutines.flow.collect
--import kotlinx.coroutines.launch
--import nuvio.composeapp.generated.resources.Res
--import nuvio.composeapp.generated.resources.autosync_toast_failed
--import nuvio.composeapp.generated.resources.autosync_toast_failed_no_reference
--import org.jetbrains.compose.resources.getString
- 
- private fun List<AddonSubtitle>.toAutoSyncCandidates(): List<AutoSyncSubtitleCandidate> =
-     map { subtitle ->
-@@ -31,17 +25,6 @@ internal fun PlayerScreenRuntime.configureAutoSyncController(
-     controller: PlayerEngineController,
- ) {
-     controller.setAutoSyncSubtitleCandidates(currentAutoSyncCandidates())
--    controller.setAutoSyncFailureListener { failure ->
--        scope.launch {
--            playerNotificationMessage = getString(
--                when (failure) {
--                    AutoSyncFailure.NO_REFERENCE -> Res.string.autosync_toast_failed_no_reference
--                    AutoSyncFailure.FAILED -> Res.string.autosync_toast_failed
--                },
--            )
--            playerNotificationToken += 1L
--        }
--    }
-     controller.setAutoSyncAppliedListener { subtitleUrl, delayMs ->
-         val appliedSubtitle = addonSubtitles.firstOrNull { it.url == subtitleUrl }
-         selectedAddonSubtitleId = appliedSubtitle?.selectionKey ?: subtitleUrl
-@@ -70,10 +53,7 @@ internal fun PlayerScreenRuntime.BindAutoSyncRuntimeEffects() {
-     DisposableEffect(activeController) {
-         // Runs once playerController is set, which Nuvio only does for the live playback key.
-         activeController?.let { configureAutoSyncController(it) }
--        onDispose {
--            activeController?.setAutoSyncAppliedListener(null)
--            activeController?.setAutoSyncFailureListener(null)
--        }
-+        onDispose { activeController?.setAutoSyncAppliedListener(null) }
-     }
-     LaunchedEffect(playbackSession.videoId) {
-         GeneratedSubtitles.contentId = playbackSession.videoId // Generated subtitles hook: lines are saved per title
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 index 8d0e691f4..42bce62d4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
@@ -162,77 +74,6 @@ index 8d0e691f4..42bce62d4 100644
                          autoSynced = SyncedSubtitles.isSyncedRow(option.subtitle.url), // Nuvio fork: synced chip
                      )
                  }
-diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopCoordinator.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopCoordinator.kt
-index fa54902b3..292ce1bba 100644
---- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopCoordinator.kt
-+++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/autosync/AutoSyncDesktopCoordinator.kt
-@@ -26,7 +26,6 @@ internal class DesktopAutoSyncCoordinator(
-     private var operationToken = 0L
-     private var candidates: List<AutoSyncSubtitleCandidate> = emptyList()
-     private var appliedListener: ((subtitleUrl: String, delayMs: Int) -> Unit)? = null
--    private var failureListener: ((AutoSyncFailure) -> Unit)? = null
- 
-     fun wrap(controller: PlayerEngineController): PlayerEngineController =
-         AutoSyncDesktopEngineController(controller, this)
-@@ -39,10 +38,6 @@ internal class DesktopAutoSyncCoordinator(
-         appliedListener = listener
-     }
- 
--    fun setFailureListener(listener: ((AutoSyncFailure) -> Unit)?) {
--        failureListener = listener
--    }
--
-     fun cancel() {
-         operationToken++
-         job?.cancel()
-@@ -52,7 +47,6 @@ internal class DesktopAutoSyncCoordinator(
-     fun dispose() {
-         cancel()
-         appliedListener = null
--        failureListener = null
-     }
- 
-     fun start(
-@@ -96,13 +90,6 @@ internal class DesktopAutoSyncCoordinator(
-                 if (token != operationToken) return@launch
-                 if (resolved == null) {
-                     log.i { "no usable reference: $outcome" }
--                    failureListener?.invoke(
--                        when (outcome) {
--                            AutoSyncAnalysisOutcome.NO_SUBTITLE_TRACKS,
--                            AutoSyncAnalysisOutcome.NO_USABLE_REFERENCE -> AutoSyncFailure.NO_REFERENCE
--                            else -> AutoSyncFailure.FAILED
--                        },
--                    )
-                     return@launch
-                 }
- 
-@@ -116,7 +103,6 @@ internal class DesktopAutoSyncCoordinator(
-                     if (token != operationToken) return@launch
-                     if (path == null) {
-                         log.w { "subtitle format cannot be retimed" }
--                        failureListener?.invoke(AutoSyncFailure.FAILED)
-                         return@launch
-                     }
-                     base.setSubtitleUri(path)
-@@ -128,7 +114,6 @@ internal class DesktopAutoSyncCoordinator(
-                 throw cancel
-             } catch (error: Exception) {
-                 log.w(error) { "autosync failed" }
--                if (token == operationToken) failureListener?.invoke(AutoSyncFailure.FAILED)
-             }
-         }
-     }
-@@ -176,9 +161,6 @@ private class AutoSyncDesktopEngineController(
-         listener: ((subtitleUrl: String, delayMs: Int) -> Unit)?,
-     ) = coordinator.setAppliedListener(listener)
- 
--    override fun setAutoSyncFailureListener(listener: ((AutoSyncFailure) -> Unit)?) =
--        coordinator.setFailureListener(listener)
--
-     override fun setSubtitleUri(url: String) {
-         coordinator.cancel()
-         base.setSubtitleUri(url)
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 index 4cfbae267..8edee5f2a 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
@@ -259,7 +100,7 @@ diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/compo
 index 00b7d1566..a10ec0323 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.css
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
-@@ -3881,30 +3881,6 @@ svg {
+@@ -3886,33 +3886,10 @@ svg {
    white-space: nowrap;
  }
  
@@ -286,10 +127,13 @@ index 00b7d1566..a10ec0323 100644
 -  align-items: center;
 -  gap: 6px;
 -}
--
+ 
  .enhance-panel .track-list { max-height: min(70vh, 560px); overflow-y: auto; }
  .enhance-heading { padding: 12px 16px 4px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .6; }
  .enhance-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 8px 16px; }
+ .enhance-row input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: #fff; }
+ .enhance-value { font-variant-numeric: tabular-nums; opacity: .7; }
+ .enhance-note { padding: 4px 16px 8px; opacity: .6; font-size: 13px; }
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
 index 9a7d7998b..8955f6a2f 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.html

@@ -16,17 +16,3 @@ index 5ac7fe9c4..175939720 100644
              isSelected = isSelected,
              onClick = onClick,
          )
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
-index 78c450ea5..59e6af9c4 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsRepository.kt
-@@ -795,7 +795,8 @@ object StreamsRepository {
-             val newKeys = presented.streams.map { it.refreshKey() }.toSet()
-             val oldKeys = oldByKey.keys
-             if (old != null && !(newKeys.size >= oldKeys.size && newKeys != oldKeys)) return@update current
--            added = newKeys.count { it !in oldKeys }
-+            // Count real growth only: link names, tokens and descriptions can change every round.
-+            added = (newKeys.size - oldKeys.size).coerceAtLeast(0)
-             // Links that were already there keep their badges and cache status.
-             val merged = presented.copy(
-                 streams = presented.streams.map { oldByKey[it.refreshKey()] ?: it },

@@ -81,9 +81,7 @@ diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeAp
 index 0107cce5d..66efbf1df 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-@@ -61,6 +61,7 @@ fun main(args: Array<String>) {
-     SentryInitializer.start()
-     com.nuvio.app.features.player.autosync.AutoSyncPreferencesPlatform.install() // AutoSync hook: mobile-style rows persist on desktop
+@@ -63,4 +63,5 @@ fun main(args: Array<String>) {
      com.nuvio.app.features.player.DesktopPlayerEnhance.install() // Nuvio fork: picture & sound prefs
 +    com.nuvio.app.features.settings.installForkPrefs() // Nuvio fork: shared fork prefs
      configureDesktopQuickJsLibrary()

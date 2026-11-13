@@ -76,9 +76,10 @@ diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/
 index 11a6a34f..fa2c7ec5 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -120,6 +120,12 @@ import com.nuvio.app.features.home.HomeCatalogSettingsRepository
+@@ -121,7 +121,13 @@ import com.nuvio.app.features.home.HomeCatalogSettingsRepository
  import com.nuvio.app.features.home.HomeRepository
  import com.nuvio.app.features.home.buildAddonCatalogRefreshSignature
+ import com.nuvio.app.features.home.opensDetails
  import com.nuvio.app.features.home.components.shouldBlurContinueWatchingArtwork
 +import com.nuvio.app.features.jellyfin.JELLYFIN_META_ID_PREFIX
 +import com.nuvio.app.features.jellyfin.JellyfinDetailScreen

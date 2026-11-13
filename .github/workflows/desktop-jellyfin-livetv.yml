@@ -62,11 +62,15 @@ jobs:
           echo "tag=$UP" >> "$GITHUB_OUTPUT"
           echo "ver=$VER" >> "$GITHUB_OUTPUT"
 
+      # Build exactly the release being shipped, not Dev HEAD. Dev drifts constantly between
+      # releases (cmp-rewrite merges landed 2026-11-10 and 2026-11-13 broke the patch chain on
+      # unreleased states), so pinning to the tag keeps the patch chain valid until the next
+      # release and makes every build reproducible against the published upstream snapshot.
       - uses: actions/checkout@v4
         if: steps.ver.outputs.should_build == 'true'
         with:
           repository: NuvioMedia/NuvioDesktop
-          ref: Dev
+          ref: ${{ steps.ver.outputs.tag }}
           lfs: false
         env:
           GIT_LFS_SKIP_SMUDGE: '1'
@@ -120,7 +124,9 @@ jobs:
 
       - name: Fix upstream broken isGifUrl reference (drop when upstream fixes Dev)
         if: steps.ver.outputs.should_build == 'true'
-        run: git apply --3way fork-src/.github/patches/fix-desktop-isgifurl.patch
+        run: |
+          git apply --3way fork-src/.github/patches/fix-desktop-isgifurl.patch \
+            || echo "::warning::isGifUrl fix no longer applies (upstream probably fixed it); skipping"
 
       # Self-host fork patch: the in-app updater checks this fork's releases and compares the CI
       # run number (version name <ver>-fork.<run>, package NuvioDesktop-<ver>-b<run>.dmg/.deb).
@@ -139,7 +145,9 @@ jobs:
       # jellyfin-livetv variant: its updater follows only desktop-jellyfin-livetv-* releases (needs fork-updater)
       - name: Apply jellyfintv-updater patch
         if: steps.ver.outputs.should_build == 'true' && steps.patch_updater.outputs.applied == 'true'
-        run: git apply fork-src/.github/patches/jellyfintv-updater.patch
+        run: |
+          git apply fork-src/.github/patches/jellyfintv-updater.patch \
+            || git apply --3way fork-src/.github/patches/jellyfintv-updater.patch
 
       # Jellyfin+LiveTV combo: the Live TV feature (+ variant + catalog filtering) and the native
       # Jellyfin integration (+ its own side-install variant, app NuvioJellyfinTV /
@@ -148,9 +156,11 @@ jobs:
       - name: Apply feature and variant patches
         if: steps.ver.outputs.should_build == 'true'
         run: |
+          # 3-way fallback: lands patches whose context merely shifted; only a real
+          # conflict (context deleted upstream) fails the build.
           for P in livetv-feature livetv-variant livetv-filtering jellyfin-feature autosync-feature jellyfintv-variant; do
-            if ! git apply "fork-src/.github/patches/$P.patch"; then
-              echo "::error::$P.patch no longer applies to upstream Dev"
+            if ! git apply "fork-src/.github/patches/$P.patch" && ! git apply --3way "fork-src/.github/patches/$P.patch"; then
+              echo "::error::$P.patch no longer applies to upstream ${{ steps.ver.outputs.tag }}"
               exit 1
             fi
           done
@@ -176,8 +186,8 @@ jobs:
       - name: Apply Jellyfin cinematic UI patch
         if: steps.ver.outputs.should_build == 'true'
         run: |
-          if ! git apply fork-src/.github/patches/desktop-jellyfin-cinematic-ui.patch; then
-            echo "::error::desktop-jellyfin-cinematic-ui.patch no longer applies to upstream Dev"
+          if ! git apply fork-src/.github/patches/desktop-jellyfin-cinematic-ui.patch && ! git apply --3way fork-src/.github/patches/desktop-jellyfin-cinematic-ui.patch; then
+            echo "::error::desktop-jellyfin-cinematic-ui.patch no longer applies to upstream ${{ steps.ver.outputs.tag }}"
             exit 1
           fi
 
@@ -203,8 +213,8 @@ jobs:
       - name: Apply upstream autosync wiring off
         if: steps.ver.outputs.should_build == 'true'
         run: |
-          if ! git apply fork-src/.github/patches/desktop-upstream-autosync-off.patch; then
-            echo "::error::desktop-upstream-autosync-off.patch no longer applies to upstream Dev"
+          if ! git apply fork-src/.github/patches/desktop-upstream-autosync-off.patch && ! git apply --3way fork-src/.github/patches/desktop-upstream-autosync-off.patch; then
+            echo "::error::desktop-upstream-autosync-off.patch no longer applies to upstream ${{ steps.ver.outputs.tag }}"
             exit 1
           fi
 

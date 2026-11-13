@@ -595,9 +595,9 @@ index dad2db423..b47200945 100644
 +        onContentRect = { rect -> controller.setCustomStretchContent(rect) },
 +    )
 +
-     LaunchedEffect(controller, playerControlsState) {
-         controller.updateControls(playerControlsState)
-         DesktopPlayerPictureInPicture.setWindowTitle(playerControlsState.pipWindowTitle)
+     LaunchedEffect(controller, controlsState) {
+         controller.updateControls(controlsState)
+         DesktopPlayerPictureInPicture.setWindowTitle(controlsState.pipWindowTitle)
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
 index 7c78fc633..2bd979be8 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
