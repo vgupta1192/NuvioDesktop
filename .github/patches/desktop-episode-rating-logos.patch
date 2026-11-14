@@ -160,12 +160,10 @@ diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/com
 index e274875ad..04a97093c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-@@ -58,6 +58,14 @@ import androidx.compose.ui.text.font.FontWeight
+@@ -58,6 +58,12 @@ import androidx.compose.ui.text.font.FontWeight
  import androidx.compose.ui.text.style.TextAlign
  import androidx.compose.ui.text.style.TextOverflow
  import androidx.compose.ui.unit.Dp
-+import androidx.compose.foundation.layout.Row
-+import androidx.compose.ui.layout.ContentScale
 +import androidx.compose.ui.layout.layout
 +import androidx.compose.ui.res.painterResource
 +import nuvio.composeapp.generated.resources.Res
