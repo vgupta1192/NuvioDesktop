@@ -96,10 +96,10 @@ index 8ed43fb6..9b893684 100644
                  title = "Reset picture and sound",
                  description = null,
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
-index 3b147ac3..cb29a81c 100644
+index b87149d3..c25a76a5 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
-@@ -124,6 +124,7 @@ internal object DesktopPlayerEnhance {
+@@ -136,6 +136,7 @@ internal object DesktopPlayerEnhance {
                  key == "audio.gain" -> PlayerEnhancePrefs.update { it.copy(gainDb = level) }
                  key == "audio.norm" -> PlayerEnhancePrefs.update { it.copy(normalize = level != 0) }
                  key == "audio.eq" -> PlayerEnhancePrefs.update { it.copy(eq = level) }
@@ -107,8 +107,8 @@ index 3b147ac3..cb29a81c 100644
                  key == "quality" -> selectQualityLocked(level)
                  else -> return true
              }
-@@ -138,8 +139,10 @@ internal object DesktopPlayerEnhance {
-             append("{\"picture\":{")
+@@ -150,8 +151,10 @@ internal object DesktopPlayerEnhance {
+             append("{\"smart\":$smartEnhance,\"picture\":{")
              append("\"brightness\":${v.brightness},\"contrast\":${v.contrast},\"saturation\":${v.saturation}")
              append(",\"gamma\":${v.gamma},\"hue\":${v.hue},\"deband\":${v.deband}},\"audio\":{")
 -            append("\"gainDb\":${v.gainDb},\"normalize\":${v.normalize},\"eq\":${v.eq},\"eqNames\":[")
@@ -119,7 +119,7 @@ index 3b147ac3..cb29a81c 100644
              append("]},\"quality\":{\"selected\":").append(qualityId).append(",\"options\":[")
              qualityOptions.joinTo(this, ",") {
                  "{\"id\":${it.id},\"label\":\"${it.label}\",\"height\":${it.height},\"bitrate\":${it.bitrate}}"
-@@ -184,6 +187,7 @@ internal object DesktopPlayerEnhance {
+@@ -197,6 +200,7 @@ internal object DesktopPlayerEnhance {
              if (v.gainDb > 0) add("volume=${v.gainDb}dB")
              if (v.normalize) add("dynaudnorm=f=250:g=15")
              eqPresets[v.eq.coerceIn(0, eqPresets.lastIndex)].second.takeIf { it.isNotEmpty() }?.let { add(it) }
@@ -128,10 +128,10 @@ index 3b147ac3..cb29a81c 100644
          }
          setLocked("af", if (filters.isEmpty()) "" else "lavfi=[${filters.joinToString(",")}]")
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index 2e73492c..3f28abad 100644
+index 35949f50..5b71b34c 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
-@@ -1368,6 +1368,20 @@ const renderEnhanceModal = () => {
+@@ -1330,6 +1330,20 @@ const renderEnhanceModal = () => {
      });
      enhanceBody.appendChild(row);
    });

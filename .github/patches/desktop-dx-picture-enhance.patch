@@ -61,10 +61,10 @@ index 9b893684..c4b6439e 100644
                  PlayerEnhancePrefs.update { it.copy(gainDb = v) }
              }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
-index cb29a81c..6dc554fd 100644
+index c25a76a5..7968e660 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
-@@ -125,6 +125,7 @@ internal object DesktopPlayerEnhance {
+@@ -137,6 +137,7 @@ internal object DesktopPlayerEnhance {
                  key == "audio.norm" -> PlayerEnhancePrefs.update { it.copy(normalize = level != 0) }
                  key == "audio.eq" -> PlayerEnhancePrefs.update { it.copy(eq = level) }
                  key == "audio.dx" -> PlayerEnhancePrefs.update { it.copy(dx = level) } // dx.bi voice presets
@@ -72,9 +72,9 @@ index cb29a81c..6dc554fd 100644
                  key == "quality" -> selectQualityLocked(level)
                  else -> return true
              }
-@@ -138,7 +139,9 @@ internal object DesktopPlayerEnhance {
+@@ -150,7 +151,9 @@ internal object DesktopPlayerEnhance {
          buildString {
-             append("{\"picture\":{")
+             append("{\"smart\":$smartEnhance,\"picture\":{")
              append("\"brightness\":${v.brightness},\"contrast\":${v.contrast},\"saturation\":${v.saturation}")
 -            append(",\"gamma\":${v.gamma},\"hue\":${v.hue},\"deband\":${v.deband}},\"audio\":{")
 +            append(",\"gamma\":${v.gamma},\"hue\":${v.hue},\"deband\":${v.deband},\"picEnhance\":${v.picEnhance},\"picEnhanceNames\":[")
@@ -83,8 +83,8 @@ index cb29a81c..6dc554fd 100644
              append("\"gainDb\":${v.gainDb},\"normalize\":${v.normalize},\"eq\":${v.eq},\"dx\":${v.dx},\"eqNames\":[")
              PlayerEnhancePrefs.eqNames.joinTo(this, ",") { "\"$it\"" }
              append("],\"dxNames\":[")
-@@ -179,6 +182,39 @@ internal object DesktopPlayerEnhance {
-         setLocked("gamma", v.gamma.toString())
+@@ -192,6 +195,39 @@ internal object DesktopPlayerEnhance {
+         setLocked("gamma", (v.gamma + if (lift) SMART_GAMMA else 0).coerceIn(-100, 100).toString())
          setLocked("hue", v.hue.toString())
          setLocked("deband", if (v.deband) "yes" else "no")
 +        applyEnhanceShaderLocked(v.picEnhance)
@@ -124,10 +124,10 @@ index cb29a81c..6dc554fd 100644
  
      private fun applyAudioLocked() {
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index 3f28abad..b663db32 100644
+index 5b71b34c..8dfd1e67 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
-@@ -1350,6 +1350,20 @@ const renderEnhanceModal = () => {
+@@ -1312,6 +1312,20 @@ const renderEnhanceModal = () => {
      enhanceSlider(slider.label, Number(picture[slider.key]) || 0, slider.min, slider.max, "", value => send(slider.event, value));
    });
    enhanceToggle("Deband (smooth gradients)", Boolean(picture.deband), on => send("enh.pic.deband", on ? 1 : 0));
