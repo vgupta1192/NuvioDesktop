@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
-index 27455e296..a9ffd510d 100644
+index 002fa11c5..222f0e55d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
-@@ -78,6 +78,16 @@ fun DetailMetaInfo(
+@@ -81,6 +81,16 @@ fun DetailMetaInfo(
      showOverallRatings: Boolean = true,
      isMdbListActive: Boolean = false,
  ) {
@@ -19,7 +19,7 @@ index 27455e296..a9ffd510d 100644
      Column(
          modifier = modifier
              .fillMaxWidth()
-@@ -441,3 +451,117 @@ internal fun forkRatingValueColor(source: String): Color? = when (source.lowerca
+@@ -457,3 +467,117 @@ internal fun forkRatingValueColor(source: String): Color? = when (source.lowerca
      "simkl" -> Color.White
      else -> null
  }
@@ -138,10 +138,10 @@ index 27455e296..a9ffd510d 100644
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
-index 33235d31f..c8f8b353f 100644
+index 597c99be0..96b024ee9 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
-@@ -133,6 +133,7 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+@@ -134,6 +134,7 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
      }
      val privateViewing by ForkPrefs.privateViewing.value.collectAsStateWithLifecycle()
      val autoAddTorbox by ForkPrefs.autoAddTorbox.value.collectAsStateWithLifecycle()
@@ -149,7 +149,7 @@ index 33235d31f..c8f8b353f 100644
      SettingsSection(title = "Streams", isTablet = isTablet) {
          SettingsGroup(isTablet = isTablet) {
              SettingsSwitchRow(
-@@ -144,6 +145,17 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
+@@ -145,6 +146,17 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
              )
          }
      }

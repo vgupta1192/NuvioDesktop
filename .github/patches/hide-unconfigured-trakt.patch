@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
-index 1668a58..c17581f 100644
+index 01f05e3ee..0ce8b0a95 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
-@@ -70,6 +70,7 @@ import com.nuvio.app.features.tracking.TrackingRefreshIntent
+@@ -71,6 +71,7 @@ import com.nuvio.app.features.tracking.TrackingRefreshIntent
  import com.nuvio.app.features.trakt.TraktAuthRepository
  import com.nuvio.app.features.trakt.TraktAuthUiState
  import com.nuvio.app.features.trakt.TraktBrandAsset
@@ -10,7 +10,7 @@ index 1668a58..c17581f 100644
  import com.nuvio.app.features.trakt.TraktConnectionMode
  import com.nuvio.app.features.trakt.traktBrandPainter
  import com.nuvio.app.features.watchprogress.WatchProgressSourceCoordinator
-@@ -183,10 +184,12 @@ internal fun TrackingProviderCards(
+@@ -188,10 +189,12 @@ internal fun TrackingProviderCards(
          modifier = Modifier.fillMaxWidth(),
          verticalArrangement = Arrangement.spacedBy(if (isTablet) 16.dp else 12.dp),
      ) {

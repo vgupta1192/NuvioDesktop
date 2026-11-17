@@ -211,10 +211,10 @@ index 535241e26..687b0f936 100644
                              page = SettingsPage.Playback,
                              description = Res.string.settings_playback_subtitle,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
-index 9c34b4588..786dc9fc6 100644
+index 6708af78b..7ebe08ac8 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
-@@ -753,6 +753,7 @@ private fun MobileSettingsScreen(
+@@ -754,6 +754,7 @@ private fun MobileSettingsScreen(
                      onPluginsClick = onPluginsClick,
                      onMediaServersClick = { onPageChange(SettingsPage.MediaServers) },
                  )
@@ -222,7 +222,7 @@ index 9c34b4588..786dc9fc6 100644
                  SettingsPage.Addons -> addonsSettingsContent()
                  SettingsPage.MediaServers -> mediaServersSettingsContent(
                      isTablet = false,
-@@ -1164,6 +1165,7 @@ private fun TabletSettingsScreen(
+@@ -1166,6 +1167,7 @@ private fun TabletSettingsScreen(
                              onPluginsClick = { openInlinePage(SettingsPage.Plugins) },
                              onMediaServersClick = { openInlinePage(SettingsPage.MediaServers) },
                          )

@@ -27,10 +27,10 @@ index d9126c65c..31cbaa677 100644
  }
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 5deb02397..f8f0bc8d0 100644
+index e67ac0ae6..73e9ea1ed 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -436,6 +436,7 @@ internal fun MainAppContent(
+@@ -441,6 +441,7 @@ internal fun MainAppContent(
      }
  
      fun handleRootTabClick(tab: AppScreenTab) {

@@ -1,6 +1,6 @@
 diff --git a/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml b/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml
 new file mode 100644
-index 00000000..629f8dae
+index 000000000..629f8dae7
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml
 @@ -0,0 +1,6 @@
@@ -11,7 +11,7 @@ index 00000000..629f8dae
 +    <string name="settings_netflix_style_description">Hover preview after a short delay with a muted trailer, and landscape Continue Watching cards with a progress bar. Turn off to restore your previous settings.</string>
 +</resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
-index 67270a6b..edfb22cb 100644
+index 67270a6b1..edfb22cb7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
 @@ -1,5 +1,7 @@
@@ -140,7 +140,7 @@ index 67270a6b..edfb22cb 100644
                      animatedArtworkMode = _uiState.value.animatedArtworkMode.name,
                  ),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HoverPreviewSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HoverPreviewSettingsPage.kt
-index c49583d4..80a85cc9 100644
+index c49583d4f..80a85cc9c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HoverPreviewSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HoverPreviewSettingsPage.kt
 @@ -45,6 +45,9 @@ import nuvio.composeapp.generated.resources.settings_hover_preview_trailer_sound

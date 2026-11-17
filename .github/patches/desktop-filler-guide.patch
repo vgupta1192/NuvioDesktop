@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index de68c345f..f23d6d74f 100644
+index 4d005b0b2..564bcce20 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-@@ -2656,6 +2656,9 @@ private fun ConfiguredMetaSections(
+@@ -2694,6 +2694,9 @@ private fun ConfiguredMetaSections(
                  }
              }
              MetaScreenSectionKey.EPISODES -> {

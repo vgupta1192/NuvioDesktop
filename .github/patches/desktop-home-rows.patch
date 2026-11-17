@@ -171,10 +171,10 @@ index 000000000..50f68ca77
 +}
 \ No newline at end of file
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 5bbc7d835..2d71335df 100644
+index d4c55adc0..8c20fc4a2 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-@@ -1180,6 +1180,10 @@ fun HomeScreen(
+@@ -1189,6 +1189,10 @@ fun HomeScreen(
                          disintegrationRequest = continueWatchingDisintegrationRequest,
                      )
  

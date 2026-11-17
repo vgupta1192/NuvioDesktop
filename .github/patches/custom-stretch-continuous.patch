@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
-index bc8bcbfd..f789520a 100644
+index bc8bcbfd8..f789520ac 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
 @@ -39,6 +39,13 @@ data class VideoContentRect(

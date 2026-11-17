@@ -1,6 +1,6 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.android.kt
 new file mode 100644
-index 00000000..693a01cd
+index 000000000..693a01cd7
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.android.kt
 @@ -0,0 +1,19 @@
@@ -24,7 +24,7 @@ index 00000000..693a01cd
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
-index 4f2e223b..472fcabc 100644
+index 4f2e223b8..472fcabc8 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
 @@ -28,6 +28,8 @@ internal val navigationSavedStateConfiguration = SavedStateConfiguration {
@@ -37,7 +37,7 @@ index 4f2e223b..472fcabc 100644
              subclass(EntityBrowseRoute::class, EntityBrowseRoute.serializer())
              subclass(SettingsPageRoute::class, SettingsPageRoute.serializer())
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index b4e437a0..319f1366 100644
+index b4e437a0c..319f13667 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 @@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
@@ -73,11 +73,10 @@ index b4e437a0..319f1366 100644
                      label = stringResource(Res.string.compose_settings_page_root),
                      selected = selectedTab == AppScreenTab.Settings,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 11a6a34f..fa2c7ec5 100644
+index 639176095..b0e07fed4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -121,7 +121,13 @@ import com.nuvio.app.features.home.HomeCatalogSettingsRepository
- import com.nuvio.app.features.home.HomeRepository
+@@ -122,6 +122,12 @@ import com.nuvio.app.features.home.HomeRepository
  import com.nuvio.app.features.home.buildAddonCatalogRefreshSignature
  import com.nuvio.app.features.home.opensDetails
  import com.nuvio.app.features.home.components.shouldBlurContinueWatchingArtwork
@@ -90,7 +89,7 @@ index 11a6a34f..fa2c7ec5 100644
  import com.nuvio.app.features.library.LibraryItem
  import com.nuvio.app.features.library.LibraryRepository
  import com.nuvio.app.features.library.LibrarySection
-@@ -945,6 +951,45 @@ internal fun MainAppContent(
+@@ -962,6 +968,45 @@ internal fun MainAppContent(
              navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
          }
  
@@ -136,7 +135,7 @@ index 11a6a34f..fa2c7ec5 100644
          fun openExternalStreamUrl(url: String): Boolean {
              val opened = runCatching {
                  uriHandler.openUri(url)
-@@ -1451,9 +1496,22 @@ internal fun MainAppContent(
+@@ -1505,9 +1550,22 @@ internal fun MainAppContent(
                          actions = { isTabletLayout ->
                              AppTabActions(
                                  onCatalogClick = onCatalogClick,
@@ -161,7 +160,7 @@ index 11a6a34f..fa2c7ec5 100644
                                  },
                                  onLibraryPosterClick = { item ->
                                      navController.navigate(
-@@ -1727,6 +1785,14 @@ internal fun MainAppContent(
+@@ -1781,6 +1839,14 @@ internal fun MainAppContent(
                      val onBack = rememberGuardedPopBackStack(navController, route)
                      LiveTvScreen(onBack = onBack, onPlay = ::openLiveTvChannel)
                  }
@@ -177,7 +176,7 @@ index 11a6a34f..fa2c7ec5 100644
                      DownloadsDestination(
                          route = route,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-index 2d3ef10b..5c1b0d4f 100644
+index 2d3ef10b3..5c1b0d4f4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 @@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
@@ -208,7 +207,7 @@ index 2d3ef10b..5c1b0d4f 100644
                  onClick = { onTabSelected(AppScreenTab.Settings) },
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
 new file mode 100644
-index 00000000..5e8fd447
+index 000000000..5e8fd4479
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
 @@ -0,0 +1,294 @@
@@ -508,7 +507,7 @@ index 00000000..5e8fd447
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
 new file mode 100644
-index 00000000..7d1d7399
+index 000000000..7d1d7399b
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinDetailScreen.kt
 @@ -0,0 +1,78 @@
@@ -592,7 +591,7 @@ index 00000000..7d1d7399
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinLauncher.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinLauncher.kt
 new file mode 100644
-index 00000000..e1f02ae6
+index 000000000..e1f02ae68
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinLauncher.kt
 @@ -0,0 +1,15 @@
@@ -613,7 +612,7 @@ index 00000000..e1f02ae6
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
 new file mode 100644
-index 00000000..05f1c523
+index 000000000..05f1c5237
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinModels.kt
 @@ -0,0 +1,127 @@
@@ -746,7 +745,7 @@ index 00000000..05f1c523
 +)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt
 new file mode 100644
-index 00000000..2800325d
+index 000000000..2800325d6
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.kt
 @@ -0,0 +1,13 @@
@@ -765,7 +764,7 @@ index 00000000..2800325d
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
 new file mode 100644
-index 00000000..2c0d407f
+index 000000000..2c0d407f1
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinRepository.kt
 @@ -0,0 +1,602 @@
@@ -1373,7 +1372,7 @@ index 00000000..2c0d407f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
 new file mode 100644
-index 00000000..76e8719b
+index 000000000..76e8719b0
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinScreen.kt
 @@ -0,0 +1,808 @@
@@ -2186,7 +2185,7 @@ index 00000000..76e8719b
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
-index ded9279d..57bea73c 100644
+index ded9279d3..57bea73c7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
 @@ -22,6 +22,7 @@ import com.nuvio.app.features.catalog.nextCatalogPaginationState
@@ -2243,7 +2242,7 @@ index ded9279d..57bea73c 100644
          if (canReuseRequestState(forceRefresh, requestKey, lastRequestKey)) return
          lastRequestKey = requestKey
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-index 95e389a9..7536a820 100644
+index 95e389a99..7536a8206 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
 @@ -1322,6 +1322,12 @@ object WatchProgressRepository {
@@ -2260,7 +2259,7 @@ index 95e389a9..7536a820 100644
          val positionMs = snapshot.positionMs.coerceAtLeast(0L)
          val durationMs = snapshot.durationMs.coerceAtLeast(0L)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/navigation/Routes.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/navigation/Routes.kt
-index 99099829..141eecf0 100644
+index 99099829d..141eecf00 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/navigation/Routes.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/navigation/Routes.kt
 @@ -40,6 +40,16 @@ data class DetailRoute(
@@ -2282,7 +2281,7 @@ index 99099829..141eecf0 100644
      val personId: Int,
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt
 new file mode 100644
-index 00000000..629c2f96
+index 000000000..629c2f969
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.desktop.kt
 @@ -0,0 +1,51 @@
@@ -2339,7 +2338,7 @@ index 00000000..629c2f96
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.ios.kt
 new file mode 100644
-index 00000000..693a01cd
+index 000000000..693a01cd7
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinPlatform.ios.kt
 @@ -0,0 +1,19 @@

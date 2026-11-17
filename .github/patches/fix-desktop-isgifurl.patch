@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/home/components/CollectionCardRemoteImage.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/home/components/CollectionCardRemoteImage.desktop.kt
-index c61aa69..6b9af8a 100644
+index c08e9d914..d99a464a7 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/home/components/CollectionCardRemoteImage.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/home/components/CollectionCardRemoteImage.desktop.kt
-@@ -229,6 +229,10 @@ internal actual fun CollectionCardRemoteImage(
+@@ -227,6 +227,10 @@ internal actual fun CollectionCardRemoteImage(
  
      var composeBitmap by remember(imageUrl) { mutableStateOf<ImageBitmap?>(null) }
  

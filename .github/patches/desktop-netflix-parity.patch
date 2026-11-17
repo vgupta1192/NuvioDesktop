@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/composeResources/values/strings_livetv_netflix.xml b/composeApp/src/commonMain/composeResources/values/strings_livetv_netflix.xml
-index 66484ce0..01ab5a9a 100644
+index 66484ce0a..01ab5a9ad 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings_livetv_netflix.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings_livetv_netflix.xml
 @@ -2,6 +2,7 @@
@@ -12,7 +12,7 @@ index 66484ce0..01ab5a9a 100644
 +    <string name="livetv_preview_live_badge">LIVE</string>
  </resources>
 diff --git a/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml b/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml
-index 629f8dae..2517411f 100644
+index 629f8dae7..2517411fd 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings_netflix_style.xml
 @@ -2,5 +2,5 @@
@@ -23,7 +23,7 @@ index 629f8dae..2517411f 100644
 +    <string name="settings_netflix_style_description">Hover preview after a short delay with a muted trailer, a muted trailer in the details hero (where supported), landscape Continue Watching cards with a progress bar, and Live TV cards with a muted channel preview. Turn off to restore your previous settings.</string>
  </resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
-index 7138794f..3b6570e5 100644
+index 7138794f7..3b6570e5d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
 @@ -1,5 +1,8 @@
@@ -116,7 +116,7 @@ index 7138794f..3b6570e5 100644
                      animatedArtworkMode = _uiState.value.animatedArtworkMode.name,
                  ),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/HeroTrailerAudioState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/HeroTrailerAudioState.kt
-index b0b3a447..fa0fd1ed 100644
+index b0b3a4472..fa0fd1ed8 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/HeroTrailerAudioState.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/HeroTrailerAudioState.kt
 @@ -8,6 +8,10 @@ object HeroTrailerAudioState {
@@ -131,7 +131,7 @@ index b0b3a447..fa0fd1ed 100644
          _muted.value = !_muted.value
      }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
-index 806ef2f7..2a061fad 100644
+index 806ef2f7f..2a061fade 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
 @@ -3,6 +3,9 @@ package com.nuvio.app.features.livetv

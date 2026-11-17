@@ -157,7 +157,7 @@ index 7968e6607..61dda8a08 100644
  
      private fun applyPictureLocked() {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 8edee5f2a..cccf25a4c 100644
+index d92f64f95..6b9b91771 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 @@ -2,6 +2,7 @@ package com.nuvio.app.features.player.desktop
@@ -168,7 +168,7 @@ index 8edee5f2a..cccf25a4c 100644
  import com.nuvio.app.features.player.PlayerControlAddonSubtitleItem
  import com.nuvio.app.features.player.PlayerControlEpisodeItem
  import com.nuvio.app.features.player.PlayerControlFilterItem
-@@ -763,6 +764,7 @@ internal class NativePlayerController(
+@@ -776,6 +777,7 @@ internal class NativePlayerController(
          val currentSpeed = NativePlayerBridge.speed(current)
          val next = speeds.firstOrNull { it > currentSpeed + 0.01f } ?: speeds.first()
          NativePlayerBridge.setSpeed(current, next)
@@ -176,7 +176,7 @@ index 8edee5f2a..cccf25a4c 100644
      }
  
      fun snapshot(): PlayerPlaybackSnapshot {
-@@ -1090,6 +1092,7 @@ internal class NativePlayerController(
+@@ -1106,6 +1108,7 @@ internal class NativePlayerController(
  
      override fun setPlaybackSpeed(speed: Float) {
          log.d { "setPlaybackSpeed speed=$speed handle=$handle" }
@@ -185,10 +185,10 @@ index 8edee5f2a..cccf25a4c 100644
      }
  
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index 268461b41..5de912f1c 100644
+index 1b75663e9..bca96852c 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
-@@ -4334,6 +4334,17 @@ document.addEventListener("keydown", event => {
+@@ -4363,6 +4363,17 @@ document.addEventListener("keydown", event => {
      return;
    }
  

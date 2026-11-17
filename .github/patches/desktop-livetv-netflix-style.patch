@@ -1,6 +1,6 @@
 diff --git a/composeApp/src/commonMain/composeResources/values/strings_livetv_netflix.xml b/composeApp/src/commonMain/composeResources/values/strings_livetv_netflix.xml
 new file mode 100644
-index 00000000..66484ce0
+index 000000000..66484ce0a
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values/strings_livetv_netflix.xml
 @@ -0,0 +1,7 @@
@@ -12,7 +12,7 @@ index 00000000..66484ce0
 +    <string name="livetv_netflix_style_chip">Netflix style</string>
 +</resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
-index edfb22cb..7138794f 100644
+index edfb22cb7..7138794f7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
 @@ -55,6 +55,8 @@ private data class StoredPosterCardStylePreferences(
@@ -92,7 +92,7 @@ index edfb22cb..7138794f 100644
                      animatedArtworkMode = _uiState.value.animatedArtworkMode.name,
                  ),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
-index fc5b1ce0..806ef2f7 100644
+index fc5b1ce06..806ef2f7f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
 @@ -15,7 +15,11 @@ import androidx.compose.foundation.layout.height
@@ -304,7 +304,7 @@ index fc5b1ce0..806ef2f7 100644
  private fun LiveTvChannelRow(
      channel: LiveTvChannel,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/LiveTvSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/LiveTvSettingsPage.kt
-index 945b47b1..ba591876 100644
+index 945b47b16..ba591876e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/LiveTvSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/LiveTvSettingsPage.kt
 @@ -24,10 +24,16 @@ import androidx.compose.ui.Modifier

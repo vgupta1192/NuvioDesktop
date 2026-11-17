@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
-index ce6249cef..23a640437 100644
+index 8b874ccf9..d1745b7f4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
-@@ -344,6 +344,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
+@@ -366,6 +366,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
              playerNotificationToken += 1L
          }
      }
@@ -69,10 +69,10 @@ index fd5fd0da3..423f9c80b 100644
              append(",\"gamma\":${v.gamma},\"hue\":${v.hue},\"deband\":${v.deband},\"picEnhance\":${v.picEnhance},\"picEnhanceNames\":[")
              PlayerEnhancePrefs.picEnhanceNames.joinTo(this, ",") { "\"$it\"" }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 9eefd4940..c8b0266bb 100644
+index 6b9b91771..a0397baf2 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -626,6 +626,10 @@ internal class NativePlayerController(
+@@ -640,6 +640,10 @@ internal class NativePlayerController(
              }
              "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
              "autoSyncRetry" -> com.nuvio.app.features.player.DesktopAutoSyncRetry.retry()
@@ -84,10 +84,10 @@ index 9eefd4940..c8b0266bb 100644
              "enh.pic.brightness", "enh.pic.contrast", "enh.pic.saturation", "enh.pic.gamma",
              "enh.pic.hue", "enh.pic.deband", "enh.audio.gain", "enh.audio.norm", "enh.audio.eq" ->
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index b33d314cf..e31fc91fe 100644
+index bca96852c..c3cd714b4 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
-@@ -1283,6 +1283,30 @@ const renderEnhanceModal = () => {
+@@ -1345,6 +1345,30 @@ const renderEnhanceModal = () => {
    const quality = enhance.quality || { selected: -1, options: [] };
    enhanceBody.textContent = "";
  

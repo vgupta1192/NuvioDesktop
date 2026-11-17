@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/SkipIntroRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/SkipIntroRepository.kt
-index 45eea90ac..6e2c1830d 100644
+index f34d366da..137c905dc 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/SkipIntroRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/SkipIntroRepository.kt
 @@ -12,7 +12,7 @@ object SkipIntroRepository {
@@ -21,7 +21,7 @@ index 45eea90ac..6e2c1830d 100644
          return data.movieSkipIntervals().also { cache[cacheKey] = it }
      }
  
-@@ -201,6 +202,7 @@ object SkipIntroRepository {
+@@ -184,6 +185,7 @@ object SkipIntroRepository {
      }
  
      private suspend fun fetchFromIntroDb(imdbId: String, season: Int, episode: Int): List<SkipInterval> {

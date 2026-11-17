@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
-index 53e2e904b..fff275a7d 100644
+index 5fdd794a6..e807ebe48 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
-@@ -338,6 +338,7 @@ data class PlayerControlSourceItem(
+@@ -368,6 +368,7 @@ data class PlayerControlSourceItem(
      val addonLogo: String = "",
      val showAddonLogo: Boolean = false,
      val isCurrent: Boolean = false,
@@ -11,10 +11,10 @@ index 53e2e904b..fff275a7d 100644
      val badges: List<PlayerControlSourceBadgeItem> = emptyList(),
      val formattedSize: String = "",
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 706baa515..94afa5ce3 100644
+index af79b283d..5ab9a7f01 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -217,7 +217,8 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -224,7 +224,8 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi(
          allLabel = allFilterLabel,
          selectedFilter = null,
      )
@@ -24,7 +24,7 @@ index 706baa515..94afa5ce3 100644
      val episodeItems = buildPlayerControlEpisodeItems()
      val episodeSeasons = buildPlayerControlSeasonItems(episodeItems)
      val episodeStreamFilters = buildPlayerControlEpisodeStreamFilters(
-@@ -225,6 +226,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -232,6 +233,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi(
          selectedFilter = null,
      )
      val episodeStreamItems = buildPlayerControlEpisodeStreamItems()
@@ -32,7 +32,7 @@ index 706baa515..94afa5ce3 100644
      val playerControlAddonSubtitles = buildPlayerControlAddonSubtitleItems()
      val playerControlSubtitleSelection = buildPlayerControlSubtitleSelection()
      val playerControlAutoSyncCues = buildPlayerControlSubtitleCueItems()
-@@ -1481,6 +1483,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSourceItems(): List<PlayerCont
+@@ -1570,6 +1572,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSourceItems(): List<PlayerCont
      val showFileSizeBadges = streamBadgeState.showFileSizeBadges
      val showAddonLogo = streamBadgeState.showAddonLogo
      val badgePlacement = streamBadgeState.badgePlacement.name
@@ -40,7 +40,7 @@ index 706baa515..94afa5ce3 100644
      return sourceStreamsState.groups.flatMap { group ->
          group.streams.map { stream -> group.addonId to stream }
      }.mapIndexed { index, (filterId, stream) ->
-@@ -1493,6 +1496,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSourceItems(): List<PlayerCont
+@@ -1582,6 +1585,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSourceItems(): List<PlayerCont
              addonLogo = stream.addonLogo.orEmpty(),
              showAddonLogo = showAddonLogo,
              isCurrent = isCurrentPlayerControlStream(stream),
@@ -48,7 +48,7 @@ index 706baa515..94afa5ce3 100644
              isEnabled = stream.isSelectableForPlayback(canResolveDebrid),
              badges = stream.badges.map {
                  PlayerControlSourceBadgeItem(
-@@ -1516,6 +1520,7 @@ private fun PlayerScreenRuntime.buildPlayerControlEpisodeStreamItems(): List<Pla
+@@ -1605,6 +1609,7 @@ private fun PlayerScreenRuntime.buildPlayerControlEpisodeStreamItems(): List<Pla
      val showFileSizeBadges = streamBadgeState.showFileSizeBadges
      val showAddonLogo = streamBadgeState.showAddonLogo
      val badgePlacement = streamBadgeState.badgePlacement.name
@@ -56,7 +56,7 @@ index 706baa515..94afa5ce3 100644
      return episodeStreamsRepoState.groups.flatMap { group ->
          group.streams.map { stream -> group.addonId to stream }
      }.mapIndexed { index, (filterId, stream) ->
-@@ -1528,6 +1533,7 @@ private fun PlayerScreenRuntime.buildPlayerControlEpisodeStreamItems(): List<Pla
+@@ -1617,6 +1622,7 @@ private fun PlayerScreenRuntime.buildPlayerControlEpisodeStreamItems(): List<Pla
              addonLogo = stream.addonLogo.orEmpty(),
              showAddonLogo = showAddonLogo,
              isCurrent = false,
@@ -88,10 +88,10 @@ index 08eeecdee..7f4b84238 100644
      fun readRaw(key: String): String? = storage?.getString(key)
  
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index d167e2c13..b73b0406c 100644
+index 6e9a91b0c..6385d15b6 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -630,6 +630,10 @@ internal class NativePlayerController(
+@@ -644,6 +644,10 @@ internal class NativePlayerController(
              }
              "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
              "autoSyncRetry" -> com.nuvio.app.features.player.DesktopAutoSyncRetry.retry()
@@ -102,7 +102,7 @@ index d167e2c13..b73b0406c 100644
              "enh.sleep" -> {
                  com.nuvio.app.features.player.SleepTimer.set(value.toInt().coerceAtLeast(0))
                  refreshControlsForEnhance()
-@@ -1989,6 +1993,8 @@ private fun StringBuilder.appendSourceItemJson(item: PlayerControlSourceItem) {
+@@ -2046,6 +2050,8 @@ private fun StringBuilder.appendSourceItemJson(item: PlayerControlSourceItem) {
      append(',')
      appendJsonField("isCurrent", item.isCurrent)
      append(',')
@@ -112,10 +112,10 @@ index d167e2c13..b73b0406c 100644
      append(',')
      appendJsonField("formattedSize", item.formattedSize)
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index e31fc91fe..52d928865 100644
+index c3cd714b4..0f82835d9 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
-@@ -1902,6 +1902,19 @@ const buildSourceRow = (item, onSelect) => {
+@@ -2024,6 +2024,19 @@ const buildSourceRow = (item, onSelect) => {
      onSelect(item);
    });
  
@@ -135,7 +135,7 @@ index e31fc91fe..52d928865 100644
    const copy = document.createElement("span");
    copy.className = "track-copy";
  
-@@ -2077,8 +2090,29 @@ const requestSourceVirtualRender = () => {
+@@ -2180,8 +2193,29 @@ const requestSourceVirtualRender = () => {
    sourceVirtualRenderRaf = window.requestAnimationFrame(renderSourceVirtualRows);
  };
  
@@ -165,7 +165,7 @@ index e31fc91fe..52d928865 100644
    sourceReloadButton.textContent = state.reloadLabel || "Reload";
    sourceCloseButton.textContent = state.panelCloseLabel || "Close";
    sourceContextLabel.textContent = state.episodeText || state.title || "";
-@@ -2107,6 +2141,14 @@ const renderSourceModal = (modalOpened = false) => {
+@@ -2210,6 +2244,14 @@ const renderSourceModal = (modalOpened = false) => {
    if (sourceFilterId) {
      items = items.filter(item => String(item.filterId || "") === sourceFilterId);
    }

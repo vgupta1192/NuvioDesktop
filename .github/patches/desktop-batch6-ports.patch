@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonRepository.kt
-index 94a0d479..a4f31aab 100644
+index 11fd39b38..4735fb01b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonRepository.kt
 @@ -70,6 +70,7 @@ object AddonRepository {
@@ -10,7 +10,7 @@ index 94a0d479..a4f31aab 100644
          if (storedUrls.isEmpty()) return
  
          val existingByUrl = _uiState.value.addons.associateBy(ManagedAddon::manifestUrl)
-@@ -273,6 +274,19 @@ object AddonRepository {
+@@ -302,6 +303,19 @@ object AddonRepository {
          }
      }
  
@@ -31,7 +31,7 @@ index 94a0d479..a4f31aab 100644
          _uiState.value.addons.filter { it.enabled }.distinctBy { it.manifestUrl }.forEach { addon ->
              refreshAddon(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogData.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogData.kt
-index b4d3efa6..bc23bb5f 100644
+index b4d3efa6d..bc23bb5fc 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogData.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogData.kt
 @@ -89,10 +89,12 @@ suspend fun fetchCatalogPage(
@@ -52,10 +52,10 @@ index b4d3efa6..bc23bb5f 100644
          (skip ?: 0) + parsed.rawItemCount
      } else {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-index 20b8e88a..eb09de7c 100644
+index 96a5e9028..9f61d8b2b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-@@ -184,6 +184,9 @@ fun DetailSeriesContent(
+@@ -183,6 +183,9 @@ fun DetailSeriesContent(
          ?.takeIf { it in groupedEpisodes }
          ?: defaultSeason
  
@@ -65,7 +65,7 @@ index 20b8e88a..eb09de7c 100644
      BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
          val sizing = seriesContentSizing(maxWidth.value)
          val containerWidthDp = maxWidth.value
-@@ -227,6 +230,12 @@ fun DetailSeriesContent(
+@@ -226,6 +229,12 @@ fun DetailSeriesContent(
                              },
                          )
                      }
@@ -78,7 +78,7 @@ index 20b8e88a..eb09de7c 100644
                      if (episodeRatings.isNotEmpty()) { // Nuvio fork: episode rating map
                          var showRatingMap by remember { mutableStateOf(false) }
                          Text(
-@@ -245,7 +254,25 @@ fun DetailSeriesContent(
+@@ -244,7 +253,25 @@ fun DetailSeriesContent(
                              }
                          }
                      }
@@ -105,7 +105,7 @@ index 20b8e88a..eb09de7c 100644
                      if (episodeCardStyle == MetaEpisodeCardStyle.Horizontal) {
                          EpisodeHorizontalRow(
                              episodes = seasonEpisodes,
-@@ -259,7 +286,7 @@ fun DetailSeriesContent(
+@@ -258,7 +285,7 @@ fun DetailSeriesContent(
                              episodeRatings = episodeRatings,
                              episodeRatingsVisibility = episodeRatingsVisibility,
                              blurUnwatchedEpisodes = blurUnwatchedEpisodes,
@@ -116,7 +116,7 @@ index 20b8e88a..eb09de7c 100644
                                  preferredEpisodeNumber = preferredEpisodeNumber,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkEpisodeNavigator.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkEpisodeNavigator.kt
 new file mode 100644
-index 00000000..d5ff7591
+index 000000000..d5ff75911
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkEpisodeNavigator.kt
 @@ -0,0 +1,139 @@
@@ -261,7 +261,7 @@ index 00000000..d5ff7591
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeCache.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeCache.kt
 new file mode 100644
-index 00000000..c6f04ae6
+index 000000000..c6f04ae6f
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeCache.kt
 @@ -0,0 +1,82 @@
@@ -348,7 +348,7 @@ index 00000000..c6f04ae6
 +    }.getOrDefault(emptyMap())
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
-index 466a3c3f..7585e702 100644
+index 5d1063375..2a13e862d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 @@ -49,6 +49,7 @@ object HomeRepository {
@@ -373,8 +373,8 @@ index 466a3c3f..7585e702 100644
 +        }
          _uiState.update { it.copy(isLoading = true, errorMessage = null) }
          activeJob = scope.launch {
-             val prioritizedRequests = prioritizeDefinitions(
-@@ -130,6 +139,7 @@ object HomeRepository {
+             val settingsSnapshot = HomeCatalogSettingsRepository.snapshot()
+@@ -147,6 +156,7 @@ object HomeRepository {
              if (activeRequestKey != requestKey) return@launch
  
              cachedSections = loadedSections.toMap()
@@ -383,7 +383,7 @@ index 466a3c3f..7585e702 100644
              activeRequestKey = null
              publishCurrentState(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt
-index b1c9c412..00092887 100644
+index b1c9c4127..000928876 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt
 @@ -2,6 +2,7 @@ package com.nuvio.app.features.library
@@ -415,10 +415,10 @@ index b1c9c412..00092887 100644
  @Composable
  internal fun LibraryCalendarHost(items: List<LibraryItem>, onPosterClick: ((LibraryItem) -> Unit)?) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
-index 31cbe5b0..833c7295 100644
+index 4facce3bb..5af29fa00 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
-@@ -350,6 +350,7 @@ fun LibraryScreen(
+@@ -367,6 +367,7 @@ fun LibraryScreen(
                              actions = {
                                  if (sourceMode == LibraryViewMode.Saved) {
                                      LibraryCalendarButton() // Nuvio fork: library calendar
@@ -428,7 +428,7 @@ index 31cbe5b0..833c7295 100644
                                          LibraryLayoutMode.VERTICAL
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/ForkLiveTv.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/ForkLiveTv.kt
 new file mode 100644
-index 00000000..d6401fdf
+index 000000000..d6401fdfc
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/ForkLiveTv.kt
 @@ -0,0 +1,159 @@
@@ -592,7 +592,7 @@ index 00000000..d6401fdf
 +        }?.toList().orEmpty()
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
-index 614019a3..365fd446 100644
+index 614019a3b..365fd4464 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
 @@ -18,13 +18,16 @@ object LiveTvEpgRepository {
@@ -743,7 +743,7 @@ index 614019a3..365fd446 100644
      }
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
-index fe36dad0..ccae1e69 100644
+index fe36dad03..ccae1e699 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
 @@ -122,6 +122,9 @@ data class ChannelEpgInfo(
@@ -757,7 +757,7 @@ index fe36dad0..ccae1e69 100644
      val id: String,
      val name: String,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
-index 9c2cab2c..605699fe 100644
+index 9c2cab2c3..605699fe4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
 @@ -20,6 +20,7 @@ import kotlinx.coroutines.SupervisorJob
@@ -928,7 +928,7 @@ index 9c2cab2c..605699fe 100644
      }
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
-index 2a061fad..a8f89692 100644
+index 2a061fade..a8f896925 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
 @@ -28,6 +28,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
@@ -1125,7 +1125,7 @@ index 2a061fad..a8f89692 100644
                  }
                  Text(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mdblist/MdbListTrackingLibraryProvider.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mdblist/MdbListTrackingLibraryProvider.kt
-index c2fa2ac4..ef5b0369 100644
+index c2fa2ac4e..ef5b03696 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mdblist/MdbListTrackingLibraryProvider.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mdblist/MdbListTrackingLibraryProvider.kt
 @@ -22,7 +22,12 @@ class MdbListTrackingLibraryProvider(
@@ -1143,7 +1143,7 @@ index c2fa2ac4..ef5b0369 100644
  
      override suspend fun membership(item: LibraryItem) = library.getMembershipSnapshot(item)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
-index ea3363e3..a2ec00c1 100644
+index ea3363e39..a2ec00c1b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 @@ -137,6 +137,13 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
@@ -1161,7 +1161,7 @@ index ea3363e3..a2ec00c1 100644
      }
      val privateViewing by ForkPrefs.privateViewing.value.collectAsStateWithLifecycle()
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
-index 68c06904..8dd947df 100644
+index 68c069047..8dd947df4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
 @@ -72,6 +72,7 @@ object ForkPrefs {

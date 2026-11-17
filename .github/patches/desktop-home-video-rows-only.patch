@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
-index c09ac18c4..466a3c3fe 100644
+index d8c092601..5d1063375 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
-@@ -193,6 +193,13 @@ object HomeRepository {
+@@ -211,6 +211,13 @@ object HomeRepository {
              .mapNotNull { definition ->
                  val preference = preferences[definition.key]
                  if (preference?.enabled == false) return@mapNotNull null

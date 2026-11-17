@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
-index ee061fd96..ce6249cef 100644
+index ee615c024..8b874ccf9 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
-@@ -335,6 +335,16 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
+@@ -357,6 +357,16 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
          if (!playbackSnapshot.isLoading) loadChaptersIfNeeded()
      }
  

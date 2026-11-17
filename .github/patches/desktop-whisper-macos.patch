@@ -1,5 +1,5 @@
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index 500383b5..da5a0dac 100644
+index e8a7eb956..b23d8ad41 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
 @@ -688,6 +688,39 @@ val buildMacosPlayerBridge = tasks.register<Exec>("buildMacosPlayerBridge") {
@@ -42,7 +42,7 @@ index 500383b5..da5a0dac 100644
  // ---- Linux player bridge (system libmpv, X11 "wid" embedding) ----
  // Compiles a single JNI .so against the system libmpv + JDK JNI headers.
  // Requires a C++ toolchain, pkg-config, and libmpv development files on the
-@@ -950,8 +983,9 @@ val prepareMacosPlayerRuntime = tasks.register<Sync>("prepareMacosPlayerRuntime"
+@@ -958,8 +991,9 @@ val prepareMacosPlayerRuntime = tasks.register<Sync>("prepareMacosPlayerRuntime"
  
  val prepareMacosPlayerAppResources = tasks.register<Sync>("prepareMacosPlayerAppResources") {
      enabled = isMacHost
@@ -54,7 +54,7 @@ index 500383b5..da5a0dac 100644
          include("*.dylib")
      }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt
-index 6426f118..76e1c2a5 100644
+index 6426f118a..76e1c2a53 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedSubtitles.kt
 @@ -73,6 +73,9 @@ object GeneratedSubtitles {
@@ -69,7 +69,7 @@ index 6426f118..76e1c2a5 100644
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedUsage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedUsage.kt
 new file mode 100644
-index 00000000..27951cd4
+index 000000000..27951cd41
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/GeneratedUsage.kt
 @@ -0,0 +1,144 @@
@@ -218,7 +218,7 @@ index 00000000..27951cd4
 +    private const val KEY_AUDIO = "usage_groq_audio_seconds"
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
-index d3f4225c..d27ef49a 100644
+index d3f4225c5..d27ef49ae 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/GeneratedSubtitleSettings.kt
 @@ -12,6 +12,7 @@ import androidx.compose.material3.OutlinedTextField
@@ -326,7 +326,7 @@ index d3f4225c..d27ef49a 100644
          SettingsGroupDivider(isTablet = isTablet)
          SettingsNavigationRow(
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-index c81dcf1d..a6f9e7e3 100644
+index c81dcf1d1..a6f9e7e36 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 @@ -159,6 +159,8 @@ internal class AutoSyncNativePlayerController(
@@ -347,7 +347,7 @@ index c81dcf1d..a6f9e7e3 100644
  
      private fun cancelAutoSync() {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt
-index 654b0f31..12c2e0ac 100644
+index 654b0f31a..12c2e0ac3 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/DeepLTranslator.kt
 @@ -1,6 +1,7 @@
@@ -426,7 +426,7 @@ index 654b0f31..12c2e0ac 100644
          fun sourceCode(language: String?): String? = when (val code = language?.lowercase()) {
              null, "", "auto" -> null
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-index 0afd949e..7da7b9ff 100644
+index 0afd949e4..7da7b9ff0 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -1,7 +1,9 @@
@@ -1111,7 +1111,7 @@ index 0afd949e..7da7b9ff 100644
 +    )
  }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt
-index c74c81c3..7644373a 100644
+index c74c81c30..7644373a9 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GroqWhisperClient.kt
 @@ -1,6 +1,7 @@
@@ -1138,7 +1138,7 @@ index c74c81c3..7644373a 100644
                  401, 403 -> throw Failure("Groq key rejected", permanent = true)
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt
 new file mode 100644
-index 00000000..388802a2
+index 000000000..388802a24
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/SubtitleTimingSnap.kt
 @@ -0,0 +1,49 @@
@@ -1193,7 +1193,7 @@ index 00000000..388802a2
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperLocal.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperLocal.kt
 new file mode 100644
-index 00000000..11aa46a4
+index 000000000..11aa46a47
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperLocal.kt
 @@ -0,0 +1,107 @@
@@ -1306,7 +1306,7 @@ index 00000000..11aa46a4
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperModels.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperModels.kt
 new file mode 100644
-index 00000000..52e6db4c
+index 000000000..52e6db4c4
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperModels.kt
 @@ -0,0 +1,196 @@
@@ -1508,7 +1508,7 @@ index 00000000..52e6db4c
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperNative.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperNative.kt
 new file mode 100644
-index 00000000..4d960869
+index 000000000..4d960869d
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/WhisperNative.kt
 @@ -0,0 +1,55 @@
@@ -1569,7 +1569,7 @@ index 00000000..4d960869
 +}
 diff --git a/composeApp/src/desktopMain/native/macos/whisper/whisper_bridge.cpp b/composeApp/src/desktopMain/native/macos/whisper/whisper_bridge.cpp
 new file mode 100644
-index 00000000..f7859484
+index 000000000..f78594841
 --- /dev/null
 +++ b/composeApp/src/desktopMain/native/macos/whisper/whisper_bridge.cpp
 @@ -0,0 +1,150 @@
@@ -1724,10 +1724,10 @@ index 00000000..f7859484
 +
 +}  // extern "C"
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index 8dd429bd..58ac5796 100644
+index ddfb4e78f..89a67a096 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
-@@ -495,6 +495,7 @@ const playerToastDurationMs = 1400;
+@@ -533,6 +533,7 @@ const playerToastDurationMs = 1400;
  const autoSyncBubble = document.getElementById("autoSyncBubble");
  const autoSyncBubbleHeadline = document.getElementById("autoSyncBubbleHeadline");
  const autoSyncBubbleDetail = document.getElementById("autoSyncBubbleDetail");
@@ -1735,7 +1735,7 @@ index 8dd429bd..58ac5796 100644
  const autoSyncBubbleDurations = { working: 600000, success: 9000, failure: 9000 };
  let autoSyncBubbleTimer = 0;
  
-@@ -519,6 +520,8 @@ const showAutoSyncBubble = (kind, message) => {
+@@ -557,6 +558,8 @@ const showAutoSyncBubble = (kind, message) => {
    const statsBlock = newlineAt >= 0 ? raw.slice(newlineAt + 1).trim() : "";
    const parts = headPart.split(" • ").map(part => part.trim()).filter(Boolean);
    const body = parts.length > 1 ? parts.slice(1) : parts;

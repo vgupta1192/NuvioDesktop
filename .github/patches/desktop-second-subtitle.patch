@@ -140,10 +140,10 @@ index d753ecd37..7cd8f4c65 100644
      }
  }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 6f60f4f9e..fd532c480 100644
+index b3be0d0dc..af77e3348 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -697,6 +697,33 @@ internal class NativePlayerController(
+@@ -710,6 +710,33 @@ internal class NativePlayerController(
          }
      }
  
@@ -177,7 +177,7 @@ index 6f60f4f9e..fd532c480 100644
      private fun startPlaybackStatsPoller() {
          val poller = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
              Thread(r, "nuvio-playback-stats").apply { isDaemon = true }
-@@ -708,6 +735,7 @@ internal class NativePlayerController(
+@@ -721,6 +748,7 @@ internal class NativePlayerController(
                  val paused = runCatching { NativePlayerBridge.propGetString(current, "paused") }.getOrNull()
                  if (paused == "true") return@scheduleWithFixedDelay
                  refreshPlaybackStats()

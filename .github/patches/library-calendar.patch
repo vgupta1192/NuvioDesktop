@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
-index eee68bdd..e1874b75 100644
+index eee68bdd3..e1874b75c 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
 @@ -130,6 +130,7 @@ open class MainActivity : AppCompatActivity() {
@@ -12,7 +12,7 @@ index eee68bdd..e1874b75 100644
          ContinueWatchingEnrichmentStorage.initialize(applicationContext)
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/library/LibraryCalendarStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/library/LibraryCalendarStorage.android.kt
 new file mode 100644
-index 00000000..f78bdc45
+index 000000000..f78bdc45b
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/library/LibraryCalendarStorage.android.kt
 @@ -0,0 +1,18 @@
@@ -36,7 +36,7 @@ index 00000000..f78bdc45
 +}
 diff --git a/composeApp/src/commonMain/composeResources/values/library_calendar_strings.xml b/composeApp/src/commonMain/composeResources/values/library_calendar_strings.xml
 new file mode 100644
-index 00000000..919da762
+index 000000000..919da7622
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values/library_calendar_strings.xml
 @@ -0,0 +1,30 @@
@@ -72,7 +72,7 @@ index 00000000..919da762
 +</resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendar.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendar.kt
 new file mode 100644
-index 00000000..e48524b5
+index 000000000..e48524b5f
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendar.kt
 @@ -0,0 +1,820 @@
@@ -898,7 +898,7 @@ index 00000000..e48524b5
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarData.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarData.kt
 new file mode 100644
-index 00000000..d2901ecd
+index 000000000..d2901ecd5
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarData.kt
 @@ -0,0 +1,134 @@
@@ -1038,7 +1038,7 @@ index 00000000..d2901ecd
 +    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt
 new file mode 100644
-index 00000000..b1c9c412
+index 000000000..b1c9c4127
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt
 @@ -0,0 +1,46 @@
@@ -1090,7 +1090,7 @@ index 00000000..b1c9c412
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarLoader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarLoader.kt
 new file mode 100644
-index 00000000..93aef15d
+index 000000000..93aef15d1
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarLoader.kt
 @@ -0,0 +1,138 @@
@@ -1234,7 +1234,7 @@ index 00000000..93aef15d
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarStorage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarStorage.kt
 new file mode 100644
-index 00000000..3cec6ad8
+index 000000000..3cec6ad8d
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarStorage.kt
 @@ -0,0 +1,7 @@
@@ -1246,10 +1246,10 @@ index 00000000..3cec6ad8
 +    fun save(profileId: Int, payload: String)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
-index 3e38c393..31cbe5b0 100644
+index 38e454446..4facce3bb 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
-@@ -349,6 +349,7 @@ fun LibraryScreen(
+@@ -366,6 +366,7 @@ fun LibraryScreen(
                              topPadding = topChromePadding,
                              actions = {
                                  if (sourceMode == LibraryViewMode.Saved) {
@@ -1257,7 +1257,7 @@ index 3e38c393..31cbe5b0 100644
                                      LibraryListManagementButton()
                                      val targetLayout = if (displaySettings.layoutMode == LibraryLayoutMode.HORIZONTAL) {
                                          LibraryLayoutMode.VERTICAL
-@@ -546,6 +547,7 @@ fun LibraryScreen(
+@@ -564,6 +565,7 @@ fun LibraryScreen(
                  }
              }
          }
@@ -1267,7 +1267,7 @@ index 3e38c393..31cbe5b0 100644
  
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/library/LibraryCalendarStorage.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/library/LibraryCalendarStorage.desktop.kt
 new file mode 100644
-index 00000000..a9a2f619
+index 000000000..a9a2f6190
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/library/LibraryCalendarStorage.desktop.kt
 @@ -0,0 +1,13 @@
@@ -1286,7 +1286,7 @@ index 00000000..a9a2f619
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/library/LibraryCalendarStorage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/library/LibraryCalendarStorage.ios.kt
 new file mode 100644
-index 00000000..9544c8a8
+index 000000000..9544c8a81
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/library/LibraryCalendarStorage.ios.kt
 @@ -0,0 +1,12 @@

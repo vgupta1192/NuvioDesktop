@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
-index 158706b6f..d7e521432 100644
+index aa11d274b..e9ef8ecc1 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
-@@ -1767,7 +1767,8 @@ private class NuvioLibmpvView(
+@@ -1958,7 +1958,8 @@ private class NuvioLibmpvView(
          executeMpv {
              when (resizeMode) {
                  PlayerResizeMode.Fit,
@@ -12,7 +12,7 @@ index 158706b6f..d7e521432 100644
                      mpv.setPropertyDouble("panscan", 0.0)
                      mpv.setPropertyString("video-aspect-override", "no")
                  }
-@@ -2249,6 +2250,7 @@ private fun PlayerResizeMode.toExoResizeMode(): Int =
+@@ -2445,6 +2446,7 @@ private fun PlayerResizeMode.toExoResizeMode(): Int =
          PlayerResizeMode.Fill -> AspectRatioFrameLayout.RESIZE_MODE_FILL
          PlayerResizeMode.Zoom -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
          PlayerResizeMode.Stretch -> AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -21,10 +21,10 @@ index 158706b6f..d7e521432 100644
  
  private fun PlayerView.syncLibassOverlay(
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 350de66c3..ae535f3f1 100644
+index 4620c7253..740bd4895 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -471,6 +471,7 @@
+@@ -478,6 +478,7 @@
      <string name="compose_player_resize_fill">Fill</string>
      <string name="compose_player_resize_fit">Fit</string>
      <string name="compose_player_resize_stretch">Stretch</string>
@@ -493,10 +493,10 @@ index 000000000..bc8bcbfd8
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerLayout.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerLayout.kt
-index ebfdf1b9f..159a840a6 100644
+index 5c623b5a5..21430253a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerLayout.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerLayout.kt
-@@ -19,6 +19,7 @@ import nuvio.composeapp.generated.resources.Res
+@@ -20,6 +20,7 @@ import nuvio.composeapp.generated.resources.Res
  import nuvio.composeapp.generated.resources.compose_player_resize_fill
  import nuvio.composeapp.generated.resources.compose_player_resize_fit
  import nuvio.composeapp.generated.resources.compose_player_resize_stretch
@@ -504,7 +504,7 @@ index ebfdf1b9f..159a840a6 100644
  import nuvio.composeapp.generated.resources.compose_player_resize_zoom
  import org.jetbrains.compose.resources.StringResource
  import kotlin.math.max
-@@ -140,8 +141,9 @@ internal fun PlayerResizeMode.next(): PlayerResizeMode =
+@@ -144,8 +145,9 @@ internal fun PlayerResizeMode.next(): PlayerResizeMode =
      when (supportedOnCurrentPlatform()) {
          PlayerResizeMode.Fit -> if (isDesktop) PlayerResizeMode.Zoom else PlayerResizeMode.Fill
          PlayerResizeMode.Fill -> PlayerResizeMode.Zoom
@@ -516,7 +516,7 @@ index ebfdf1b9f..159a840a6 100644
      }
  
  internal fun PlayerResizeMode.supportedOnCurrentPlatform(): PlayerResizeMode =
-@@ -157,6 +159,7 @@ internal val PlayerResizeMode.labelRes: StringResource
+@@ -161,6 +163,7 @@ internal val PlayerResizeMode.labelRes: StringResource
          PlayerResizeMode.Fill -> Res.string.compose_player_resize_fill
          PlayerResizeMode.Zoom -> Res.string.compose_player_resize_zoom
          PlayerResizeMode.Stretch -> Res.string.compose_player_resize_stretch
@@ -525,10 +525,10 @@ index ebfdf1b9f..159a840a6 100644
  
  internal fun formatPlaybackTime(positionMs: Long): String {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerModels.kt
-index 712ba3140..d4953bb76 100644
+index 6fc577649..f6d72c931 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerModels.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerModels.kt
-@@ -148,6 +148,7 @@ enum class PlayerResizeMode {
+@@ -152,6 +152,7 @@ enum class PlayerResizeMode {
      Fill,
      Zoom,
      Stretch,
@@ -537,10 +537,10 @@ index 712ba3140..d4953bb76 100644
  
  enum class AndroidPlaybackEngine(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
-index ee47881ad..b209fbd70 100644
+index 7fe29ad4d..7454f2fb4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenContent.kt
-@@ -35,6 +35,7 @@ import nuvio.composeapp.generated.resources.compose_player_downloaded
+@@ -41,6 +41,7 @@ import nuvio.composeapp.generated.resources.compose_player_downloaded
  import nuvio.composeapp.generated.resources.compose_player_resize_fill
  import nuvio.composeapp.generated.resources.compose_player_resize_fit
  import nuvio.composeapp.generated.resources.compose_player_resize_stretch
@@ -548,7 +548,7 @@ index ee47881ad..b209fbd70 100644
  import nuvio.composeapp.generated.resources.compose_player_resize_zoom
  import nuvio.composeapp.generated.resources.generic_unknown
  import nuvio.composeapp.generated.resources.parental_alcohol
-@@ -157,6 +158,7 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
+@@ -182,6 +183,7 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
          runtime.resizeModeFillLabel = stringResource(Res.string.compose_player_resize_fill)
          runtime.resizeModeZoomLabel = stringResource(Res.string.compose_player_resize_zoom)
          runtime.resizeModeStretchLabel = stringResource(Res.string.compose_player_resize_stretch)
@@ -557,10 +557,10 @@ index ee47881ad..b209fbd70 100644
          runtime.airsPrefix = stringResource(Res.string.compose_player_airs_prefix)
          runtime.tbaLabel = stringResource(Res.string.compose_player_tba)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-index cedd387db..fd1593ead 100644
+index 54310b1f9..5dccce839 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-@@ -363,6 +363,7 @@ internal fun PlayerScreenRuntime.cycleResizeMode() {
+@@ -364,6 +364,7 @@ internal fun PlayerScreenRuntime.cycleResizeMode() {
              PlayerResizeMode.Fill -> resizeModeFillLabel
              PlayerResizeMode.Zoom -> resizeModeZoomLabel
              PlayerResizeMode.Stretch -> resizeModeStretchLabel
@@ -569,10 +569,10 @@ index cedd387db..fd1593ead 100644
      )
      controlsVisible = true
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-index acf9c004a..dd82e0ea0 100644
+index 11a042d4d..2f02e5060 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-@@ -142,6 +142,7 @@ internal class PlayerScreenRuntime(
+@@ -145,6 +145,7 @@ internal class PlayerScreenRuntime(
      var resizeModeFillLabel: String = ""
      var resizeModeZoomLabel: String = ""
      var resizeModeStretchLabel: String = ""
@@ -581,10 +581,10 @@ index acf9c004a..dd82e0ea0 100644
      var airsPrefix: String = ""
      var tbaLabel: String = ""
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
-index dad2db423..b47200945 100644
+index 45935345a..2d614223e 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
-@@ -259,6 +259,13 @@ private fun NativePlayerSurface(
+@@ -260,6 +260,13 @@ private fun NativePlayerSurface(
          controller.setResizeMode(resizeMode)
      }
  
@@ -614,7 +614,7 @@ index 7c78fc633..2bd979be8 100644
      external fun positionMs(handle: Long): Long
      external fun bufferedPositionMs(handle: Long): Long
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 1bee68c60..e377b5b62 100644
+index 8b172e628..6117b8191 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 @@ -22,6 +22,10 @@ import com.nuvio.app.features.player.PlayerMediaInfo
@@ -628,7 +628,7 @@ index 1bee68c60..e377b5b62 100644
  import com.nuvio.app.features.player.SUBTITLE_DELAY_MAX_MS
  import com.nuvio.app.features.player.findPreferredAudioTrackIndex
  import com.nuvio.app.features.player.SUBTITLE_DELAY_MIN_MS
-@@ -535,9 +539,57 @@ internal class NativePlayerController(
+@@ -548,9 +552,57 @@ internal class NativePlayerController(
                      PlayerResizeMode.Fill -> 1
                      PlayerResizeMode.Zoom -> 2
                      PlayerResizeMode.Stretch -> 3
@@ -687,7 +687,7 @@ index 1bee68c60..e377b5b62 100644
  
      private fun handlePlayerEvent(type: String, value: Double) {
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-index 01ffd80ea..a1e872e7b 100644
+index 87d13c704..a43e791d7 100644
 --- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 @@ -26,6 +26,7 @@
@@ -698,7 +698,7 @@ index 01ffd80ea..a1e872e7b 100644
  #include <cstring>
  #include <functional>
  #include <mutex>
-@@ -1515,6 +1516,77 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
+@@ -1600,6 +1601,77 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
      return JNI_VERSION_1_6;
  }
  
@@ -776,7 +776,7 @@ index 01ffd80ea..a1e872e7b 100644
  extern "C" {
  
  #define NP(name) \
-@@ -1865,9 +1937,11 @@ JNIEXPORT jfloat JNICALL NP(speed)(JNIEnv *, jobject, jlong handle) {
+@@ -1950,9 +2022,11 @@ JNIEXPORT jfloat JNICALL NP(speed)(JNIEnv *, jobject, jlong handle) {
  JNIEXPORT void JNICALL NP(setResizeMode)(JNIEnv *, jobject, jlong handle, jint mode) {
      Player *p = asPlayer(handle);
      if (!p) return;
@@ -790,7 +790,7 @@ index 01ffd80ea..a1e872e7b 100644
                  mpv_set_property_string(p->mpv, "panscan", "0.0");
                  mpv_set_property_string(p->mpv, "video-unscaled", "no"); break;
          case 1:
-@@ -1880,6 +1954,35 @@ JNIEXPORT void JNICALL NP(setResizeMode)(JNIEnv *, jobject, jlong handle, jint m
+@@ -1965,6 +2039,35 @@ JNIEXPORT void JNICALL NP(setResizeMode)(JNIEnv *, jobject, jlong handle, jint m
      }
  }
  
@@ -827,7 +827,7 @@ index 01ffd80ea..a1e872e7b 100644
  
  JNIEXPORT jstring JNICALL NP(audioTracksJson)(JNIEnv *env, jobject, jlong handle) {
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index e03330be4..700ffa114 100644
+index 1bc6308ef..57424e528 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
 @@ -13,9 +13,12 @@
@@ -840,10 +840,10 @@ index e03330be4..700ffa114 100644
  #include <cmath>
 +#include <cstdint>
 +#include <cstring>
+ #include <dlfcn.h>
  #include <mutex>
  #include <string>
- #include <vector>
-@@ -119,6 +122,71 @@ static constexpr double kMaxVolumePercent = 200.0;
+@@ -119,6 +122,71 @@ - (void)mouseDown:(NSEvent *)event {
  
  @end
  
@@ -915,7 +915,7 @@ index e03330be4..700ffa114 100644
  @interface MpvWebPlayer : NSObject
  - (instancetype)initWithHostView:(NSView *)hostView
                         sourceUrl:(NSString *)sourceUrl
-@@ -144,6 +212,8 @@ static constexpr double kMaxVolumePercent = 200.0;
+@@ -144,6 +212,8 @@ - (double)speed;
  - (void)setVolume:(double)level;
  - (double)volume;
  - (void)setResizeMode:(int)mode;
@@ -924,7 +924,7 @@ index e03330be4..700ffa114 100644
  - (long long)durationMs;
  - (long long)positionMs;
  - (long long)bufferedPositionMs;
-@@ -2314,14 +2384,17 @@ static void nuvioMpvWakeup(void *ctx) {
+@@ -2314,14 +2384,17 @@ - (void)setResizeMode:(int)mode {
              panscan = @"1.0";
              break;
          case 3:
@@ -942,7 +942,7 @@ index e03330be4..700ffa114 100644
          [self setStringProperty:"keepaspect" value:keepAspect];
          [self setStringProperty:"panscan" value:panscan];
          [self setStringProperty:"video-unscaled" value:@"no"];
-@@ -2333,12 +2406,63 @@ static void nuvioMpvWakeup(void *ctx) {
+@@ -2333,12 +2406,63 @@ - (void)setResizeMode:(int)mode {
          if (!mpv) {
              return;
          }
@@ -1006,7 +1006,7 @@ index e03330be4..700ffa114 100644
  - (long long)durationMs {
      return (long long)llround(fmax(_cachedDurationSeconds.load(), 0.0) * 1000.0);
  }
-@@ -3570,6 +3694,37 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_volume(
+@@ -3570,6 +3694,37 @@ static void throwJavaError(JNIEnv *env, NSString *message) {
      return (jfloat)[player volume];
  }
  
@@ -1045,7 +1045,7 @@ index e03330be4..700ffa114 100644
  Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setResizeMode(
      JNIEnv * /* env */,
 diff --git a/composeApp/src/desktopMain/native/windows/player_bridge.cpp b/composeApp/src/desktopMain/native/windows/player_bridge.cpp
-index 8d9ea4050..cc6e6dceb 100644
+index 39826edc4..d22c73c4c 100644
 --- a/composeApp/src/desktopMain/native/windows/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/windows/player_bridge.cpp
 @@ -19,6 +19,7 @@
@@ -1266,10 +1266,10 @@ index 8d9ea4050..cc6e6dceb 100644
  Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_audioTracksJson(JNIEnv *env, jobject, jlong handle) {
      auto player = playerFromHandle(handle);
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerEngine.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerEngine.ios.kt
-index 59e836b74..6804e2b5a 100644
+index b1b5869be..247bf3c24 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerEngine.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerEngine.ios.kt
-@@ -333,6 +333,7 @@ actual fun PlatformPlayerSurface(
+@@ -368,6 +368,7 @@ actual fun PlatformPlayerSurface(
                  PlayerResizeMode.Fill -> 1
                  PlayerResizeMode.Zoom -> 2
                  PlayerResizeMode.Stretch -> 0

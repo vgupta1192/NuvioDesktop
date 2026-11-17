@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 482893c16..959958bf8 100644
+index 82d79c049..79a0b7dc1 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -72,6 +72,10 @@ internal class NativePlayerController(
+@@ -73,6 +73,10 @@ internal class NativePlayerController(
      private val releaseTimeoutMs: Long = 10_000L,
      private val onCreateWaitCompleted: () -> Unit = {},
  ) : PlayerEngineController {
@@ -13,7 +13,7 @@ index 482893c16..959958bf8 100644
      private companion object {
          val json = Json { ignoreUnknownKeys = true }
          val log = Logger.withTag("NativePlayerControls")
-@@ -657,6 +661,56 @@ internal class NativePlayerController(
+@@ -671,6 +675,56 @@ internal class NativePlayerController(
          }
      }
  
@@ -70,7 +70,7 @@ index 482893c16..959958bf8 100644
      private fun refreshControlsForEnhance() {
          SwingUtilities.invokeLater {
              lastSentControlsStructureKey = null
-@@ -1804,7 +1858,10 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+@@ -1861,7 +1915,10 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
          append(',')
          appendJsonField("streamInfoLabel", streamInfoLabel)
          append(',')
@@ -82,7 +82,7 @@ index 482893c16..959958bf8 100644
              append("{\"title\":").append(section.title.toJsonString())
              append(",\"logo\":").append((section.logo ?: "").toJsonString())
              append(",\"name\":").append((section.name ?: "").toJsonString())
-@@ -1819,6 +1876,11 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+@@ -1876,6 +1933,11 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
              }
              append("]}")
          }

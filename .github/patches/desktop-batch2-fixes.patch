@@ -45,10 +45,10 @@ index 4d272724c..cf8a9d46b 100644
                          loader.diskCache?.clear()
                          cleared = true
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index c8b0266bb..482893c16 100644
+index a0397baf2..82d79c049 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -627,7 +627,7 @@ internal class NativePlayerController(
+@@ -641,7 +641,7 @@ internal class NativePlayerController(
              "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
              "autoSyncRetry" -> com.nuvio.app.features.player.DesktopAutoSyncRetry.retry()
              "enh.sleep" -> {

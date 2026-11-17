@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index ae535f3f1..acff04a82 100644
+index 740bd4895..f7dda1da8 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -532,6 +532,8 @@
+@@ -539,6 +539,8 @@
      <string name="compose_settings_page_poster_customization">Poster Card Style</string>
      <string name="compose_settings_page_privacy_policy">Privacy Policy</string>
      <string name="compose_settings_page_root">Settings</string>
@@ -86,7 +86,7 @@ index 5bfa1c5f2..83c0832e1 100644
                              page = SettingsPage.Advanced,
                              description = Res.string.compose_settings_root_advanced_description,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
-index 786dc9fc6..7df1b9a13 100644
+index 7ebe08ac8..fe6d246f8 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt
 @@ -723,6 +723,7 @@ private fun MobileSettingsScreen(
@@ -97,7 +97,7 @@ index 786dc9fc6..7df1b9a13 100644
                  SettingsPage.Advanced -> advancedSettingsContent(
                      isTablet = false,
                      rememberLastProfileEnabled = rememberLastProfileEnabled,
-@@ -1135,6 +1136,7 @@ private fun TabletSettingsScreen(
+@@ -1136,6 +1137,7 @@ private fun TabletSettingsScreen(
                              onTestUpdateBannerClick = onTestUpdateBannerClick,
                              showSupportersContributorsPage = AppFeaturePolicy.supportersContributorsPageEnabled,
                          )

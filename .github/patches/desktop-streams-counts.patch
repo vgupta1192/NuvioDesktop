@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ProviderFilterRow.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ProviderFilterRow.kt
-index 5ac7fe9c4..175939720 100644
+index 55d29ae8b..cde00faf1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ProviderFilterRow.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/ProviderFilterRow.kt
-@@ -64,7 +64,12 @@ internal fun ProviderFilterRow(
+@@ -65,7 +65,12 @@ internal fun ProviderFilterRow(
      },
      filterChip: @Composable (AddonStreamGroup?, Boolean, () -> Unit) -> Unit = { group, isSelected, onClick ->
          FilterChip(

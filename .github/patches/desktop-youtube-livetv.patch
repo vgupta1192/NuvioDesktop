@@ -1,6 +1,6 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncLiveSources.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncLiveSources.kt
 new file mode 100644
-index 00000000..aa33e9ee
+index 000000000..aa33e9ee6
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/autosync/AutoSyncLiveSources.kt
 @@ -0,0 +1,20 @@
@@ -25,7 +25,7 @@ index 00000000..aa33e9ee
 +    fun isLive(url: String): Boolean = url in urls
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeCatalogDefinitions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeCatalogDefinitions.kt
-index 23b4e2d0..683ab2a4 100644
+index 23b4e2d0a..683ab2a4b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeCatalogDefinitions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeCatalogDefinitions.kt
 @@ -49,7 +49,7 @@ fun buildHomeCatalogDefinitions(addons: List<ManagedAddon>): List<HomeCatalogDef
@@ -39,7 +39,7 @@ index 23b4e2d0..683ab2a4 100644
                      key = "${manifest.id}:${catalog.type}:${catalog.id}",
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvCatalogFilter.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvCatalogFilter.kt
 new file mode 100644
-index 00000000..bcce7ffb
+index 000000000..bcce7ffb1
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvCatalogFilter.kt
 @@ -0,0 +1,45 @@
@@ -89,7 +89,7 @@ index 00000000..bcce7ffb
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
-index 5f9232ef..bf68d361 100644
+index 5f9232efc..bf68d361f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
 @@ -7,7 +7,9 @@ import com.nuvio.app.features.addons.buildAddonResourceUrl
@@ -162,7 +162,7 @@ index 5f9232ef..bf68d361 100644
  
      private fun loadSet(key: String): Set<String>? =
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
-index 57bea73c..5feacfa3 100644
+index 57bea73c7..5feacfa3e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchRepository.kt
 @@ -450,7 +450,7 @@ object SearchRepository {
@@ -184,7 +184,7 @@ index 57bea73c..5feacfa3 100644
                      val genreExtra = catalog.genreExtra()
                      DiscoverCatalogOption(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/YouTubeStreamResolver.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/YouTubeStreamResolver.kt
-index 9f7e1dc5..8d120ad1 100644
+index 9f7e1dc54..8d120ad18 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/YouTubeStreamResolver.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/YouTubeStreamResolver.kt
 @@ -36,5 +36,15 @@ class YouTubeStreamResolver(
@@ -205,7 +205,7 @@ index 9f7e1dc5..8d120ad1 100644
  }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeDiag.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeDiag.kt
 new file mode 100644
-index 00000000..e6fb99ea
+index 000000000..e6fb99ea0
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeDiag.kt
 @@ -0,0 +1,97 @@
@@ -307,10 +307,10 @@ index 00000000..e6fb99ea
 +        }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
-index 7d4b9279..7e667027 100644
+index 0e3bde979..01aa58d23 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
-@@ -231,6 +231,7 @@ private fun NativePlayerSurface(
+@@ -232,6 +232,7 @@ private fun NativePlayerSurface(
              return@LaunchedEffect
          }
          delay(16L)
@@ -318,7 +318,7 @@ index 7d4b9279..7e667027 100644
          controller.attach(
              sourceUrl = sourceUrl,
              sourceHeaders = playbackHeaders,
-@@ -238,7 +239,10 @@ private fun NativePlayerSurface(
+@@ -239,7 +240,10 @@ private fun NativePlayerSurface(
              initialPositionMs = initialPositionMs,
              decoderPriority = decoderPriority,
              nvidiaRtxSuperResolutionEnabled = nvidiaRtxSuperResolutionEnabled,
@@ -330,7 +330,7 @@ index 7d4b9279..7e667027 100644
          )
          initialPositionRequestKey?.let { key ->
              latestOnInitialPositionHandled.value(key, initialPositionMs > 0L)
-@@ -293,7 +297,11 @@ private fun NativePlayerSurface(
+@@ -294,7 +298,11 @@ private fun NativePlayerSurface(
  
      LaunchedEffect(controller) {
          while (true) {
@@ -344,7 +344,7 @@ index 7d4b9279..7e667027 100644
          }
      }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-index 90de7dd9..66e470f5 100644
+index 90de7dd93..66e470f58 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -126,6 +126,14 @@ internal object GeneratedSubtitlesDesktop {

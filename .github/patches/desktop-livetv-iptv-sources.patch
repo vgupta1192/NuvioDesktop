@@ -1,6 +1,6 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/IptvSources.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/IptvSources.kt
 new file mode 100644
-index 00000000..2442b6bf
+index 000000000..2442b6bfa
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/IptvSources.kt
 @@ -0,0 +1,342 @@
@@ -348,7 +348,7 @@ index 00000000..2442b6bf
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/IptvSourcesUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/IptvSourcesUi.kt
 new file mode 100644
-index 00000000..24296a06
+index 000000000..24296a06c
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/IptvSourcesUi.kt
 @@ -0,0 +1,197 @@
@@ -550,7 +550,7 @@ index 00000000..24296a06
 +    )
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
-index 66cac7fa..614019a3 100644
+index 66cac7fa1..614019a3b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvEpgRepository.kt
 @@ -42,6 +42,7 @@ object LiveTvEpgRepository {
@@ -608,7 +608,7 @@ index 66cac7fa..614019a3 100644
          val norm = normalize(channelName)
          if (norm.isBlank()) return null
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
-index a7f9c85c..fe36dad0 100644
+index a7f9c85c3..fe36dad03 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
 @@ -21,6 +21,13 @@ data class LiveTvChannel(
@@ -636,7 +636,7 @@ index a7f9c85c..fe36dad0 100644
      fun isFavorite(channel: LiveTvChannel): Boolean = favoriteKeys.contains(channel.stableKey())
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
-index bf68d361..9c2cab2c 100644
+index bf68d361f..9c2cab2c3 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
 @@ -7,8 +7,10 @@ import com.nuvio.app.features.addons.buildAddonResourceUrl
@@ -829,7 +829,7 @@ index bf68d361..9c2cab2c 100644
          val manifest = addon?.manifest
          val payload = fetchAddonResponseText(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
-index 35023b39..fc5b1ce0 100644
+index 35023b39e..fc5b1ce06 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
 @@ -192,6 +192,7 @@ private fun LiveTvSidebar(

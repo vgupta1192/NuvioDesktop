@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index fa2c7ec5..372a8ac2 100644
+index b0e07fed4..06c3b4d0e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -124,6 +124,7 @@ import com.nuvio.app.features.jellyfin.JELLYFIN_META_ID_PREFIX
+@@ -126,6 +126,7 @@ import com.nuvio.app.features.jellyfin.JELLYFIN_META_ID_PREFIX
  import com.nuvio.app.features.jellyfin.JellyfinDetailScreen
  import com.nuvio.app.features.jellyfin.JellyfinItem
  import com.nuvio.app.features.jellyfin.JellyfinLauncher
@@ -10,7 +10,7 @@ index fa2c7ec5..372a8ac2 100644
  import com.nuvio.app.features.jellyfin.JellyfinRepository
  import com.nuvio.app.features.jellyfin.JellyfinScreen
  import com.nuvio.app.features.library.LibraryItem
-@@ -963,31 +964,36 @@ internal fun MainAppContent(
+@@ -980,31 +981,36 @@ internal fun MainAppContent(
              val session = JellyfinRepository.uiState.value.session ?: return
              val sourceUrl = JellyfinRepository.streamUrlFor(item) ?: return
              val isEpisode = item.isEpisode
@@ -72,7 +72,7 @@ index fa2c7ec5..372a8ac2 100644
  
          fun openExternalStreamUrl(url: String): Boolean {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
-index 5e8fd447..b1b97c1f 100644
+index 5e8fd4479..b1b97c1f1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/jellyfin/JellyfinClient.kt
 @@ -1,8 +1,12 @@

@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
-index d5e1f95da..b532897de 100644
+index 3ca2766a5..7739acce6 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
-@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
+@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
  import androidx.compose.runtime.Composable
  import androidx.compose.runtime.key
  import androidx.compose.runtime.LaunchedEffect
@@ -10,7 +10,7 @@ index d5e1f95da..b532897de 100644
  import androidx.compose.runtime.getValue
  import androidx.compose.runtime.mutableStateOf
  import androidx.compose.runtime.remember
-@@ -161,9 +162,11 @@ fun HomeHeroSection(
+@@ -157,9 +158,11 @@ fun HomeHeroSection(
          }
      }
  

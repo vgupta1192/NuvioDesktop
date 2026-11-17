@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
-index f789520a..2d0026de 100644
+index f789520ac..2d0026de9 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
 @@ -200,6 +200,9 @@ object BlackBarDetector {
@@ -244,10 +244,10 @@ index f789520a..2d0026de 100644
      }
  }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
-index b4720094..7d4b9279 100644
+index 2d614223e..0e3bde979 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
-@@ -264,6 +264,7 @@ private fun NativePlayerSurface(
+@@ -265,6 +265,7 @@ private fun NativePlayerSurface(
          sourceKey = listOf(controller, sourceUrl),
          sample = { controller.sampleCustomStretchContent() },
          onContentRect = { rect -> controller.setCustomStretchContent(rect) },

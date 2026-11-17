@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
-index 2ec04512..c81dcf1d 100644
+index 2ec04512b..c81dcf1d1 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngineAutoSync.desktop.kt
 @@ -55,6 +55,11 @@ internal class AutoSyncNativePlayerController(
@@ -102,10 +102,10 @@ index 2ec04512..c81dcf1d 100644
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 0ed7a905..a3be3a8f 100644
+index 38baa812a..51d82ae23 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -624,6 +624,7 @@ internal class NativePlayerController(
+@@ -638,6 +638,7 @@ internal class NativePlayerController(
                  }
              }
              "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
@@ -114,10 +114,10 @@ index 0ed7a905..a3be3a8f 100644
              "enh.pic.brightness", "enh.pic.contrast", "enh.pic.saturation", "enh.pic.gamma",
              "enh.pic.hue", "enh.pic.deband", "enh.audio.gain", "enh.audio.norm", "enh.audio.eq" ->
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
-index 407df2b1..7363584c 100644
+index 18fbc510c..332382b0a 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.html
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.html
-@@ -394,6 +394,7 @@
+@@ -428,6 +428,7 @@
                      <div class="style-control-row">
                        <button class="panel-button" id="autoSyncReload" type="button">Reload</button>
                        <button class="panel-button" id="autoSyncCapture" type="button">Capture</button>
@@ -126,10 +126,10 @@ index 407df2b1..7363584c 100644
                      <div class="stream-subtitle" id="autoSyncStatus"></div>
                      <div id="autoSyncCueList"></div>
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index 30252521..47f35ac9 100644
+index 9d381284b..0d332a2ba 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
-@@ -114,6 +114,7 @@ const subtitleDelayReset = document.getElementById("subtitleDelayReset");
+@@ -111,6 +111,7 @@ const subtitleDelayReset = document.getElementById("subtitleDelayReset");
  const autoSyncLabel = document.getElementById("autoSyncLabel");
  const autoSyncReload = document.getElementById("autoSyncReload");
  const autoSyncCapture = document.getElementById("autoSyncCapture");
@@ -137,7 +137,7 @@ index 30252521..47f35ac9 100644
  const autoSyncStatus = document.getElementById("autoSyncStatus");
  const autoSyncCueList = document.getElementById("autoSyncCueList");
  const fontSizeLabel = document.getElementById("fontSizeLabel");
-@@ -1603,6 +1604,7 @@ const renderAutoSyncCues = () => {
+@@ -1667,6 +1668,7 @@ const renderAutoSyncCues = () => {
    autoSyncCueList.textContent = "";
    autoSyncReload.disabled = !state.hasSelectedAddonSubtitle;
    autoSyncCapture.disabled = !state.hasSelectedAddonSubtitle;
@@ -145,7 +145,7 @@ index 30252521..47f35ac9 100644
    if (!state.hasSelectedAddonSubtitle) {
      autoSyncStatus.textContent = state.selectAddonSubtitleFirstLabel || "Select an addon subtitle first";
      return;
-@@ -3378,6 +3380,10 @@ autoSyncReload.addEventListener("click", event => {
+@@ -3492,6 +3494,10 @@ autoSyncReload.addEventListener("click", event => {
    event.stopPropagation();
    send("subtitleAutoSyncReload", 0);
  });

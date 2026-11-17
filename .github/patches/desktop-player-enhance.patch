@@ -192,10 +192,12 @@ index 000000000..8ed43fb62
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-index 7fe464e24..0107cce5d 100644
+index e6e05c3df..1690e8264 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-@@ -62,4 +62,5 @@ fun main(args: Array<String>) {
+@@ -64,6 +64,7 @@ fun main(args: Array<String>) {
+     applyDesktopRendererPreference()
+     SentryInitializer.start()
      com.nuvio.app.features.player.autosync.AutoSyncPreferencesPlatform.install() // AutoSync hook: mobile-style rows persist on desktop
 +    com.nuvio.app.features.player.DesktopPlayerEnhance.install() // Nuvio fork: picture & sound prefs
      configureDesktopQuickJsLibrary()
@@ -445,10 +447,10 @@ index 000000000..3b147ac34
 +    private const val YOUTUBE_HLS_CAP_BPS = 2_500_000
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index e377b5b62..6c00faa23 100644
+index 6117b8191..38baa812a 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -344,6 +344,8 @@ internal class NativePlayerController(
+@@ -345,6 +345,8 @@ internal class NativePlayerController(
                      com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.activeHandle = created
                      com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.applyToPlayer()
                      com.nuvio.app.features.player.ConnectionFitDesktopFeed.start(created)
@@ -457,7 +459,7 @@ index e377b5b62..6c00faa23 100644
                      SwingUtilities.invokeLater {
                          val shouldConfigure = synchronized(lifecycleLock) {
                              when {
-@@ -623,6 +625,10 @@ internal class NativePlayerController(
+@@ -636,6 +638,10 @@ internal class NativePlayerController(
                  }
              }
              "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
@@ -468,7 +470,7 @@ index e377b5b62..6c00faa23 100644
              "volumeChange" -> setFallbackVolume(value.toFloat())
              "volumeChangeTemporary" -> setTemporaryVolume(value.toFloat())
              "setPlaybackSpeed" -> {
-@@ -646,6 +652,13 @@ internal class NativePlayerController(
+@@ -659,6 +665,13 @@ internal class NativePlayerController(
          }
      }
  
@@ -482,7 +484,7 @@ index e377b5b62..6c00faa23 100644
      @Synchronized
      private fun updateLocalProgress(positionMs: Long) {
          controlsState = controlsState.copy(positionMs = positionMs)
-@@ -1000,6 +1013,7 @@ internal class NativePlayerController(
+@@ -1016,6 +1029,7 @@ internal class NativePlayerController(
       */
      private fun invalidateHandleUsersBeforeDispose(current: Long) {
          com.nuvio.app.features.player.ConnectionFitDesktopFeed.stop()
@@ -490,7 +492,7 @@ index e377b5b62..6c00faa23 100644
          com.nuvio.app.features.player.generated.GeneratedSubtitlesDesktop.onPlayerHandleDisposed(current)
          com.nuvio.app.features.player.NativePlayerBridgeSubtitleFont.clearActiveHandle(current)
      }
-@@ -1824,6 +1838,8 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+@@ -1842,6 +1856,8 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
              }
              append("]}")
          }
@@ -500,10 +502,10 @@ index e377b5b62..6c00faa23 100644
          append(partyJson.encodeToString(PlayerControlPartyState.serializer(), party.withWebviewImages(onImageReady)))
          append('}')
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/composeApp/src/desktopMain/resources/player-ui/controls.css
-index ef1f7b190..173d95ee6 100644
+index 0249e5d45..a1e6bdee3 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.css
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
-@@ -3904,3 +3904,10 @@ svg {
+@@ -3913,3 +3913,10 @@ svg {
    align-items: center;
    gap: 6px;
  }
@@ -540,7 +542,7 @@ index 556d6e793..18fbc510c 100644
          <div class="track-panel audio-rail-panel">
            <div class="track-header" id="audioPanelTitle">Audio tracks</div>
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index a5c386aad..dcb8c4a10 100644
+index ecedc9232..9d381284b 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
 @@ -87,6 +87,8 @@ const chaptersPanelTitle = document.getElementById("chaptersPanelTitle");
@@ -552,7 +554,7 @@ index a5c386aad..dcb8c4a10 100644
  const subtitleModal = document.getElementById("subtitleModal");
  const speedModal = document.getElementById("speedModal");
  const speedOptionList = document.getElementById("speedOptionList");
-@@ -1060,6 +1062,7 @@ const modalByName = {
+@@ -1098,6 +1100,7 @@ const modalByName = {
    audio: audioModal,
    subtitles: subtitleModal,
    speed: speedModal,
@@ -560,7 +562,7 @@ index a5c386aad..dcb8c4a10 100644
    sources: sourceModal,
    episodes: episodesModal,
    chapters: chaptersModal,
-@@ -1226,6 +1229,140 @@ const renderSpeedOptionList = () => {
+@@ -1264,6 +1267,140 @@ const renderSpeedOptionList = () => {
    });
  };
  
@@ -701,7 +703,7 @@ index a5c386aad..dcb8c4a10 100644
  const renderAudioTrackList = () => {
    audioPanelTitle.textContent = state.audioTracksPanelTitle || "Audio Tracks";
    audioTrackList.textContent = "";
-@@ -2453,6 +2590,7 @@ const renderActiveModal = (modalOpened = false) => {
+@@ -2472,6 +2609,7 @@ const renderActiveModal = (modalOpened = false) => {
    if (activeModal === "audio") renderAudioTrackList();
    if (activeModal === "subtitles") renderSubtitleModal();
    if (activeModal === "speed") renderSpeedOptionList();
@@ -709,7 +711,7 @@ index a5c386aad..dcb8c4a10 100644
    if (activeModal === "sources") renderSourceModal(modalOpened);
    if (activeModal === "episodes") renderEpisodesModal(modalOpened);
    if (activeModal === "chapters") renderChaptersModal(modalOpened);
-@@ -3244,6 +3382,11 @@ document.querySelectorAll("[data-command]").forEach(button => {
+@@ -3274,6 +3412,11 @@ document.querySelectorAll("[data-command]").forEach(button => {
        openPlayerModal("speed");
        return;
      }

@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamModels.kt
-index 28bee257e..27f669a7a 100644
+index b380ba0bf..99b98efaa 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamModels.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamModels.kt
-@@ -325,6 +325,13 @@ data class StreamsUiState(
+@@ -327,6 +327,13 @@ data class StreamsUiState(
      val isDirectAutoPlayFlow: Boolean = false,
      val showDirectAutoPlayOverlay: Boolean = false,
      val overlayMessage: String? = null,
@@ -79,7 +79,7 @@ index 000000000..ab11b6d20
 +    )
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index e6998a680..64ca13ad8 100644
+index 5370f66b6..87bb8339c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 @@ -517,6 +517,7 @@ private fun MobileStreamsLayout(

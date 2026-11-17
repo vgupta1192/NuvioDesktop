@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonsScreen.kt
-index 6ac35ff4d..db2446f2e 100644
+index 3833fbcee..08478e161 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonsScreen.kt
-@@ -184,6 +184,8 @@ internal fun AddonsSettingsPageContent(
+@@ -190,6 +190,8 @@ internal fun AddonsSettingsPageContent(
                  )
              }
          }

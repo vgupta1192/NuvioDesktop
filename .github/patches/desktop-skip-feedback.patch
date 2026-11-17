@@ -57,10 +57,10 @@ index 36f5ef695..2ce123eaa 100644
          SkipIntroButton(
              interval = if (!initialLoadCompleted || pausedOverlayVisible) null else activeSkipInterval,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-index 38583fa50..59568be0f 100644
+index dcccae005..9f2f012b1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-@@ -248,6 +248,25 @@ internal fun PlayerScreenRuntime.skipInterval(interval: SkipInterval) {
+@@ -249,6 +249,25 @@ internal fun PlayerScreenRuntime.skipInterval(interval: SkipInterval) {
      scheduleProgressSyncAfterSeek()
      publishPartyPlayback(positionMs = seekMs)
      skipIntervalDismissed = true
@@ -87,10 +87,10 @@ index 38583fa50..59568be0f 100644
  
  internal fun PlayerScreenRuntime.setPlaybackPlaying(playing: Boolean) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-index b38eca5c2..5051f059a 100644
+index 2f02e5060..740291fdf 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-@@ -257,6 +257,9 @@ internal class PlayerScreenRuntime(
+@@ -267,6 +267,9 @@ internal class PlayerScreenRuntime(
      var lastManualSkipSeekPositions by mutableStateOf<Pair<Long, Long>?>(null)
      var activeSkipInterval by mutableStateOf<SkipInterval?>(null)
      var skipIntervalDismissed by mutableStateOf(false)
@@ -101,10 +101,10 @@ index b38eca5c2..5051f059a 100644
      var parentalWarnings by mutableStateOf<List<ParentalWarning>>(emptyList())
      var showParentalGuide by mutableStateOf(false)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 7c711ad72..706baa515 100644
+index 1ddcc3496..af79b283d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -1832,6 +1832,16 @@ private fun BoxScope.RenderPlaybackOverlays(
+@@ -1925,6 +1925,16 @@ private fun BoxScope.RenderPlaybackOverlays(
              controlsVisible = controlsVisible,
              onSkipInterval = { interval -> skipInterval(interval) },
              onDismissSkipInterval = { skipIntervalDismissed = true },

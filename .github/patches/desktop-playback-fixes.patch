@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
-index 2d0026de..a4507aad 100644
+index 2d0026de9..a4507aad0 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/CustomStretch.kt
 @@ -101,6 +101,8 @@ class BarSample(
@@ -210,7 +210,7 @@ index 2d0026de..a4507aad 100644
  
          /** Longest side of the sampled frame. Enough to place bar edges within ~0.3%. */
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
-index 3b147ac3..b87149d3 100644
+index 3b147ac34..b87149d3a 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopPlayerEnhance.kt
 @@ -23,6 +23,8 @@ internal object DesktopPlayerEnhance {
@@ -328,7 +328,7 @@ index 3b147ac3..b87149d3 100644
      private const val YOUTUBE_HLS_CAP_BPS = 2_500_000
  }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeDiag.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeDiag.kt
-index e6fb99ea..15afb8ec 100644
+index e6fb99ea0..15afb8ec0 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeDiag.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeDiag.kt
 @@ -19,7 +19,7 @@ internal object DesktopYouTubeDiag {
@@ -351,7 +351,7 @@ index e6fb99ea..15afb8ec 100644
      fun onSnapshot(snapshot: PlayerPlaybackSnapshot) {
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeHls.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeHls.kt
 new file mode 100644
-index 00000000..9664ed88
+index 000000000..9664ed88f
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/DesktopYouTubeHls.kt
 @@ -0,0 +1,368 @@
@@ -724,7 +724,7 @@ index 00000000..9664ed88
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
-index 7e667027..497f2025 100644
+index 01aa58d23..62981cc85 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 @@ -1,5 +1,6 @@
@@ -734,7 +734,7 @@ index 7e667027..497f2025 100644
  import androidx.compose.foundation.background
  import androidx.compose.foundation.layout.Arrangement
  import androidx.compose.foundation.layout.Box
-@@ -231,9 +232,14 @@ private fun NativePlayerSurface(
+@@ -232,9 +233,14 @@ private fun NativePlayerSurface(
              return@LaunchedEffect
          }
          delay(16L)
@@ -752,7 +752,7 @@ index 7e667027..497f2025 100644
              playWhenReady = playWhenReady,
              initialPositionMs = initialPositionMs,
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
-index 3d5f5e47..1fe50862 100644
+index 3d5f5e47d..1fe50862e 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/HlsAudioSpotSampler.kt
 @@ -157,9 +157,23 @@ internal object HlsAudioSpotSampler {
@@ -813,7 +813,7 @@ index 3d5f5e47..1fe50862 100644
      private fun le16(b: ByteArray, i: Int): Int = (b[i].toInt() and 0xFF) or ((b[i + 1].toInt() and 0xFF) shl 8)
  }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
-index a2496cd6..d8c332a3 100644
+index a2496cd6c..d8c332a32 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/audiosync/SpeechAutoSyncEngine.kt
 @@ -337,11 +337,23 @@ internal object SpeechAutoSyncEngine {
@@ -844,10 +844,10 @@ index a2496cd6..d8c332a3 100644
          } finally {
              wav.delete()
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index a3be3a8f..2b8647f8 100644
+index 51d82ae23..569b98d84 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -625,7 +625,7 @@ internal class NativePlayerController(
+@@ -639,7 +639,7 @@ internal class NativePlayerController(
              }
              "dragWindow" -> NativePlayerBridge.beginWindowDrag(handle)
              "autoSyncRetry" -> com.nuvio.app.features.player.DesktopAutoSyncRetry.retry()
@@ -856,7 +856,7 @@ index a3be3a8f..2b8647f8 100644
              "enh.pic.brightness", "enh.pic.contrast", "enh.pic.saturation", "enh.pic.gamma",
              "enh.pic.hue", "enh.pic.deband", "enh.audio.gain", "enh.audio.norm", "enh.audio.eq" ->
                  com.nuvio.app.features.player.DesktopPlayerEnhance.handleEvent(type, value)
-@@ -1175,6 +1175,20 @@ internal class NativePlayerController(
+@@ -1192,6 +1192,20 @@ internal class NativePlayerController(
      override fun setSubtitleUri(url: String) {
          log.d { "setSubtitleUri ${url.toPlaybackLogKey()} handle=$handle" }
          handle.takeIf { it != 0L }?.let { current ->
@@ -878,7 +878,7 @@ index a3be3a8f..2b8647f8 100644
              NativePlayerBridge.addSubtitleUrl(current, url)
          }
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
-index 66e470f5..0afd949e 100644
+index 66e470f58..0afd949e4 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/generated/GeneratedSubtitlesDesktop.kt
 @@ -23,9 +23,10 @@ import java.security.MessageDigest
@@ -937,10 +937,10 @@ index 66e470f5..0afd949e 100644
                  buildSrt(groqLines.map { it.startSec to it.endSec }, lines, startSec, cueIndex),
              )
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index ca4a9478..5e071fcd 100644
+index 9bb70ad67..ce96889f3 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-@@ -3956,33 +3956,24 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applySubtitleStyle
+@@ -4017,33 +4017,24 @@ static void throwJavaError(JNIEnv *env, NSString *message) {
  // Generated subtitles: dump [startSec, endSec) of url's audio as 16 kHz mono s16 WAV with a
  // headless mpv instance (ao=pcm + untimed decodes as fast as the demuxer allows). Blocking on
  // the calling thread - Kotlin dispatches it to IO.
@@ -988,7 +988,7 @@ index ca4a9478..5e071fcd 100644
      char optFail[512] = {};
      auto setOpt = [&](const char *name, const char *value) {
          if (mpv_set_option_string(mpv, name, value) < 0) {
-@@ -3990,117 +3981,142 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_dumpAudioWav(
+@@ -4051,117 +4042,142 @@ static void throwJavaError(JNIEnv *env, NSString *message) {
              strlcat(optFail, " ", sizeof(optFail));
          }
      };
@@ -1229,10 +1229,10 @@ index ca4a9478..5e071fcd 100644
 +    return ok ? JNI_TRUE : JNI_FALSE;
  }
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.css b/composeApp/src/desktopMain/resources/player-ui/controls.css
-index 48f4c025..aa7160b3 100644
+index a1e6bdee3..6c3619dff 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.css
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.css
-@@ -3874,3 +3874,12 @@ svg {
+@@ -3920,3 +3920,12 @@ svg {
  .enhance-row input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: #fff; }
  .enhance-value { font-variant-numeric: tabular-nums; opacity: .7; }
  .enhance-note { padding: 4px 16px 8px; opacity: .6; font-size: 13px; }
@@ -1246,7 +1246,7 @@ index 48f4c025..aa7160b3 100644
 +  fill: #ffd766;
 +}
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.html b/composeApp/src/desktopMain/resources/player-ui/controls.html
-index 7363584c..df95c458 100644
+index 332382b0a..9a7d7998b 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.html
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.html
 @@ -26,6 +26,9 @@
@@ -1268,7 +1268,7 @@ index 7363584c..df95c458 100644
              <button class="action optional" id="sourcesButton" data-command="sources"><svg><use href="#icon-source"></use></svg><span id="sourcesLabel">Sources</span></button>
              <button class="action optional" id="episodesButton" data-command="episodes"><svg><use href="#icon-episodes"></use></svg><span id="episodesLabel">Episodes</span></button>
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index 47f35ac9..8dd429bd 100644
+index 0d332a2ba..ddfb4e78f 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
 @@ -35,6 +35,7 @@ const streamTitle = document.getElementById("streamTitle");
@@ -1279,7 +1279,7 @@ index 47f35ac9..8dd429bd 100644
  const speedLabel = document.getElementById("speedLabel");
  const subtitlesLabel = document.getElementById("subtitlesLabel");
  const audioLabel = document.getElementById("audioLabel");
-@@ -1303,6 +1304,7 @@ const renderEnhanceModal = () => {
+@@ -1365,6 +1366,7 @@ const renderEnhanceModal = () => {
    }
  
    enhanceSection("Picture");
@@ -1287,17 +1287,17 @@ index 47f35ac9..8dd429bd 100644
    enhanceSliders.forEach(slider => {
      enhanceSlider(slider.label, Number(picture[slider.key]) || 0, slider.min, slider.max, "", value => send(slider.event, value));
    });
-@@ -2863,6 +2865,9 @@ const renderChrome = () => {
+@@ -2977,6 +2979,9 @@ const renderChrome = () => {
    setText(streamTitle, state.streamTitle);
    setText(providerName, state.providerName);
    renderPlayerBadges();
 +  const smartEnhanceOn = Boolean(state.enhance && state.enhance.smart);
 +  smartEnhanceButton.classList.toggle("is-active", smartEnhanceOn);
 +  smartEnhanceButton.setAttribute("aria-pressed", smartEnhanceOn ? "true" : "false");
-   resizeLabel.textContent = state.resizeModeLabel || "Fit";
-   speedLabel.textContent = state.playbackSpeedLabel || "1x";
-   subtitlesLabel.textContent = state.subtitlesLabel || "Subs";
-@@ -3300,6 +3305,10 @@ document.querySelectorAll("[data-command]").forEach(button => {
+   setTextContent(resizeLabel, state.resizeModeLabel || "Fit");
+   setTextContent(speedLabel, state.playbackSpeedLabel || "1x");
+   setTextContent(subtitlesLabel, state.subtitlesLabel || "Subs");
+@@ -3414,6 +3419,10 @@ document.querySelectorAll("[data-command]").forEach(button => {
        openPlayerModal("speed");
        return;
      }

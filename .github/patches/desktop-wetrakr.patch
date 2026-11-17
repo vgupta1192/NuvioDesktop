@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/tracking/TrackingProviderBootstrap.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/tracking/TrackingProviderBootstrap.kt
-index a4af5d7a5..0b80c2bd4 100644
+index 9834e8703..8faaa131e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/tracking/TrackingProviderBootstrap.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/tracking/TrackingProviderBootstrap.kt
-@@ -18,6 +18,7 @@ import com.nuvio.app.features.watching.sync.TraktWatchedSyncAdapter
+@@ -19,6 +19,7 @@ import com.nuvio.app.features.watching.sync.TraktWatchedSyncAdapter
  
  fun ensureTrackingProvidersRegistered() {
      MdbListTracker.register()
@@ -98,10 +98,10 @@ index fb57d9d20..6b70bdfac 100644
          if (SimklConfig.CLIENT_ID.isBlank()) return@withContext emptyMap()
          try {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index feb54db45..c1e5fdf22 100644
+index fe46ee65b..456508169 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-@@ -424,9 +424,9 @@ fun MetaDetailsScreen(
+@@ -438,9 +438,9 @@ fun MetaDetailsScreen(
              imdbId = imdbId,
              tmdbId = tmdbId,
          )
@@ -181,10 +181,10 @@ index decf75c68..605e25a13 100644
          episodeCardStyle = MetaEpisodeCardStyle.Horizontal
          blurUnwatchedEpisodes = false
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-index 8a56d1b77..5eb879370 100644
+index 6e65b9aa9..96a5e9028 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-@@ -1587,11 +1587,26 @@ private fun EpisodeExtraRatingBadges(
+@@ -1610,11 +1610,26 @@ private fun EpisodeExtraRatingBadges(
      textSize: androidx.compose.ui.unit.TextUnit,
  ) {
      extras.forEach { (source, value) ->
@@ -211,7 +211,7 @@ index 8a56d1b77..5eb879370 100644
                  "Simkl" -> androidx.compose.foundation.Image(
                      painter = painterResource(Res.drawable.simkl_logo_glyph),
                      contentDescription = source,
-@@ -1609,7 +1624,7 @@ private fun EpisodeExtraRatingBadges(
+@@ -1632,7 +1647,7 @@ private fun EpisodeExtraRatingBadges(
              Text(
                  text = String.format(Locale.US, "%.1f", value),
                  style = MaterialTheme.typography.labelSmall.copy(fontSize = textSize),
@@ -338,7 +338,7 @@ index ccc42c411..ab01a6163 100644
          DxWatchStatsSettingsSection(isTablet = isTablet)
      }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
-index 9aba00f76..68656deef 100644
+index 806f76701..ea3363e39 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 @@ -309,3 +309,101 @@ private fun LanguageOptionRow(label: String, code: String, selected: Boolean, on
@@ -616,7 +616,7 @@ index 000000000..d7047ae7c
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/TrackingProvider.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/TrackingProvider.kt
-index 6218fb193..3f42ebd13 100644
+index 18d79c47d..7a488bcc1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/TrackingProvider.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/TrackingProvider.kt
 @@ -19,7 +19,8 @@ enum class TrackingProviderId(

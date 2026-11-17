@@ -112,10 +112,10 @@ index 000000000..e46c5ba21
 +    else -> Color(0xFFEB5757)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-index aad76cec1..2f1a4fd2f 100644
+index 972c56adc..e274875ad 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-@@ -217,6 +217,24 @@ fun DetailSeriesContent(
+@@ -219,6 +219,24 @@ fun DetailSeriesContent(
                              },
                          )
                      }

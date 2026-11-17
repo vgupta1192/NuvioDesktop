@@ -47,10 +47,10 @@ index f6e449b54..03104e02e 100644
              Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                  ProfileEditScreen(
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index 959958bf8..d167e2c13 100644
+index 79a0b7dc1..6e9a91b0c 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -662,10 +662,6 @@ internal class NativePlayerController(
+@@ -676,10 +676,6 @@ internal class NativePlayerController(
      }
  
      // Nuvio fork: live playback stats for the stream-info modal (mpv properties, fail-soft).
@@ -61,7 +61,7 @@ index 959958bf8..d167e2c13 100644
      private fun refreshPlaybackStats() {
          val current = handle
          if (current == 0L) return
-@@ -1451,6 +1447,9 @@ private data class NativeControlsStructureKey(
+@@ -1480,6 +1476,9 @@ private data class NativeControlsStructureKey(
      val isInPip: Boolean,
  )
  
@@ -71,7 +71,7 @@ index 959958bf8..d167e2c13 100644
  private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageReady: () -> Unit): String =
      buildString {
          append('{')
-@@ -1876,7 +1875,7 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+@@ -1933,7 +1932,7 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
              }
              append("]}")
          }
