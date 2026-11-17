@@ -16,7 +16,7 @@ new file mode 100644
 index 000000000..6fa018b46
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/DxAddonBackup.kt
-@@ -0,0 +1,173 @@
+@@ -0,0 +1,174 @@
 +package com.nuvio.app.features.addons
 +
 +import androidx.compose.foundation.layout.Arrangement
@@ -176,6 +176,7 @@ index 000000000..6fa018b46
 +                            is AddAddonResult.Error -> {
 +                                if (result.message.contains("already", ignoreCase = true)) skipped++ else failed++
 +                            }
++                            is AddAddonResult.TrackingConsentRequired -> failed++
 +                        }
 +                    }
 +                    busy = false
