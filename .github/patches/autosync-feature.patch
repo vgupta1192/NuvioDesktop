@@ -204,10 +204,10 @@ index 000000000..c19f0bd9f
 +    val name: String? = null,
 +)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
-index a81874e43..bcf285109 100644
+index 0f9518ee0..ef4769953 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerEngine.kt
-@@ -25,6 +25,16 @@ interface PlayerEngineController {
+@@ -27,6 +27,16 @@ interface PlayerEngineController {
      fun setSubtitleUri(url: String)
      fun clearExternalSubtitle()
      fun clearExternalSubtitleAndSelect(trackIndex: Int)
@@ -224,7 +224,7 @@ index a81874e43..bcf285109 100644
      fun applySubtitleStyle(style: SubtitleStyleState, useLibass: Boolean = false) {}
      fun applySubtitlePreferences(
          preferredLanguage: String,
-@@ -313,6 +323,9 @@ data class PlayerControlsState(
+@@ -315,6 +325,9 @@ data class PlayerControlsState(
      val submitIntroSuccessToken: Long = 0L,
      val notificationMessage: String = "",
      val notificationToken: Long = 0L,
@@ -234,7 +234,7 @@ index a81874e43..bcf285109 100644
      val party: PlayerControlPartyState = PlayerControlPartyState(),
      val badges: List<StreamBadge> = emptyList(),
      val chapters: List<PlayerControlChapter> = emptyList(),
-@@ -403,6 +416,8 @@ data class PlayerControlSubtitleOptionItem(
+@@ -405,6 +418,8 @@ data class PlayerControlSubtitleOptionItem(
      val metadata: String = "",
      val isSelected: Boolean = false,
      val isAutoSynced: Boolean = false,
@@ -395,7 +395,7 @@ index c988ae04c..ecbf2062f 100644
          }
      } else if (!preferredSubtitleSelectionApplied) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 3bfc6a385..b76551cad 100644
+index 6a28f43d6..627da8767 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 @@ -45,6 +45,7 @@ import com.nuvio.app.features.p2p.P2pStreamingState
@@ -475,7 +475,7 @@ index 3bfc6a385..b76551cad 100644
          }
          "subtitleVisibility" -> playerController?.setSubtitleVisible(value != 0.0)
          "subtitleDelayDelta" -> setSubtitleDelay((subtitleDelayMs + value.toInt()).coerceIn(SUBTITLE_DELAY_MIN_MS, SUBTITLE_DELAY_MAX_MS))
-@@ -1740,6 +1762,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSubtitleSelection(): PlayerCon
+@@ -1805,6 +1827,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSubtitleSelection(): PlayerCon
                          }.orEmpty(),
                          isSelected = option.id == selectedOptionId,
                          isAutoSynced = option.id == selectedOptionId && option.subtitle.url == autoSyncedUrl,
@@ -483,7 +483,7 @@ index 3bfc6a385..b76551cad 100644
                      )
                  }
              }
-@@ -2020,7 +2043,9 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+@@ -2085,7 +2108,9 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
              useCustomSubtitles = true
              preferredSubtitleSelectionApplied = true
              persistAddonSubtitlePreference(addon)
@@ -608,10 +608,10 @@ index ca80837da..13023d90b 100644
              title = stringResource(Res.string.settings_playback_section_subtitle_rendering),
              isTablet = isTablet,
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-index f5a1c45b5..5cda85882 100644
+index 1bc6e5fa0..244751e2b 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt
-@@ -28,6 +28,7 @@ import com.nuvio.app.features.discordrpc.DiscordPresenceManager
+@@ -29,6 +29,7 @@ import com.nuvio.app.features.discordrpc.DiscordPresenceManager
  import com.nuvio.app.features.p2p.P2pStreamingEngine
  import com.nuvio.app.features.plugins.configureDesktopQuickJsLibrary
  import com.nuvio.app.features.player.PlatformPlayerSurface
@@ -619,7 +619,7 @@ index f5a1c45b5..5cda85882 100644
  import com.nuvio.app.features.player.desktop.DesktopAppFullscreenController
  import com.nuvio.app.features.player.desktop.DesktopHostOs
  import com.nuvio.app.features.player.desktop.DesktopWindowGeometry
-@@ -62,6 +63,7 @@ fun main(args: Array<String>) {
+@@ -63,6 +64,7 @@ fun main(args: Array<String>) {
      }
      applyDesktopRendererPreference()
      SentryInitializer.start()
@@ -627,7 +627,7 @@ index f5a1c45b5..5cda85882 100644
      configureDesktopQuickJsLibrary()
      configureDesktopChrome()
      configureLinuxSwingGlobalsBeforeAwt()
-@@ -72,8 +74,10 @@ fun main(args: Array<String>) {
+@@ -73,8 +75,10 @@ fun main(args: Array<String>) {
      // on the very first Compose frame (matching Android's SharedPreferences behavior).
      ProfileRepository.loadCachedProfiles()
      AppIconRepository.ensureLoaded()
@@ -675,7 +675,7 @@ index 000000000..d1ba53c18
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
-index af00f093b..45935345a 100644
+index 23f26b3bd..c02755bcc 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/PlayerEngine.desktop.kt
 @@ -19,7 +19,6 @@ import androidx.compose.runtime.LaunchedEffect
@@ -765,8 +765,8 @@ index af00f093b..45935345a 100644
      val latestControlsState = rememberUpdatedState(controlsState)
      val latestOnPlayerControlsAction = rememberUpdatedState(onPlayerControlsAction)
      val latestOnPlayerControlsEvent = rememberUpdatedState(onPlayerControlsEvent)
-@@ -177,7 +162,7 @@ private fun NativePlayerSurface(
-     val nvidiaRtxSuperResolutionEnabled = playerSettings.nvidiaRtxSuperResolutionEnabled
+@@ -178,7 +163,7 @@ private fun NativePlayerSurface(
+     val nvidiaRtxHdrEnabled = playerSettings.nvidiaRtxHdrEnabled
  
      SideEffect {
 -        onControllerReady(readyController)
@@ -774,7 +774,7 @@ index af00f093b..45935345a 100644
      }
  
      DisposableEffect(host) {
-@@ -213,7 +198,10 @@ private fun NativePlayerSurface(
+@@ -214,7 +199,10 @@ private fun NativePlayerSurface(
      }
  
      DisposableEffect(controller, sourceAvailable, sourceUrl, playbackHeaders) {
@@ -786,7 +786,7 @@ index af00f093b..45935345a 100644
      }
  
      // The controls overlay owns the player shortcuts. After alt-tab, desktop
-@@ -256,7 +244,7 @@ private fun NativePlayerSurface(
+@@ -259,7 +247,7 @@ private fun NativePlayerSurface(
          initialPositionRequestKey?.let { key ->
              latestOnInitialPositionHandled.value(key, initialPositionMs > 0L)
          }
@@ -2707,10 +2707,10 @@ index 000000000..4edf6ee72
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-index a431d3768..8b172e628 100644
+index 8ed3ab596..6d67b5857 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt
-@@ -335,6 +335,12 @@ internal class NativePlayerController(
+@@ -339,6 +339,12 @@ internal class NativePlayerController(
                              .onFailure { error -> recordTerminalDisposeFailure(error, "superseded create", created) }
                          return@onSuccess
                      }
@@ -2723,7 +2723,7 @@ index a431d3768..8b172e628 100644
                      SwingUtilities.invokeLater {
                          val shouldConfigure = synchronized(lifecycleLock) {
                              when {
-@@ -731,6 +737,22 @@ internal class NativePlayerController(
+@@ -740,6 +746,22 @@ internal class NativePlayerController(
          releaseBeforeNavigation(onReleased, onReleaseFailed = {})
      }
  
@@ -2746,7 +2746,7 @@ index a431d3768..8b172e628 100644
      override fun releaseBeforeNavigation(
          onReleased: () -> Unit,
          onReleaseFailed: (String) -> Unit,
-@@ -769,6 +791,7 @@ internal class NativePlayerController(
+@@ -778,6 +800,7 @@ internal class NativePlayerController(
                      val current = if (failureMessage == null) detachPlayerHandle() else 0L
                      if (current != 0L) {
                          log.d { "pre-navigation dispose started handle=$current" }
@@ -2754,7 +2754,7 @@ index a431d3768..8b172e628 100644
                          runCatching { nativeDispose(current) }
                              .onSuccess { log.d { "pre-navigation dispose completed handle=$current" } }
                              .onFailure { error ->
-@@ -933,7 +956,20 @@ internal class NativePlayerController(
+@@ -942,7 +965,20 @@ internal class NativePlayerController(
      }
  
      /** Must be called while holding [lifecycleLock]. */
@@ -2775,7 +2775,7 @@ index a431d3768..8b172e628 100644
          val prior = disposeInFlight?.takeIf { it.isAlive }
          disposeInFlight = Thread(
              {
-@@ -1706,6 +1742,12 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
+@@ -1717,6 +1753,12 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean, onImageRea
          append(',')
          appendJsonField("notificationToken", notificationToken)
          append(',')
@@ -2788,7 +2788,7 @@ index a431d3768..8b172e628 100644
          appendJsonArrayField("badges", badges) {
              append("{\"name\":").append(it.name.toJsonString())
              append(",\"imageUrl\":").append(it.imageURL.toJsonString())
-@@ -1952,6 +1994,8 @@ private fun StringBuilder.appendSubtitleOptionItemJson(item: PlayerControlSubtit
+@@ -1963,6 +2005,8 @@ private fun StringBuilder.appendSubtitleOptionItemJson(item: PlayerControlSubtit
      appendJsonField("isSelected", item.isSelected)
      append(',')
      appendJsonField("isAutoSynced", item.isAutoSynced)
@@ -2988,7 +2988,7 @@ index 1852a72f3..556d6e793 100644
          <svg class="player-toast-icon" id="playerToastIcon" aria-hidden="true" hidden><use id="playerToastIconUse" href="#icon-speed"></use></svg>
          <span class="player-toast-text" id="playerToastText"></span>
 diff --git a/composeApp/src/desktopMain/resources/player-ui/controls.js b/composeApp/src/desktopMain/resources/player-ui/controls.js
-index e3b88a930..ecedc9232 100644
+index c1078ac41..4b9108b4d 100644
 --- a/composeApp/src/desktopMain/resources/player-ui/controls.js
 +++ b/composeApp/src/desktopMain/resources/player-ui/controls.js
 @@ -394,6 +394,9 @@ let state = {
@@ -3076,7 +3076,7 @@ index e3b88a930..ecedc9232 100644
    row.appendChild(copy);
    row.appendChild(buildCheckIcon());
    addonSubtitleList.appendChild(row);
-@@ -3658,6 +3713,7 @@ window.playerControls = nextState => {
+@@ -3659,6 +3714,7 @@ window.playerControls = nextState => {
    const previousCloseToken = Number(state.closeModalsToken) || 0;
    const previousSubmitIntroSuccessToken = Number(state.submitIntroSuccessToken) || 0;
    const previousNotificationToken = Number(state.notificationToken) || 0;
@@ -3084,7 +3084,7 @@ index e3b88a930..ecedc9232 100644
    const previousResizeLabel = state.resizeModeLabel || "";
    const previousSpeedLabel = state.playbackSpeedLabel || "";
    const previousEpisodeStreamsVisible = Boolean(state.episodeStreamsVisible);
-@@ -3694,6 +3750,10 @@ window.playerControls = nextState => {
+@@ -3695,6 +3751,10 @@ window.playerControls = nextState => {
    if (notificationToken !== previousNotificationToken) {
      showPlayerToast(state.notificationMessage);
    }

@@ -37,7 +37,7 @@ index 4f2e223b8..472fcabc8 100644
              subclass(EntityBrowseRoute::class, EntityBrowseRoute.serializer())
              subclass(SettingsPageRoute::class, SettingsPageRoute.serializer())
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index b4e437a0c..319f13667 100644
+index d0d990b31..5923e7830 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 @@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
@@ -48,7 +48,7 @@ index b4e437a0c..319f13667 100644
  import androidx.compose.material.icons.filled.Home
  import androidx.compose.material.icons.rounded.Settings
  import androidx.compose.material.icons.rounded.LiveTv
-@@ -878,6 +879,23 @@ internal fun DesktopHoverSidebar(
+@@ -879,6 +880,23 @@ internal fun DesktopHoverSidebar(
                          tint = color,
                      )
                  }
@@ -70,10 +70,10 @@ index b4e437a0c..319f13667 100644
 +                    )
 +                }
                  DesktopSidebarItem(
-                     label = stringResource(Res.string.compose_settings_page_root),
-                     selected = selectedTab == AppScreenTab.Settings,
+                     id = "sidebar_library",
+                     label = stringResource(Res.string.compose_nav_library),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 639176095..b0e07fed4 100644
+index 37ccaf03a..150e7ea7a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 @@ -122,6 +122,12 @@ import com.nuvio.app.features.home.HomeRepository
@@ -89,7 +89,7 @@ index 639176095..b0e07fed4 100644
  import com.nuvio.app.features.library.LibraryItem
  import com.nuvio.app.features.library.LibraryRepository
  import com.nuvio.app.features.library.LibrarySection
-@@ -962,6 +968,45 @@ internal fun MainAppContent(
+@@ -965,6 +971,45 @@ internal fun MainAppContent(
              navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
          }
  
@@ -135,7 +135,7 @@ index 639176095..b0e07fed4 100644
          fun openExternalStreamUrl(url: String): Boolean {
              val opened = runCatching {
                  uriHandler.openUri(url)
-@@ -1505,9 +1550,22 @@ internal fun MainAppContent(
+@@ -1527,9 +1572,22 @@ internal fun MainAppContent(
                          actions = { isTabletLayout ->
                              AppTabActions(
                                  onCatalogClick = onCatalogClick,
@@ -160,7 +160,7 @@ index 639176095..b0e07fed4 100644
                                  },
                                  onLibraryPosterClick = { item ->
                                      navController.navigate(
-@@ -1781,6 +1839,14 @@ internal fun MainAppContent(
+@@ -1803,6 +1861,14 @@ internal fun MainAppContent(
                      val onBack = rememberGuardedPopBackStack(navController, route)
                      LiveTvScreen(onBack = onBack, onPlay = ::openLiveTvChannel)
                  }

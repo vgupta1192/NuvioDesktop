@@ -102,7 +102,7 @@ index 000000000..74d26f8c2
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index 564bcce20..6f27b78b6 100644
+index 5e0e8e056..a4052616e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 @@ -313,6 +313,7 @@ fun MetaDetailsScreen(
@@ -113,9 +113,9 @@ index 564bcce20..6f27b78b6 100644
      var deferredMetaWorkAllowed by remember(type, id) { mutableStateOf(false) }
  
      LaunchedEffect(
-@@ -436,6 +437,10 @@ fun MetaDetailsScreen(
-             imdbId = imdbId,
+@@ -437,6 +438,10 @@ fun MetaDetailsScreen(
              tmdbId = tmdbId,
+             addonEpisodes = metaForRatings.videos.map { AddonEpisodeAirDate(it.season, it.episode, it.released) },
          )
 +        // Nuvio fork: Simkl/Trakt episode ratings as logo badges
 +        episodeExtraRatings = imdbId?.takeIf { it.isNotBlank() }
@@ -124,7 +124,7 @@ index 564bcce20..6f27b78b6 100644
      }
  
      LaunchedEffect(type, id, displayedMeta, uiState.isLoading, autoLoadAttempted) {
-@@ -1378,6 +1383,7 @@ fun MetaDetailsScreen(
+@@ -1379,6 +1384,7 @@ fun MetaDetailsScreen(
                                          commentsPageCount = commentsPageCount,
                                          commentsError = commentsError,
                                          episodeImdbRatings = episodeImdbRatings,
@@ -132,7 +132,7 @@ index 564bcce20..6f27b78b6 100644
                                          episodeListGroupedEpisodes = episodeListGroupedEpisodes,
                                          episodeListSeasons = episodeListSeasons,
                                          episodeListCurrentSeason = currentEpisodeListSeason,
-@@ -1550,6 +1556,7 @@ fun MetaDetailsScreen(
+@@ -1551,6 +1557,7 @@ fun MetaDetailsScreen(
                                          commentsPageCount = commentsPageCount,
                                          commentsError = commentsError,
                                          episodeImdbRatings = episodeImdbRatings,
@@ -140,7 +140,7 @@ index 564bcce20..6f27b78b6 100644
                                          episodeListGroupedEpisodes = episodeListGroupedEpisodes,
                                          episodeListSeasons = episodeListSeasons,
                                          episodeListCurrentSeason = currentEpisodeListSeason,
-@@ -2361,6 +2368,7 @@ private fun LazyListScope.configuredMetaSectionItems(
+@@ -2362,6 +2369,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                      commentsPageCount = commentsPageCount,
                      commentsError = commentsError,
                      episodeImdbRatings = episodeImdbRatings,
@@ -148,7 +148,7 @@ index 564bcce20..6f27b78b6 100644
                      onRetryComments = onRetryComments,
                      onLoadMoreComments = onLoadMoreComments,
                      onCommentClick = onCommentClick,
-@@ -2425,6 +2433,7 @@ private fun LazyListScope.configuredMetaSectionItems(
+@@ -2426,6 +2434,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                      progressByVideoId = progressByVideoId,
                      watchedKeys = watchedKeys,
                      episodeRatings = episodeImdbRatings,
@@ -157,7 +157,7 @@ index 564bcce20..6f27b78b6 100644
                      blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                      onEpisodeClick = onEpisodeClick,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-index e274875ad..6e65b9aa9 100644
+index 78aa9bb51..1d8be39c7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 @@ -58,6 +58,12 @@ import androidx.compose.ui.text.font.FontWeight
@@ -173,7 +173,7 @@ index e274875ad..6e65b9aa9 100644
  import androidx.compose.ui.unit.dp
  import androidx.compose.ui.unit.sp
  import com.nuvio.app.core.ui.NuvioAsyncImage as AsyncImage
-@@ -111,6 +117,7 @@ fun DetailSeriesContent(
+@@ -112,6 +118,7 @@ fun DetailSeriesContent(
      progressByVideoId: Map<String, WatchProgressEntry> = emptyMap(),
      watchedKeys: Set<String> = emptySet(),
      episodeRatings: Map<Pair<Int, Int>, Double> = emptyMap(),
@@ -181,7 +181,7 @@ index e274875ad..6e65b9aa9 100644
      episodeRatingsVisibility: EpisodeRatingsVisibility = EpisodeRatingsVisibility.SHOW_ALL,
      blurUnwatchedEpisodes: Boolean = false,
      onEpisodeClick: ((MetaVideo) -> Unit)? = null,
-@@ -270,11 +277,15 @@ fun DetailSeriesContent(
+@@ -271,11 +278,15 @@ fun DetailSeriesContent(
                                      episodeNumber = episode.episode,
                                      fallbackVideoId = episode.id,
                                  )
@@ -197,7 +197,7 @@ index e274875ad..6e65b9aa9 100644
                                      isWatched = progressByVideoId[episodeVideoId]?.isEffectivelyCompleted == true ||
                                          WatchingState.isEpisodeWatched(
                                              watchedKeys = watchedKeys,
-@@ -341,6 +352,7 @@ internal fun DetailSeriesListEpisode(
+@@ -342,6 +353,7 @@ internal fun DetailSeriesListEpisode(
      progressByVideoId: Map<String, WatchProgressEntry>,
      watchedKeys: Set<String>,
      episodeRatings: Map<Pair<Int, Int>, Double>,
@@ -205,7 +205,7 @@ index e274875ad..6e65b9aa9 100644
      episodeRatingsVisibility: EpisodeRatingsVisibility,
      blurUnwatchedEpisodes: Boolean,
      onEpisodeClick: ((MetaVideo) -> Unit)?,
-@@ -355,11 +367,15 @@ internal fun DetailSeriesListEpisode(
+@@ -356,11 +368,15 @@ internal fun DetailSeriesListEpisode(
              episodeNumber = episode.episode,
              fallbackVideoId = episode.id,
          )
@@ -221,7 +221,7 @@ index e274875ad..6e65b9aa9 100644
              isWatched = progressByVideoId[episodeVideoId]?.isEffectivelyCompleted == true ||
                  WatchingState.isEpisodeWatched(
                      watchedKeys = watchedKeys,
-@@ -737,6 +753,7 @@ private fun EpisodeHorizontalRow(
+@@ -741,6 +757,7 @@ private fun EpisodeHorizontalRow(
      fallbackImage: String?,
      progressByVideoId: Map<String, WatchProgressEntry>,
      episodeRatings: Map<Pair<Int, Int>, Double>,
@@ -229,7 +229,7 @@ index e274875ad..6e65b9aa9 100644
      episodeRatingsVisibility: EpisodeRatingsVisibility,
      blurUnwatchedEpisodes: Boolean,
      preferredEpisodeNumber: Int? = null,
-@@ -785,8 +802,13 @@ private fun EpisodeHorizontalRow(
+@@ -789,8 +806,13 @@ private fun EpisodeHorizontalRow(
                  episodeNumber = episode.episode,
                  fallbackVideoId = episode.id,
              )
@@ -243,7 +243,7 @@ index e274875ad..6e65b9aa9 100644
                  fallbackImage = fallbackImage,
                  progressEntry = progressByVideoId[episodeVideoId],
                  imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -814,6 +836,7 @@ private fun EpisodeHorizontalCard(
+@@ -818,6 +840,7 @@ private fun EpisodeHorizontalCard(
      fallbackImage: String?,
      progressEntry: WatchProgressEntry?,
      imdbRating: Double?,
@@ -251,7 +251,7 @@ index e274875ad..6e65b9aa9 100644
      isWatched: Boolean,
      episodeRatingsVisibility: EpisodeRatingsVisibility,
      blurUnwatchedEpisodes: Boolean,
-@@ -966,6 +989,11 @@ private fun EpisodeHorizontalCard(
+@@ -971,6 +994,11 @@ private fun EpisodeHorizontalCard(
                              textSize = metrics.metaTextSize,
                          )
                      }
@@ -263,7 +263,7 @@ index e274875ad..6e65b9aa9 100644
                      Spacer(modifier = Modifier.weight(1f))
                      formattedDate?.let { date ->
                          Text(
-@@ -1208,6 +1236,7 @@ private fun EpisodeListCard(
+@@ -1213,6 +1241,7 @@ private fun EpisodeListCard(
      fallbackImage: String?,
      progressEntry: WatchProgressEntry?,
      imdbRating: Double?,
@@ -271,7 +271,7 @@ index e274875ad..6e65b9aa9 100644
      isWatched: Boolean,
      episodeRatingsVisibility: EpisodeRatingsVisibility,
      blurUnwatchedEpisodes: Boolean,
-@@ -1356,6 +1385,11 @@ private fun EpisodeListCard(
+@@ -1362,6 +1391,11 @@ private fun EpisodeListCard(
                                  textSize = sizing.metaTextSize,
                              )
                          }
@@ -283,7 +283,7 @@ index e274875ad..6e65b9aa9 100644
                      }
                  }
  
-@@ -1567,3 +1601,40 @@ private fun formatEpisodeRating(rating: Double): String {
+@@ -1573,3 +1607,40 @@ private fun formatEpisodeRating(rating: Double): String {
      val tenth = (roundedTenths % 10).absoluteValue
      return "$whole.$tenth"
  }

@@ -38,7 +38,7 @@ index b6663e68c..4f2e223b8 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index 78e40e9d6..b4e437a0c 100644
+index e2c9affcd..d0d990b31 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 @@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,7 +49,7 @@ index 78e40e9d6..b4e437a0c 100644
  import androidx.compose.material3.Icon
  import androidx.compose.material3.MaterialTheme
  import androidx.compose.material3.Surface
-@@ -860,6 +861,23 @@ internal fun DesktopHoverSidebar(
+@@ -861,6 +862,23 @@ internal fun DesktopHoverSidebar(
                          tint = color,
                      )
                  }
@@ -71,10 +71,10 @@ index 78e40e9d6..b4e437a0c 100644
 +                    )
 +                }
                  DesktopSidebarItem(
-                     label = stringResource(Res.string.compose_settings_page_root),
-                     selected = selectedTab == AppScreenTab.Settings,
+                     id = "sidebar_library",
+                     label = stringResource(Res.string.compose_nav_library),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 3a8209f40..639176095 100644
+index 12fc848af..37ccaf03a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 @@ -107,6 +107,13 @@ import com.nuvio.app.features.collection.CollectionSyncService
@@ -91,7 +91,7 @@ index 3a8209f40..639176095 100644
  import com.nuvio.app.features.downloads.DownloadSubtitles
  import com.nuvio.app.features.downloads.DownloadsRepository
  import com.nuvio.app.features.home.HomeCatalogSection
-@@ -755,6 +762,13 @@ internal fun MainAppContent(
+@@ -758,6 +765,13 @@ internal fun MainAppContent(
          }
      }
  
@@ -105,7 +105,7 @@ index 3a8209f40..639176095 100644
          LaunchedEffect(navController) {
              if (!ownsAppRuntime) return@LaunchedEffect
              AppDeepLinkRepository.pendingDeepLink.collectLatest { deepLink ->
-@@ -921,6 +935,33 @@ internal fun MainAppContent(
+@@ -924,6 +938,33 @@ internal fun MainAppContent(
              navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
          }
  
@@ -139,7 +139,7 @@ index 3a8209f40..639176095 100644
          fun openExternalStreamUrl(url: String): Boolean {
              val opened = runCatching {
                  uriHandler.openUri(url)
-@@ -1736,6 +1777,10 @@ internal fun MainAppContent(
+@@ -1758,6 +1799,10 @@ internal fun MainAppContent(
                          ) appUpdaterController::showDebugTestUpdate else null,
                      )
                  }
