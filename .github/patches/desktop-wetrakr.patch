@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/tracking/TrackingProviderBootstrap.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/tracking/TrackingProviderBootstrap.kt
-index 9834e8703..8faaa131e 100644
+index 9834e87..8faaa13 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/tracking/TrackingProviderBootstrap.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/tracking/TrackingProviderBootstrap.kt
 @@ -19,6 +19,7 @@ import com.nuvio.app.features.watching.sync.TraktWatchedSyncAdapter
@@ -11,7 +11,7 @@ index 9834e8703..8faaa131e 100644
      TraktScrobbleRepository.ensureRegistered()
      SimklAuthRepository.descriptor
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
-index 3b6570e5d..63e4df666 100644
+index 3b6570e..63e4df6 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt
 @@ -49,13 +49,13 @@ private data class StoredPosterCardStylePreferences(
@@ -47,7 +47,7 @@ index 3b6570e5d..63e4df666 100644
      val netflixPrevCwStyle: ContinueWatchingSectionStyle = ContinueWatchingSectionStyle.Card,
      val liveTvNetflixStyleEnabled: Boolean = false,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
-index fb57d9d20..6b70bdfac 100644
+index fb57d9d..6b70bdf 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ExtraEpisodeRatings.kt
 @@ -29,18 +29,43 @@ object ExtraEpisodeRatings {
@@ -98,12 +98,12 @@ index fb57d9d20..6b70bdfac 100644
          if (SimklConfig.CLIENT_ID.isBlank()) return@withContext emptyMap()
          try {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index fe46ee65b..456508169 100644
+index fddad20..d8243c6 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-@@ -438,9 +438,9 @@ fun MetaDetailsScreen(
-             imdbId = imdbId,
+@@ -439,9 +439,9 @@ fun MetaDetailsScreen(
              tmdbId = tmdbId,
+             addonEpisodes = metaForRatings.videos.map { AddonEpisodeAirDate(it.season, it.episode, it.released) },
          )
 -        // Nuvio fork: Simkl/Trakt episode ratings as logo badges
 +        // Nuvio fork: TMDB/Simkl/Trakt episode ratings as logo badges
@@ -114,7 +114,7 @@ index fe46ee65b..456508169 100644
      }
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaScreenSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaScreenSettingsRepository.kt
-index decf75c68..605e25a13 100644
+index decf75c..605e25a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaScreenSettingsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaScreenSettingsRepository.kt
 @@ -79,7 +79,7 @@ data class MetaScreenSettingsUiState(
@@ -181,10 +181,10 @@ index decf75c68..605e25a13 100644
          episodeCardStyle = MetaEpisodeCardStyle.Horizontal
          blurUnwatchedEpisodes = false
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-index 6e65b9aa9..96a5e9028 100644
+index 1d8be39..e448e86 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-@@ -1610,11 +1610,26 @@ private fun EpisodeExtraRatingBadges(
+@@ -1616,11 +1616,26 @@ private fun EpisodeExtraRatingBadges(
      textSize: androidx.compose.ui.unit.TextUnit,
  ) {
      extras.forEach { (source, value) ->
@@ -211,7 +211,7 @@ index 6e65b9aa9..96a5e9028 100644
                  "Simkl" -> androidx.compose.foundation.Image(
                      painter = painterResource(Res.drawable.simkl_logo_glyph),
                      contentDescription = source,
-@@ -1632,7 +1647,7 @@ private fun EpisodeExtraRatingBadges(
+@@ -1638,7 +1653,7 @@ private fun EpisodeExtraRatingBadges(
              Text(
                  text = String.format(Locale.US, "%.1f", value),
                  style = MaterialTheme.typography.labelSmall.copy(fontSize = textSize),
@@ -221,7 +221,7 @@ index 6e65b9aa9..96a5e9028 100644
              )
          }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
-index d59838031..3a4dd1c17 100644
+index d598380..3a4dd1c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
 @@ -159,30 +159,6 @@ internal fun LazyListScope.advancedSettingsContent(
@@ -256,7 +256,7 @@ index d59838031..3a4dd1c17 100644
          SettingsSection(
              title = stringResource(Res.string.settings_advanced_section_cache),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DiscordRichPresenceRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DiscordRichPresenceRepository.kt
-index a564f67d6..46e4d7b85 100644
+index a564f67..46e4d7b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DiscordRichPresenceRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DiscordRichPresenceRepository.kt
 @@ -1,5 +1,6 @@
@@ -324,7 +324,7 @@ index a564f67d6..46e4d7b85 100644
 +    }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
-index ccc42c411..ab01a6163 100644
+index ccc42c4..ab01a61 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/FeaturesSettingsPage.kt
 @@ -22,6 +22,9 @@ internal fun LazyListScope.featuresSettingsContent(isTablet: Boolean) {
@@ -338,7 +338,7 @@ index ccc42c411..ab01a6163 100644
          DxWatchStatsSettingsSection(isTablet = isTablet)
      }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
-index 806f76701..ea3363e39 100644
+index 806f767..ea3363e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 @@ -309,3 +309,101 @@ private fun LanguageOptionRow(label: String, code: String, selected: Boolean, on
@@ -444,7 +444,7 @@ index 806f76701..ea3363e39 100644
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
-index e11f00495..68c069047 100644
+index e11f004..68c0690 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
 @@ -78,6 +78,10 @@ object ForkPrefs {
@@ -469,7 +469,7 @@ index e11f00495..68c069047 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
-index 0ce8b0a95..7e24e1661 100644
+index 0ce8b0a..7e24e16 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/TrackingProviderCards.kt
 @@ -204,6 +204,7 @@ internal fun TrackingProviderCards(
@@ -482,7 +482,7 @@ index 0ce8b0a95..7e24e1661 100644
      if (showSyncInfo) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/WeTrakrProviderCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/WeTrakrProviderCard.kt
 new file mode 100644
-index 000000000..d7047ae7c
+index 0000000..d7047ae
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/WeTrakrProviderCard.kt
 @@ -0,0 +1,129 @@
@@ -616,7 +616,7 @@ index 000000000..d7047ae7c
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/TrackingProvider.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/TrackingProvider.kt
-index 18d79c47d..7a488bcc1 100644
+index 18d79c4..7a488bc 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/TrackingProvider.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/TrackingProvider.kt
 @@ -19,7 +19,8 @@ enum class TrackingProviderId(
@@ -631,7 +631,7 @@ index 18d79c47d..7a488bcc1 100644
          fun fromStorage(value: String?): TrackingProviderId? =
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/WeTrakrRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/WeTrakrRepository.kt
 new file mode 100644
-index 000000000..9904d2fe9
+index 0000000..9904d2f
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tracking/WeTrakrRepository.kt
 @@ -0,0 +1,395 @@
@@ -1031,7 +1031,7 @@ index 000000000..9904d2fe9
 +    private const val AUTH_KEY = "wetrakr/auth"
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/discordrpc/DiscordPresenceManager.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/discordrpc/DiscordPresenceManager.kt
-index ecd00c77d..5e1ba14de 100644
+index ecd00c7..5e1ba14 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/discordrpc/DiscordPresenceManager.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/discordrpc/DiscordPresenceManager.kt
 @@ -35,7 +35,10 @@ internal object DiscordPresenceManager {

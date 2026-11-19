@@ -1,26 +1,33 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ImdbEpisodeRatingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ImdbEpisodeRatingsRepository.kt
-index 6a32a8747..091c54c90 100644
+index b0916c5..5a1c0ad 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ImdbEpisodeRatingsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/ImdbEpisodeRatingsRepository.kt
-@@ -82,7 +82,14 @@ object ImdbEpisodeRatingsRepository {
+@@ -89,7 +89,21 @@ object ImdbEpisodeRatingsRepository {
          }
  
          if (tmdbId != null) {
--            return toRatingsMap(SeriesGraphApi.getSeasonRatings(tmdbId))
-+            val graph = toRatingsMap(SeriesGraphApi.getSeasonRatings(tmdbId))
-+            if (graph.isNotEmpty()) return graph
+-            return toEpisodeRatings(SeriesGraphApi.getSeasonRatings(tmdbId))
++            val graph = toEpisodeRatings(SeriesGraphApi.getSeasonRatings(tmdbId))
++            if (graph.any { it.rating != null }) return graph
 +        }
 +
 +        // Nuvio fork: OMDb fallback with the user's own API key
 +        val omdbKey = com.nuvio.app.features.settings.ForkPrefs.omdbKey.current()
 +        if (!imdbId.isNullOrBlank() && omdbKey.isNotBlank()) {
-+            return OmdbEpisodeRatings.fetch(imdbId, omdbKey)
++            return OmdbEpisodeRatings.fetch(imdbId, omdbKey).map { (key, rating) ->
++                ExternalEpisodeRating(
++                    season = key.first,
++                    episode = key.second,
++                    airDate = null,
++                    rating = rating,
++                )
++            }
          }
  
-         return emptyMap()
+         return emptyList()
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/OmdbEpisodeRatings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/OmdbEpisodeRatings.kt
 new file mode 100644
-index 000000000..99857783d
+index 0000000..9985778
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/OmdbEpisodeRatings.kt
 @@ -0,0 +1,65 @@
@@ -90,7 +97,7 @@ index 000000000..99857783d
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
-index 67f3dfd0d..10ed492ff 100644
+index 67f3dfd..10ed492 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 @@ -1,12 +1,19 @@
@@ -163,7 +170,7 @@ index 67f3dfd0d..10ed492ff 100644
          SettingsGroup(isTablet = isTablet) {
              SettingsSwitchRow(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
-index f2273252a..2afc92325 100644
+index f227325..2afc923 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
 @@ -62,6 +62,7 @@ object ForkPrefs {

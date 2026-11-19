@@ -1,6 +1,6 @@
 diff --git a/composeApp/src/commonMain/composeResources/values/strings_dynamic_artwork.xml b/composeApp/src/commonMain/composeResources/values/strings_dynamic_artwork.xml
 new file mode 100644
-index 000000000..ceb6539df
+index 0000000..ceb6539
 --- /dev/null
 +++ b/composeApp/src/commonMain/composeResources/values/strings_dynamic_artwork.xml
 @@ -0,0 +1,5 @@
@@ -11,7 +11,7 @@ index 000000000..ceb6539df
 +</resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ArtworkDominantColor.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ArtworkDominantColor.kt
 new file mode 100644
-index 000000000..c480e9065
+index 0000000..c480e90
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ArtworkDominantColor.kt
 @@ -0,0 +1,135 @@
@@ -152,7 +152,7 @@ index 000000000..c480e9065
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/BrightDominantColor.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/BrightDominantColor.kt
 new file mode 100644
-index 000000000..99d5e2a3d
+index 0000000..99d5e2a
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/BrightDominantColor.kt
 @@ -0,0 +1,44 @@
@@ -201,10 +201,10 @@ index 000000000..99d5e2a3d
 +    return Color(r1 + m, g1 + m, b1 + m, alpha)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Components.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Components.kt
-index e2ce4f987..db0f43893 100644
+index a25a344..029448b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Components.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Components.kt
-@@ -86,10 +86,15 @@ fun NuvioScreen(
+@@ -86,6 +86,11 @@ fun NuvioScreen(
  ) {
      val tokens = MaterialTheme.nuvio
      val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -213,6 +213,10 @@ index e2ce4f987..db0f43893 100644
 +    } else {
 +        tokens.colors.background
 +    }
+     val scrollViewportModifier = if (isDesktop) {
+         com.nuvio.app.controller.RegisterControllerVerticalScroll(lazyListState = listState)
+     } else {
+@@ -94,7 +99,7 @@ fun NuvioScreen(
      Box(
          modifier = modifier
              .fillMaxSize()
@@ -223,7 +227,7 @@ index e2ce4f987..db0f43893 100644
              state = listState,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DynamicArtworkBackground.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DynamicArtworkBackground.kt
 new file mode 100644
-index 000000000..04b4f22ff
+index 0000000..04b4f22
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DynamicArtworkBackground.kt
 @@ -0,0 +1,99 @@
@@ -327,7 +331,7 @@ index 000000000..04b4f22ff
 +    )
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogData.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogData.kt
-index bc23bb5fc..7fd6378dc 100644
+index bc23bb5..7fd6378 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogData.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogData.kt
 @@ -85,10 +85,31 @@ suspend fun fetchCatalogPage(
@@ -368,7 +372,7 @@ index bc23bb5fc..7fd6378dc 100644
              payload = payload,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/ForkCatalogSnapshot.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/ForkCatalogSnapshot.kt
 new file mode 100644
-index 000000000..f1ad8bdf8
+index 0000000..f1ad8bd
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/ForkCatalogSnapshot.kt
 @@ -0,0 +1,91 @@
@@ -464,7 +468,7 @@ index 000000000..f1ad8bdf8
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeCache.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeCache.kt
-index c6f04ae6f..3f54416fe 100644
+index c6f04ae..3f54416 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeCache.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeCache.kt
 @@ -42,7 +42,7 @@ internal object ForkHomeCache {
@@ -477,7 +481,7 @@ index c6f04ae6f..3f54416fe 100644
                              it.id, it.type, it.name, it.poster, it.banner, it.logo,
                              it.posterShape.name, it.description, it.releaseInfo, it.imdbRating,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 8c20fc4a2..c54b43397 100644
+index 8c20fc4..c54b433 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 @@ -32,6 +32,7 @@ import com.nuvio.app.core.network.NetworkStatusRepository
@@ -514,7 +518,7 @@ index 8c20fc4a2..c54b43397 100644
  }
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
-index 7739acce6..3f7d2e2da 100644
+index 71c4111..19e2c0e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
 @@ -11,6 +11,14 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -532,7 +536,7 @@ index 7739acce6..3f7d2e2da 100644
  import androidx.compose.foundation.layout.BoxWithConstraints
  import androidx.compose.foundation.layout.Column
  import androidx.compose.foundation.layout.Row
-@@ -129,6 +137,7 @@ fun HomeHeroSection(
+@@ -130,6 +138,7 @@ fun HomeHeroSection(
      showImdbRating: Boolean = true,
      showMdbListRatings: Boolean = false,
      onItemClick: ((MetaPreview) -> Unit)? = null,
@@ -540,7 +544,7 @@ index 7739acce6..3f7d2e2da 100644
  ) {
      if (items.isEmpty()) return
  
-@@ -162,6 +171,7 @@ fun HomeHeroSection(
+@@ -163,6 +172,7 @@ fun HomeHeroSection(
      ScreenActivityEffect(autoScrollPage, items.size) { active ->
          if (!active || items.size <= 1) return@ScreenActivityEffect
          if (heroRotationIntervalMs <= 0L) return@ScreenActivityEffect // Nuvio fork: rotation off
@@ -548,7 +552,7 @@ index 7739acce6..3f7d2e2da 100644
          delay(heroRotationIntervalMs)
          while (pagerState.isScrollInProgress) {
              delay(100L)
-@@ -171,6 +181,16 @@ fun HomeHeroSection(
+@@ -172,6 +182,16 @@ fun HomeHeroSection(
          pagerState.animateScrollToPage(nextPage)
      }
  
@@ -565,7 +569,7 @@ index 7739acce6..3f7d2e2da 100644
      BoxWithConstraints(
          modifier = modifier
              .fillMaxWidth()
-@@ -463,19 +483,24 @@ private fun DefaultHomeHeroFrame(
+@@ -464,19 +484,24 @@ private fun DefaultHomeHeroFrame(
              includePagerNeighbors = includePagerNeighbors,
          )
  
@@ -599,7 +603,7 @@ index 7739acce6..3f7d2e2da 100644
          )
  
          Box(
-@@ -483,14 +508,10 @@ private fun DefaultHomeHeroFrame(
+@@ -484,14 +509,10 @@ private fun DefaultHomeHeroFrame(
                  .fillMaxWidth()
                  .height(layout.bottomFadeHeight)
                  .align(Alignment.BottomCenter)
@@ -619,7 +623,7 @@ index 7739acce6..3f7d2e2da 100644
  
          Column(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
-index a2ec00c1b..ef731100b 100644
+index a2ec00c..ef73110 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPlayerPrefsSettings.kt
 @@ -144,6 +144,20 @@ internal fun ForkPlayerPrefsSettingsSection(isTablet: Boolean) {
@@ -644,7 +648,7 @@ index a2ec00c1b..ef731100b 100644
      }
      val privateViewing by ForkPrefs.privateViewing.value.collectAsStateWithLifecycle()
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
-index 8dd947df4..e73492b56 100644
+index 8dd947d..e73492b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkPrefs.kt
 @@ -73,6 +73,8 @@ object ForkPrefs {
