@@ -1,8 +1,8 @@
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index 2852e700a..e8a7eb956 100644
+index 1be028460..fc5f3272d 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
-@@ -1185,6 +1185,7 @@ kotlin {
+@@ -1189,6 +1189,7 @@ kotlin {
              resources.srcDir(desktopSentryResourceDir)
              dependencies {
                  implementation(compose.desktop.currentOs)
@@ -1115,10 +1115,10 @@ index 000000000..e761dedd1
 +    }
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
-index fff70cc54..eb2e49c53 100644
+index 002afe072..8ca10b764 100644
 --- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt
-@@ -154,6 +154,18 @@ internal object NativePlayerBridge {
+@@ -156,6 +156,18 @@ internal object NativePlayerBridge {
      external fun propSetString(handle: Long, name: String, value: String): Boolean
      external fun command(handle: Long, args: Array<String>): Boolean
  
@@ -1669,10 +1669,10 @@ index 000000000..e06676724
 +    actual fun saveEnabled(enabled: Boolean) = store.putBoolean("enabled", enabled)
 +}
 diff --git a/composeApp/src/desktopMain/native/linux/player_bridge.cpp b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-index 734f0f411..06e734662 100644
+index 4fb380391..21d078224 100644
 --- a/composeApp/src/desktopMain/native/linux/player_bridge.cpp
 +++ b/composeApp/src/desktopMain/native/linux/player_bridge.cpp
-@@ -2310,5 +2310,112 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
+@@ -2413,5 +2413,112 @@ JNIEXPORT void JNICALL NP(setWindowAspectRatio)(JNIEnv *, jobject, jlong, jfloat
  JNIEXPORT void JNICALL NP(layoutNativeSubviews)(JNIEnv *, jobject, jlong) {}
  JNIEXPORT void JNICALL NP(reparentSurfaceNative)(JNIEnv *, jobject, jlong, jlong) {}
  
@@ -1786,11 +1786,11 @@ index 734f0f411..06e734662 100644
  #undef NP
  } // extern "C"
 diff --git a/composeApp/src/desktopMain/native/macos/player_bridge.mm b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-index dfb73e7d8..9bb70ad67 100644
+index a60c631db..07291e4f2 100644
 --- a/composeApp/src/desktopMain/native/macos/player_bridge.mm
 +++ b/composeApp/src/desktopMain/native/macos/player_bridge.mm
-@@ -4013,3 +4013,155 @@ static void throwJavaError(JNIEnv *env, NSString *message) {
-                                    shadowOffset:(double)shadowOffset];
+@@ -4018,3 +4018,155 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setSubtitleAppeara
+                                      shadowBlur:(double)shadowBlur];
      });
  }
 +

@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonRepository.kt
-index 11fd39b38..4735fb01b 100644
+index 1e24117ba..108e9573b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/addons/AddonRepository.kt
-@@ -70,6 +70,7 @@ object AddonRepository {
+@@ -75,6 +75,7 @@ object AddonRepository {
          val storedUrls = dedupeManifestUrls(AddonStorage.loadInstalledAddonUrls(currentProfileId))
          val enabledByUrl = loadLocalEnabledStates()
          log.d { "initialize() — local addon count: ${storedUrls.size}" }
@@ -10,7 +10,7 @@ index 11fd39b38..4735fb01b 100644
          if (storedUrls.isEmpty()) return
  
          val existingByUrl = _uiState.value.addons.associateBy(ManagedAddon::manifestUrl)
-@@ -302,6 +303,19 @@ object AddonRepository {
+@@ -307,6 +308,19 @@ object AddonRepository {
          }
      }
  
@@ -52,10 +52,10 @@ index b4d3efa6d..bc23bb5fc 100644
          (skip ?: 0) + parsed.rawItemCount
      } else {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-index 96a5e9028..9f61d8b2b 100644
+index e448e8653..0d72ba41c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-@@ -183,6 +183,9 @@ fun DetailSeriesContent(
+@@ -184,6 +184,9 @@ fun DetailSeriesContent(
          ?.takeIf { it in groupedEpisodes }
          ?: defaultSeason
  
@@ -65,7 +65,7 @@ index 96a5e9028..9f61d8b2b 100644
      BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
          val sizing = seriesContentSizing(maxWidth.value)
          val containerWidthDp = maxWidth.value
-@@ -226,6 +229,12 @@ fun DetailSeriesContent(
+@@ -227,6 +230,12 @@ fun DetailSeriesContent(
                              },
                          )
                      }
@@ -78,7 +78,7 @@ index 96a5e9028..9f61d8b2b 100644
                      if (episodeRatings.isNotEmpty()) { // Nuvio fork: episode rating map
                          var showRatingMap by remember { mutableStateOf(false) }
                          Text(
-@@ -244,7 +253,25 @@ fun DetailSeriesContent(
+@@ -245,7 +254,25 @@ fun DetailSeriesContent(
                              }
                          }
                      }
@@ -105,7 +105,7 @@ index 96a5e9028..9f61d8b2b 100644
                      if (episodeCardStyle == MetaEpisodeCardStyle.Horizontal) {
                          EpisodeHorizontalRow(
                              episodes = seasonEpisodes,
-@@ -258,7 +285,7 @@ fun DetailSeriesContent(
+@@ -259,7 +286,7 @@ fun DetailSeriesContent(
                              episodeRatings = episodeRatings,
                              episodeRatingsVisibility = episodeRatingsVisibility,
                              blurUnwatchedEpisodes = blurUnwatchedEpisodes,
@@ -348,10 +348,10 @@ index 000000000..c6f04ae6f
 +    }.getOrDefault(emptyMap())
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
-index 5d1063375..2a13e862d 100644
+index 062045154..00b47e2d7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
-@@ -49,6 +49,7 @@ object HomeRepository {
+@@ -54,6 +54,7 @@ object HomeRepository {
      private var collectionHeroRequestKey: String? = null
      private var lastPublishedCatalogHeroEmpty: Boolean = true
      private var lastErrorMessage: String? = null
@@ -359,7 +359,7 @@ index 5d1063375..2a13e862d 100644
  
      fun refresh(addons: List<ManagedAddon>, force: Boolean = false) {
          val activeAddons = addons.enabledAddons()
-@@ -82,6 +83,14 @@ object HomeRepository {
+@@ -96,6 +97,14 @@ object HomeRepository {
          }
  
          activeJob?.cancel()
@@ -374,14 +374,14 @@ index 5d1063375..2a13e862d 100644
          _uiState.update { it.copy(isLoading = true, errorMessage = null) }
          activeJob = scope.launch {
              val settingsSnapshot = HomeCatalogSettingsRepository.snapshot()
-@@ -147,6 +156,7 @@ object HomeRepository {
+@@ -190,6 +199,7 @@ object HomeRepository {
              if (activeRequestKey != requestKey) return@launch
  
              cachedSections = loadedSections.toMap()
 +            ForkHomeCache.save(cachedSections)
              lastErrorMessage = firstErrorMessage
              activeRequestKey = null
-             publishCurrentState(
+             loadedRequestKey = requestKey
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt
 index b1c9c4127..000928876 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryCalendarHooks.kt
@@ -415,10 +415,10 @@ index b1c9c4127..000928876 100644
  @Composable
  internal fun LibraryCalendarHost(items: List<LibraryItem>, onPosterClick: ((LibraryItem) -> Unit)?) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
-index 4facce3bb..5af29fa00 100644
+index 11802df53..b202e0961 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryScreen.kt
-@@ -367,6 +367,7 @@ fun LibraryScreen(
+@@ -368,6 +368,7 @@ fun LibraryScreen(
                              actions = {
                                  if (sourceMode == LibraryViewMode.Saved) {
                                      LibraryCalendarButton() // Nuvio fork: library calendar
